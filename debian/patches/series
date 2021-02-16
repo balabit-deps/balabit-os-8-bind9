@@ -11,3 +11,4 @@ CVE-2020-8622.patch
 CVE-2020-8623.patch
 CVE-2020-8624.patch
 0003-Print-diagnostics-on-dns_name_issubdomain-failure-in.patch
+CVE-2020-8625.patch

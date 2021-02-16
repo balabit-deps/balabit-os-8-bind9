@@ -1,3 +1,14 @@
+bind9 (1:9.16.1-0ubuntu2.6) focal-security; urgency=medium
+
+  * SECURITY UPDATE: off-by-one bug in ISC SPNEGO implementation
+    - debian/patches/CVE-2020-8625.patch: properly calculate length in
+      lib/dns/spnego.c.
+    - CVE-2020-8625
+  * This update does _not_ contain the changes from 1:9.16.1-0ubuntu2.5 in
+    focal-proposed.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 16 Feb 2021 15:08:33 -0500
+
 bind9 (1:9.16.1-0ubuntu2.4) focal; urgency=medium
 
   * Fix rare condition that can break bind9 with a crash (LP: #1896740)
