@@ -1,0 +1,95 @@
+Author: Witold Kręcicki <wpk@isc.org>
+Date:   Thu Mar 26 14:25:06 2020 +0100
+Description: Deactivate the handle before sending the async close callback.
+ We could have a race between handle closing and processing async
+ callback. Deactivate the handle before issuing the callback - we
+ have the socket referenced anyway so it's not a problem.
+ .
+ [backport: remove CHANGES hunk]
+Bug: https://gitlab.isc.org/isc-projects/bind9/-/issues/1700
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1909950
+Origin: backport, https://gitlab.isc.org/isc-projects/bind9/-/commit/01c4c3301e55b7d6a935a95ac0829e37fb317a0e
+
+Index: bind9-9.16.1/lib/isc/netmgr/netmgr-int.h
+===================================================================
+--- bind9-9.16.1.orig/lib/isc/netmgr/netmgr-int.h	2021-02-01 16:20:57.678295438 +1300
++++ bind9-9.16.1/lib/isc/netmgr/netmgr-int.h	2021-02-01 16:20:57.678295438 +1300
+@@ -214,6 +214,7 @@
+ typedef isc__netievent__socket_t isc__netievent_tcpdnsclose_t;
+ typedef isc__netievent__socket_t isc__netievent_startread_t;
+ typedef isc__netievent__socket_t isc__netievent_pauseread_t;
++typedef isc__netievent__socket_t isc__netievent_closecb_t;
+ 
+ typedef struct isc__netievent__socket_req {
+ 	isc__netievent_type type;
+@@ -239,8 +240,6 @@
+ 	isc_nmhandle_t *handle;
+ } isc__netievent__socket_handle_t;
+ 
+-typedef isc__netievent__socket_handle_t isc__netievent_closecb_t;
+-
+ typedef struct isc__netievent_udpsend {
+ 	isc__netievent_type type;
+ 	isc_nmsocket_t *sock;
+Index: bind9-9.16.1/lib/isc/netmgr/netmgr.c
+===================================================================
+--- bind9-9.16.1.orig/lib/isc/netmgr/netmgr.c	2021-02-01 16:20:57.678295438 +1300
++++ bind9-9.16.1/lib/isc/netmgr/netmgr.c	2021-02-01 16:20:57.678295438 +1300
+@@ -1147,7 +1147,15 @@
+ 	}
+ 
+ 	/*
+-	 * The handle is closed. If the socket has a callback configured
++	 * Temporarily reference the socket to ensure that it can't
++	 * be deleted by another thread while we're deactivating the
++	 * handle.
++	 */
++	isc_nmsocket_attach(sock, &tmp);
++	nmhandle_deactivate(sock, handle);
++
++	/*
++	 * The handle is gone now. If the socket has a callback configured
+ 	 * for that (e.g., to perform cleanup after request processing),
+ 	 * call it now, or schedule it to run asynchronously.
+ 	 */
+@@ -1157,27 +1165,16 @@
+ 		} else {
+ 			isc__netievent_closecb_t *event = isc__nm_get_ievent(
+ 				sock->mgr, netievent_closecb);
++			/*
++			 * The socket will be finally detached by the closecb
++			 * event handler.
++			 */
+ 			isc_nmsocket_attach(sock, &event->sock);
+-			event->handle = handle;
+ 			isc__nm_enqueue_ievent(&sock->mgr->workers[sock->tid],
+ 					       (isc__netievent_t *)event);
+-
+-			/*
+-			 * If we're doing this asynchronously, then the
+-			 * async event will take care of cleaning up the
+-			 * handle and closing the socket.
+-			 */
+-			return;
+ 		}
+ 	}
+ 
+-	/*
+-	 * Temporarily reference the socket to ensure that it can't
+-	 * be deleted by another thread while we're deactivating the
+-	 * handle.
+-	 */
+-	isc_nmsocket_attach(sock, &tmp);
+-	nmhandle_deactivate(sock, handle);
+ 	isc_nmsocket_detach(&tmp);
+ }
+ 
+@@ -1314,8 +1311,6 @@
+ 
+ 	UNUSED(worker);
+ 
+-	nmhandle_deactivate(ievent->sock, ievent->handle);
+-
+ 	ievent->sock->closehandle_cb(ievent->sock);
+ 	isc_nmsocket_detach(&ievent->sock);
+ }

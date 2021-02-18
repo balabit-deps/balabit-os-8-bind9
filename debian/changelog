@@ -1,3 +1,12 @@
+bind9 (1:9.16.1-0ubuntu2.7) focal; urgency=medium
+
+  * Fix a race between deactivating socket handle and processing
+    async callbacks, which can lead to sockets not being closed
+    properly, exhausting TCP connection limits. (LP: #1909950) 
+    - d/p/lp-1909950-fix-race-between-deactivating-handle-async-callback.patch
+
+ -- Matthew Ruffell <matthew.ruffell@canonical.com>  Thu, 18 Feb 2021 16:28:44 +1300
+
 bind9 (1:9.16.1-0ubuntu2.6) focal-security; urgency=medium
 
   * SECURITY UPDATE: off-by-one bug in ISC SPNEGO implementation
