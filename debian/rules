@@ -69,6 +69,7 @@ override_dh_auto_configure:
 		--enable-rrl \
 		--enable-filter-aaaa \
 		--disable-native-pkcs11 \
+		--disable-isc-spnego \
 		$(EXTRA_FEATURES)
 
 override_dh_auto_build:

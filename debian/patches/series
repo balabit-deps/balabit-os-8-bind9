@@ -13,3 +13,5 @@ CVE-2020-8624.patch
 0003-Print-diagnostics-on-dns_name_issubdomain-failure-in.patch
 CVE-2020-8625.patch
 lp-1909950-fix-race-between-deactivating-handle-async-callback.patch
+CVE-2021-25214.patch
+CVE-2021-25215.patch

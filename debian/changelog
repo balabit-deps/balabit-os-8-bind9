@@ -1,3 +1,20 @@
+bind9 (1:9.16.1-0ubuntu2.8) focal-security; urgency=medium
+
+  * SECURITY UPDATE: DoS via broken inbound incremental zone update (IXFR)
+    - debian/patches/CVE-2021-25214.patch: immediately reject the entire
+      transfer for certain RR in lib/dns/xfrin.c.
+    - CVE-2021-25214
+  * SECURITY UPDATE: assert via answering certain queries for DNAME records
+    - debian/patches/CVE-2021-25215.patch: fix assert checks in
+      lib/ns/query.c.
+    - CVE-2021-25215
+  * SECURITY UPDATE: overflow in BIND's GSSAPI security policy negotiation
+    - debian/rules: build with --disable-isc-spnego to disable internal
+      SPNEGO and use the one from the kerberos libraries.
+    - CVE-2021-25216
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 27 Apr 2021 07:15:23 -0400
+
 bind9 (1:9.16.1-0ubuntu2.7) focal; urgency=medium
 
   * Fix a race between deactivating socket handle and processing
