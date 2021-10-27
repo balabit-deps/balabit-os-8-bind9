@@ -1,3 +1,12 @@
+bind9 (1:9.16.1-0ubuntu2.9) focal-security; urgency=medium
+
+  * SECURITY UPDATE: resolver performance degradation via lame cache abuse
+    - debian/patches/CVE-2021-25219.patch: disable lame cache in
+      bin/named/config.c, bin/named/server.c, lib/dns/resolver.c.
+    - CVE-2021-25219
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 27 Oct 2021 07:00:32 -0400
+
 bind9 (1:9.16.1-0ubuntu2.8) focal-security; urgency=medium
 
   * SECURITY UPDATE: DoS via broken inbound incremental zone update (IXFR)
