@@ -16,3 +16,4 @@ lp-1909950-fix-race-between-deactivating-handle-async-callback.patch
 CVE-2021-25214.patch
 CVE-2021-25215.patch
 CVE-2021-25219.patch
+CVE-2021-25220.patch
