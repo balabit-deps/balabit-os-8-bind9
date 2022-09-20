@@ -1,3 +1,20 @@
+bind9 (1:9.16.1-0ubuntu2.11) focal-security; urgency=medium
+
+  * SECURITY UPDATE: Processing large delegations may severely degrade
+    resolver performance
+    - debian/patches/CVE-2022-2795.patch: add limit to lib/dns/resolver.c.
+    - CVE-2022-2795
+  * SECURITY UPDATE: memory leak in ECDSA DNSSEC verification code
+    - debian/patches/CVE-2022-38177.patch: fix return handling in
+      lib/dns/opensslecdsa_link.c.
+    - CVE-2022-38177
+  * SECURITY UPDATE: memory leaks in EdDSA DNSSEC verification code
+    - debian/patches/CVE-2022-38178.patch: fix return handling in
+      lib/dns/openssleddsa_link.c.
+    - CVE-2022-38178
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 20 Sep 2022 08:05:01 -0400
+
 bind9 (1:9.16.1-0ubuntu2.10) focal-security; urgency=medium
 
   * SECURITY UPDATE: cache poisoning via bogus NS records
