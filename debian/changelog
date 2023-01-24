@@ -1,3 +1,15 @@
+bind9 (1:9.16.1-0ubuntu2.12) focal-security; urgency=medium
+
+  * SECURITY UPDATE: An UPDATE message flood may cause named to exhaust all
+    available memory
+    - debian/patches/CVE-2022-3094.patch: add counter in
+      bin/named/bind9.xsl, bin/named/statschannel.c,
+      lib/ns/include/ns/server.h, lib/ns/include/ns/stats.h,
+      lib/ns/server.c, lib/ns/update.c.
+    - CVE-2022-3094
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 24 Jan 2023 08:30:54 -0500
+
 bind9 (1:9.16.1-0ubuntu2.11) focal-security; urgency=medium
 
   * SECURITY UPDATE: Processing large delegations may severely degrade
