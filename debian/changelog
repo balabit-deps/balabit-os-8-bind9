@@ -1,3 +1,18 @@
+bind9 (1:9.16.1-0ubuntu2.14) focal; urgency=medium
+
+  * d/bind9.named.service: restart the named service on failure.
+    (LP: #2006054)
+
+ -- Athos Ribeiro <athos.ribeiro@canonical.com>  Fri, 03 Mar 2023 12:37:25 -0300
+
+bind9 (1:9.16.1-0ubuntu2.13) focal; urgency=medium
+
+  * d/p/lp1997375-segfault-isc-nm-tcp-send.patch: Fix segfault on
+    isc__nm_tcpdns_send by moving the tcpdns processing to another
+    thread. (LP: #1997375)
+
+ -- Sergio Durigan Junior <sergio.durigan@canonical.com>  Thu, 02 Feb 2023 13:38:24 -0500
+
 bind9 (1:9.16.1-0ubuntu2.12) focal-security; urgency=medium
 
   * SECURITY UPDATE: An UPDATE message flood may cause named to exhaust all
