@@ -1,3 +1,13 @@
+bind9 (1:9.16.1-0ubuntu2.15) focal-security; urgency=medium
+
+  * SECURITY UPDATE: Configured cache size limit can be significantly
+    exceeded
+    - debian/patches/CVE-2023-2828.patch: fix cache expiry in
+      lib/dns/rbtdb.c.
+    - CVE-2023-2828
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 20 Jun 2023 08:38:29 -0400
+
 bind9 (1:9.16.1-0ubuntu2.14) focal; urgency=medium
 
   * d/bind9.named.service: restart the named service on failure.
