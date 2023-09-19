@@ -23,3 +23,4 @@ CVE-2022-38178.patch
 CVE-2022-3094.patch
 lp1997375-segfault-isc-nm-tcp-send.patch
 CVE-2023-2828.patch
+CVE-2023-3341.patch

@@ -1,3 +1,12 @@
+bind9 (1:9.16.1-0ubuntu2.16) focal-security; urgency=medium
+
+  * SECURITY UPDATE: DoS via recusive packet parsing
+    - debian/patches/CVE-2023-3341.patch: add a max depth check to
+      lib/isccc/include/isccc/result.h, lib/isccc/result.c, lib/isccc/cc.c.
+    - CVE-2023-3341
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 19 Sep 2023 07:22:19 -0400
+
 bind9 (1:9.16.1-0ubuntu2.15) focal-security; urgency=medium
 
   * SECURITY UPDATE: Configured cache size limit can be significantly
