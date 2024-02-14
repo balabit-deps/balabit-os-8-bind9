@@ -1,45 +1,30 @@
 /*
- * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND STICHTING NLNET
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * STICHTING NLNET BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
- *
- * The development of Dynamically Loadable Zones (DLZ) for BIND 9 was
- * conceived and contributed by Rob Butler.
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ROB BUTLER
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * ROB BUTLER BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
- */
-
-/*
- * Copyright (C) 1999-2001, 2013, 2016  Internet Systems Consortium, Inc.
- * ("ISC")
+ * SPDX-License-Identifier: MPL-2.0 and ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*
+ * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
+ *
+ * The development of Dynamically Loadable Zones (DLZ) for Bind 9 was
+ * conceived and contributed by Rob Butler.
+ *
+ * Permission to use, copy, modify, and distribute this software for any purpose
+ * with or without fee is hereby granted, provided that the above copyright
+ * notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+ * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+ * AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+ * INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+ * LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+ * OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
  */
 
 /*
@@ -58,6 +43,10 @@
 #include <dlz_list.h>
 #include <dlz_minimal.h>
 #include <dlz_pthread.h>
+
+#if !defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 80000
+typedef bool my_bool;
+#endif /* !defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 80000 */
 
 #define dbc_search_limit 30
 #define ALLNODES	 1
@@ -493,8 +482,9 @@ mysql_process_rs(mysql_instance_t *db, dns_sdlzlookup_t *lookup,
 			 * ones together.  figure out how long to make
 			 * string.
 			 */
-			for (j = 2; j < fields; j++)
+			for (j = 2; j < fields; j++) {
 				len += strlen(safeGet(row[j])) + 1;
+			}
 
 			/*
 			 * allocate string memory, allow for NULL to
@@ -693,8 +683,9 @@ dlz_allnodes(const char *zone, void *dbdata, dns_sdlzallnodes_t *allnodes) {
 			 * more than 4 fields, concatenate the last
 			 * ones together.
 			 */
-			for (j = 3; j < fields; j++)
+			for (j = 3; j < fields; j++) {
 				len += strlen(safeGet(row[j])) + 1;
+			}
 
 			tmpString = malloc(len + 1);
 			if (tmpString == NULL) {
@@ -812,9 +803,6 @@ dlz_create(const char *dlzname, unsigned int argc, char *argv[], void **dbdata,
 	char *endp;
 	int j;
 	const char *helper_name;
-#if MYSQL_VERSION_ID >= 50000
-	my_bool auto_reconnect = 1;
-#endif /* if MYSQL_VERSION_ID >= 50000 */
 #if PTHREADS
 	int dbcount;
 	int i;
@@ -1012,17 +1000,15 @@ dlz_create(const char *dlzname, unsigned int argc, char *argv[], void **dbdata,
 
 		dbc = NULL;
 
-#if MYSQL_VERSION_ID >= 50000
 		/* enable automatic reconnection. */
 		if (mysql_options((MYSQL *)dbi->dbconn, MYSQL_OPT_RECONNECT,
-				  &auto_reconnect) != 0)
+				  &(my_bool){ 1 }) != 0)
 		{
 			mysql->log(ISC_LOG_WARNING, "MySQL module failed to "
 						    "set "
 						    "MYSQL_OPT_RECONNECT "
 						    "option, continuing");
 		}
-#endif /* if MYSQL_VERSION_ID >= 50000 */
 
 		for (j = 0; dbc == NULL && j < 4; j++) {
 			dbc = mysql_real_connect(

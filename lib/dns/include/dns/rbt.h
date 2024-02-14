@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -57,10 +59,11 @@ ISC_LANG_BEGINDECLS
  * multiple dns_rbtnode structures will not work.
  */
 typedef struct dns_rbtnode dns_rbtnode_t;
-enum { DNS_RBT_NSEC_NORMAL = 0,	  /* in main tree */
-       DNS_RBT_NSEC_HAS_NSEC = 1, /* also has node in nsec tree */
-       DNS_RBT_NSEC_NSEC = 2,	  /* in nsec tree */
-       DNS_RBT_NSEC_NSEC3 = 3	  /* in nsec3 tree */
+enum {
+	DNS_RBT_NSEC_NORMAL = 0,   /* in main tree */
+	DNS_RBT_NSEC_HAS_NSEC = 1, /* also has node in nsec tree */
+	DNS_RBT_NSEC_NSEC = 2,	   /* in nsec tree */
+	DNS_RBT_NSEC_NSEC3 = 3	   /* in nsec3 tree */
 };
 struct dns_rbtnode {
 #if DNS_RBT_USEMAGIC
@@ -86,28 +89,35 @@ struct dns_rbtnode {
 	 * the unnamed bitfields unless they should also be accessed
 	 * after acquiring the tree lock.
 	 */
-	unsigned int : 0;		/* start of bitfields c/o tree lock */
-	unsigned int is_root : 1;	/*%< range is 0..1 */
-	unsigned int color : 1;		/*%< range is 0..1 */
+	unsigned int		   : 0; /* start of bitfields c/o tree lock */
+	unsigned int is_root	   : 1; /*%< range is 0..1 */
+	unsigned int color	   : 1; /*%< range is 0..1 */
 	unsigned int find_callback : 1; /*%< range is 0..1 */
-	unsigned int attributes : 3;	/*%< range is 0..2 */
-	unsigned int nsec : 2;		/*%< range is 0..3 */
-	unsigned int namelen : 8;	/*%< range is 1..255 */
-	unsigned int offsetlen : 8;	/*%< range is 1..128 */
-	unsigned int oldnamelen : 8;	/*%< range is 1..255 */
+	unsigned int attributes	   : 3; /*%< range is 0..2 */
+	unsigned int nsec	   : 2; /*%< range is 0..3 */
+	unsigned int namelen	   : 8; /*%< range is 1..255 */
+	unsigned int offsetlen	   : 8; /*%< range is 1..128 */
+	unsigned int oldnamelen	   : 8; /*%< range is 1..255 */
 	/*@}*/
 
 	/* flags needed for serialization to file */
-	unsigned int is_mmapped : 1;
+	unsigned int is_mmapped		: 1;
 	unsigned int parent_is_relative : 1;
-	unsigned int left_is_relative : 1;
-	unsigned int right_is_relative : 1;
-	unsigned int down_is_relative : 1;
-	unsigned int data_is_relative : 1;
+	unsigned int left_is_relative	: 1;
+	unsigned int right_is_relative	: 1;
+	unsigned int down_is_relative	: 1;
+	unsigned int data_is_relative	: 1;
+
+	/*
+	 * full name length; set during serialization, and used
+	 * during deserialization to calculate database size.
+	 * should be cleared after use.
+	 */
+	unsigned int fullnamelen : 8; /*%< range is 1..255 */
 
 	/* node needs to be cleaned from rpz */
 	unsigned int rpz : 1;
-	unsigned int : 0; /* end of bitfields c/o tree lock */
+	unsigned int	 : 0; /* end of bitfields c/o tree lock */
 
 	/*%
 	 * These are needed for hashing. The 'uppernode' points to the
@@ -130,6 +140,12 @@ struct dns_rbtnode {
 	 */
 	ISC_LINK(dns_rbtnode_t) deadlink;
 
+	/*%
+	 * This linked list is used to store nodes from which tree pruning can
+	 * be started.
+	 */
+	ISC_LINK(dns_rbtnode_t) prunelink;
+
 	/*@{*/
 	/*!
 	 * These values are used in the RBT DB implementation.  The appropriate
@@ -149,19 +165,18 @@ struct dns_rbtnode {
 	 * separate region of memory.
 	 */
 	void *data;
-	uint8_t : 0; /* start of bitfields c/o node lock */
+	uint8_t	      : 0; /* start of bitfields c/o node lock */
 	uint8_t dirty : 1;
-	uint8_t wild : 1;
-	uint8_t : 0;	  /* end of bitfields c/o node lock */
-	uint16_t locknum; /* note that this is not in the bitfield
-			   * */
+	uint8_t wild  : 1;
+	uint8_t	      : 0;	/* end of bitfields c/o node lock */
+	uint16_t       locknum; /* note that this is not in the bitfield */
 	isc_refcount_t references;
 	/*@}*/
 };
 
 typedef isc_result_t (*dns_rbtfindcallback_t)(dns_rbtnode_t *node,
-					      dns_name_t *   name,
-					      void *	     callback_arg);
+					      dns_name_t    *name,
+					      void	    *callback_arg);
 
 typedef isc_result_t (*dns_rbtdatawriter_t)(FILE *file, unsigned char *data,
 					    void *arg, uint64_t *crc);
@@ -678,6 +693,17 @@ dns_rbt_hashsize(dns_rbt_t *rbt);
  * \li  rbt is a valid rbt manager.
  */
 
+isc_result_t
+dns_rbt_adjusthashsize(dns_rbt_t *rbt, size_t size);
+/*%<
+ * Adjust the number of buckets in the 'rbt' hash table, according to the
+ * expected maximum size of the rbt database.
+ *
+ * Requires:
+ * \li  rbt is a valid rbt manager.
+ * \li  size is expected maximum memory footprint of rbt.
+ */
+
 void
 dns_rbt_destroy(dns_rbt_t **rbtp);
 isc_result_t
@@ -742,7 +768,7 @@ dns_rbt_deserialize_tree(void *base_address, size_t filesize,
 
 void
 dns_rbt_printtext(dns_rbt_t *rbt, void (*data_printer)(FILE *, void *),
-		  FILE *     f);
+		  FILE	    *f);
 /*%<
  * Print an ASCII representation of the internal structure of the red-black
  * tree of trees to the passed stream.
@@ -1029,12 +1055,12 @@ dns_rbtnodechain_nextflat(dns_rbtnodechain_t *chain, dns_name_t *name);
  * Find the next node at the current depth in DNSSEC order.
  */
 
-void
-dns_rbtnode_nodename(dns_rbtnode_t *node, dns_name_t *name);
-
-dns_rbtnode_t *
-dns_rbt_root(dns_rbt_t *rbt);
-
+unsigned int
+dns__rbtnode_namelen(dns_rbtnode_t *node);
+/*%<
+ * Returns the length of the full name of the node. Used only internally
+ * and in unit tests.
+ */
 ISC_LANG_ENDDECLS
 
 #endif /* DNS_RBT_H */

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -149,27 +151,30 @@ isc_rsa_verify_test(void **state) {
 	ret = dns_name_fromtext(name, &buf, NULL, 0, NULL);
 	assert_int_equal(ret, ISC_R_SUCCESS);
 
-	ret = dst_key_fromfile(name, 29235, DST_ALG_RSASHA1, DST_TYPE_PUBLIC,
+	ret = dst_key_fromfile(name, 29238, DST_ALG_RSASHA256, DST_TYPE_PUBLIC,
 			       "./", dt_mctx, &key);
 	assert_int_equal(ret, ISC_R_SUCCESS);
 
-	/* RSASHA1 */
+	/* RSASHA1 - May not be supported by the OS */
+	if (dst_algorithm_supported(DST_ALG_RSASHA1)) {
+		key->key_alg = DST_ALG_RSASHA1;
 
-	ret = dst_context_create(key, dt_mctx, DNS_LOGCATEGORY_DNSSEC, false, 0,
-				 &ctx);
-	assert_int_equal(ret, ISC_R_SUCCESS);
+		ret = dst_context_create(key, dt_mctx, DNS_LOGCATEGORY_DNSSEC,
+					 false, 0, &ctx);
+		assert_int_equal(ret, ISC_R_SUCCESS);
 
-	r.base = d;
-	r.length = 10;
-	ret = dst_context_adddata(ctx, &r);
-	assert_int_equal(ret, ISC_R_SUCCESS);
+		r.base = d;
+		r.length = 10;
+		ret = dst_context_adddata(ctx, &r);
+		assert_int_equal(ret, ISC_R_SUCCESS);
 
-	r.base = sigsha1;
-	r.length = 256;
-	ret = dst_context_verify(ctx, &r);
-	assert_int_equal(ret, ISC_R_SUCCESS);
+		r.base = sigsha1;
+		r.length = 256;
+		ret = dst_context_verify(ctx, &r);
+		assert_int_equal(ret, ISC_R_SUCCESS);
 
-	dst_context_destroy(&ctx);
+		dst_context_destroy(&ctx);
+	}
 
 	/* RSASHA256 */
 
@@ -231,7 +236,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* HAVE_CMOCKA */

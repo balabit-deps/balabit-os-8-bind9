@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -52,6 +54,7 @@ ns_server_create(isc_mem_t *mctx, ns_matchview_t matchingview,
 	isc_quota_init(&sctx->xfroutquota, 10);
 	isc_quota_init(&sctx->tcpquota, 10);
 	isc_quota_init(&sctx->recursionquota, 100);
+	isc_quota_init(&sctx->updquota, 100);
 
 	CHECKFATAL(dns_tkeyctx_create(mctx, &sctx->tkeyctx));
 
@@ -87,7 +90,7 @@ ns_server_create(isc_mem_t *mctx, ns_matchview_t matchingview,
 	CHECKFATAL(isc_stats_create(mctx, &sctx->tcpoutstats6,
 				    dns_sizecounter_out_max));
 
-	sctx->udpsize = 4096;
+	sctx->udpsize = 1232;
 	sctx->transfer_tcp_message_size = 20480;
 
 	sctx->fuzztype = isc_fuzz_none;
@@ -131,6 +134,7 @@ ns_server_detach(ns_server_t **sctxp) {
 			isc_mem_put(sctx->mctx, altsecret, sizeof(*altsecret));
 		}
 
+		isc_quota_destroy(&sctx->updquota);
 		isc_quota_destroy(&sctx->recursionquota);
 		isc_quota_destroy(&sctx->tcpquota);
 		isc_quota_destroy(&sctx->xfroutquota);

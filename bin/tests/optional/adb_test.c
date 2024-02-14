@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,6 +20,7 @@
 #include <isc/app.h>
 #include <isc/buffer.h>
 #include <isc/hash.h>
+#include <isc/managers.h>
 #include <isc/print.h>
 #include <isc/socket.h>
 #include <isc/task.h>
@@ -41,20 +44,21 @@ struct client {
 };
 
 static isc_mem_t *mctx = NULL;
-static isc_mempool_t *cmp;
-static isc_log_t *lctx;
-static isc_logconfig_t *lcfg;
-static isc_taskmgr_t *taskmgr;
-static isc_socketmgr_t *socketmgr;
-static isc_timermgr_t *timermgr;
-static dns_dispatchmgr_t *dispatchmgr;
-static isc_task_t *t1, *t2;
-static dns_view_t *view;
-static dns_db_t *rootdb;
+static isc_mempool_t *cmp = NULL;
+static isc_log_t *lctx = NULL;
+static isc_logconfig_t *lcfg = NULL;
+static isc_nm_t *netmgr = NULL;
+static isc_taskmgr_t *taskmgr = NULL;
+static isc_socketmgr_t *socketmgr = NULL;
+static isc_timermgr_t *timermgr = NULL;
+static dns_dispatchmgr_t *dispatchmgr = NULL;
+static isc_task_t *t1 = NULL, *t2 = NULL;
+static dns_view_t *view = NULL;
+static dns_db_t *rootdb = NULL;
 static ISC_LIST(client_t) clients;
 static isc_mutex_t client_lock;
 static isc_stdtime_t now;
-static dns_adb_t *adb;
+static dns_adb_t *adb = NULL;
 
 static void
 check_result(isc_result_t result, const char *format, ...)
@@ -103,12 +107,12 @@ free_client(client_t **c) {
 	isc_mempool_put(cmp, client);
 }
 
-static inline void
+static void
 CLOCK(void) {
 	RUNTIME_CHECK(isc_mutex_lock(&client_lock) == ISC_R_SUCCESS);
 }
 
-static inline void
+static void
 CUNLOCK(void) {
 	RUNTIME_CHECK(isc_mutex_unlock(&client_lock) == ISC_R_SUCCESS);
 }
@@ -144,39 +148,33 @@ static void
 create_managers(void) {
 	isc_result_t result;
 
-	taskmgr = NULL;
-	result = isc_taskmgr_create(mctx, 5, 0, NULL, &taskmgr);
-	check_result(result, "isc_taskmgr_create");
+	result = isc_managers_create(mctx, 5, 0, &netmgr, &taskmgr);
+	check_result(result, "isc_managers_create");
 
-	timermgr = NULL;
 	result = isc_timermgr_create(mctx, &timermgr);
 	check_result(result, "isc_timermgr_create");
 
-	socketmgr = NULL;
 	result = isc_socketmgr_create(mctx, &socketmgr);
 	check_result(result, "isc_socketmgr_create");
 
-	dispatchmgr = NULL;
 	result = dns_dispatchmgr_create(mctx, &dispatchmgr);
 	check_result(result, "dns_dispatchmgr_create");
 }
 
 static void
 create_view(void) {
-	dns_cache_t *cache;
+	dns_cache_t *cache = NULL;
 	isc_result_t result;
 
 	/*
 	 * View.
 	 */
-	view = NULL;
 	result = dns_view_create(mctx, dns_rdataclass_in, "_default", &view);
 	check_result(result, "dns_view_create");
 
 	/*
 	 * Cache.
 	 */
-	cache = NULL;
 	result = dns_cache_create(mctx, mctx, taskmgr, timermgr,
 				  dns_rdataclass_in, "", "rbt", 0, NULL,
 				  &cache);
@@ -297,8 +295,7 @@ main(int argc, char **argv) {
 	isc_mempool_create(mctx, sizeof(client_t), &cmp);
 	isc_mempool_setname(cmp, "adb test clients");
 
-	result = isc_log_create(mctx, &lctx, &lcfg);
-	check_result(result, "isc_log_create()");
+	isc_log_create(mctx, &lctx, &lcfg);
 	isc_log_setcontext(lctx);
 	dns_log_init(lctx);
 	dns_log_setcontext(lctx);
@@ -310,10 +307,9 @@ main(int argc, char **argv) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	result = isc_log_createchannel(lcfg, "_default", ISC_LOG_TOFILEDESC,
-				       ISC_LOG_DYNAMIC, &destination,
-				       ISC_LOG_PRINTTIME);
-	check_result(result, "isc_log_createchannel()");
+	isc_log_createchannel(lcfg, "_default", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination, ISC_LOG_PRINTTIME);
+
 	result = isc_log_usechannel(lcfg, "_default", NULL, NULL);
 	check_result(result, "isc_log_usechannel()");
 
@@ -324,10 +320,8 @@ main(int argc, char **argv) {
 
 	create_managers();
 
-	t1 = NULL;
 	result = isc_task_create(taskmgr, 0, &t1);
 	check_result(result, "isc_task_create t1");
-	t2 = NULL;
 	result = isc_task_create(taskmgr, 0, &t2);
 	check_result(result, "isc_task_create t2");
 
@@ -335,6 +329,7 @@ main(int argc, char **argv) {
 	printf("task 2 = %p\n", t2);
 
 	create_view();
+	RUNTIME_CHECK(view != NULL);
 
 	adb = view->adb;
 
@@ -400,8 +395,8 @@ main(int argc, char **argv) {
 	fprintf(stderr, "Destroying timer manager\n");
 	isc_timermgr_destroy(&timermgr);
 
-	fprintf(stderr, "Destroying task manager\n");
-	isc_taskmgr_destroy(&taskmgr);
+	fprintf(stderr, "Destroying task and network managers\n");
+	isc_managers_destroy(&netmgr, &taskmgr);
 
 	isc_log_destroy(&lctx);
 

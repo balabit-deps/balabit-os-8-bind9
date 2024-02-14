@@ -45,6 +45,15 @@
 /* define if the ARM yield instruction is available */
 #undef HAVE_ARM_YIELD
 
+/* Define to 1 if you have the `BIO_read_ex' function. */
+#undef HAVE_BIO_READ_EX
+
+/* Define to 1 if you have the `BIO_write_ex' function. */
+#undef HAVE_BIO_WRITE_EX
+
+/* Define to 1 if you have the `BN_GENCB_new' function. */
+#undef HAVE_BN_GENCB_NEW
+
 /* Define to 1 if the compiler supports __builtin_clz. */
 #undef HAVE_BUILTIN_CLZ
 
@@ -63,11 +72,20 @@
 /* Use CMocka */
 #undef HAVE_CMOCKA
 
-/* Define to 1 if you have the `cpuset_setaffinity' function. */
-#undef HAVE_CPUSET_SETAFFINITY
-
 /* Define to 1 if you have the `CRYPTO_zalloc' function. */
 #undef HAVE_CRYPTO_ZALLOC
+
+/* Define to 1 if you have the declaration of `UV_UDP_MMSG_CHUNK', and to 0 if
+   you don't. */
+#undef HAVE_DECL_UV_UDP_MMSG_CHUNK
+
+/* Define to 1 if you have the declaration of `UV_UDP_MMSG_FREE', and to 0 if
+   you don't. */
+#undef HAVE_DECL_UV_UDP_MMSG_FREE
+
+/* Define to 1 if you have the declaration of `UV_UDP_RECVMMSG', and to 0 if
+   you don't. */
+#undef HAVE_DECL_UV_UDP_RECVMMSG
 
 /* Define to 1 if you have the <devpoll.h> header file. */
 #undef HAVE_DEVPOLL_H
@@ -150,9 +168,6 @@
 /* Define to 1 if you have the `EVP_sha512' function. */
 #undef HAVE_EVP_SHA512
 
-/* Define to 1 if you have the `explicit_bzero' function. */
-#undef HAVE_EXPLICIT_BZERO
-
 /* Define to 1 if you have the <fcntl.h> header file. */
 #undef HAVE_FCNTL_H
 
@@ -164,6 +179,18 @@
 
 /* Define to 1 if fseeko (and presumably ftello) exists and is declared. */
 #undef HAVE_FSEEKO
+
+/* Define to 1 if the system has the `constructor' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_CONSTRUCTOR
+
+/* Define to 1 if the system has the `destructor' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_DESTRUCTOR
+
+/* Define to 1 if the system has the `malloc' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_MALLOC
+
+/* Define to 1 if the system has the `returns_nonnull' function attribute */
+#undef HAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL
 
 /* Build with GeoIP2 support */
 #undef HAVE_GEOIP2
@@ -258,14 +285,14 @@
 /* Define to 1 if you have the <locale.h> header file. */
 #undef HAVE_LOCALE_H
 
+/* define if extended attributes for malloc are available */
+#undef HAVE_MALLOC_EXT_ATTR
+
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
 
 /* Define to 1 if you have the `mmap' function. */
 #undef HAVE_MMAP
-
-/* Define to 1 if you have the `nanosleep' function. */
-#undef HAVE_NANOSLEEP
 
 /* Define to 1 if you have the <net/if6.h> header file. */
 #undef HAVE_NET_IF6_H
@@ -273,17 +300,20 @@
 /* Define to 1 if you have the <net/route.h> header file. */
 #undef HAVE_NET_ROUTE_H
 
+/* Define to 1 if you have the `OPENSSL_cleanup' function. */
+#undef HAVE_OPENSSL_CLEANUP
+
 /* define if OpenSSL supports Ed25519 */
 #undef HAVE_OPENSSL_ED25519
 
 /* define if OpenSSL supports Ed448 */
 #undef HAVE_OPENSSL_ED448
 
-/* define if OpenSSL supports SipHash */
-#undef HAVE_OPENSSL_SIPHASH
+/* Define to 1 if you have the `OPENSSL_init_crypto' function. */
+#undef HAVE_OPENSSL_INIT_CRYPTO
 
-/* Define to 1 if you have the `processor_bind' function. */
-#undef HAVE_PROCESSOR_BIND
+/* Define to 1 if you have the `OPENSSL_init_ssl' function. */
+#undef HAVE_OPENSSL_INIT_SSL
 
 /* Define if you have POSIX threads libraries and header files. */
 #undef HAVE_PTHREAD
@@ -305,9 +335,6 @@
 
 /* Define to 1 if you have the `pthread_rwlock_rdlock' function. */
 #undef HAVE_PTHREAD_RWLOCK_RDLOCK
-
-/* Define to 1 if you have the `pthread_setaffinity_np' function. */
-#undef HAVE_PTHREAD_SETAFFINITY_NP
 
 /* Define to 1 if you have the `pthread_setname_np' function. */
 #undef HAVE_PTHREAD_SETNAME_NP
@@ -339,9 +366,6 @@
 /* Define to 1 if you have the <sched.h> header file. */
 #undef HAVE_SCHED_H
 
-/* Define to 1 if you have the `sched_setaffinity' function. */
-#undef HAVE_SCHED_SETAFFINITY
-
 /* Define to 1 if you have the `sched_yield' function. */
 #undef HAVE_SCHED_YIELD
 
@@ -362,6 +386,21 @@
 
 /* define if the SPARC pause instruction is available */
 #undef HAVE_SPARC_PAUSE
+
+/* Define to 1 if you have the `SSL_CTX_set_min_proto_version' function. */
+#undef HAVE_SSL_CTX_SET_MIN_PROTO_VERSION
+
+/* Define to 1 if you have the `SSL_CTX_up_ref' function. */
+#undef HAVE_SSL_CTX_UP_REF
+
+/* Define to 1 if you have the `SSL_peek_ex' function. */
+#undef HAVE_SSL_PEEK_EX
+
+/* Define to 1 if you have the `SSL_read_ex' function. */
+#undef HAVE_SSL_READ_EX
+
+/* Define to 1 if you have the `SSL_write_ex' function. */
+#undef HAVE_SSL_WRITE_EX
 
 /* define if struct stat has st_mtim.tv_nsec field */
 #undef HAVE_STAT_NSEC
@@ -390,6 +429,9 @@
 /* Define to 1 if you have the `strlcpy' function. */
 #undef HAVE_STRLCPY
 
+/* Define to 1 if you have the `strnstr' function. */
+#undef HAVE_STRNSTR
+
 /* Define to 1 if you have the `sysconf' function. */
 #undef HAVE_SYSCONF
 
@@ -399,9 +441,6 @@
 /* Define to 1 if you have the <sys/capability.h> header file. */
 #undef HAVE_SYS_CAPABILITY_H
 
-/* Define to 1 if you have the <sys/cpuset.h> header file. */
-#undef HAVE_SYS_CPUSET_H
-
 /* Define to 1 if you have the <sys/devpoll.h> header file. */
 #undef HAVE_SYS_DEVPOLL_H
 
@@ -410,9 +449,6 @@
 
 /* Define to 1 if you have the <sys/param.h> header file. */
 #undef HAVE_SYS_PARAM_H
-
-/* Define to 1 if you have the <sys/procset.h> header file. */
-#undef HAVE_SYS_PROCSET_H
 
 /* Define to 1 if you have the <sys/select.h> header file. */
 #undef HAVE_SYS_SELECT_H
@@ -447,6 +483,12 @@
 /* Define if Thread-Local Storage is available */
 #undef HAVE_TLS
 
+/* Define to 1 if you have the `TLS_client_method' function. */
+#undef HAVE_TLS_CLIENT_METHOD
+
+/* Define to 1 if you have the `TLS_server_method' function. */
+#undef HAVE_TLS_SERVER_METHOD
+
 /* Define to 1 if you have the `tzset' function. */
 #undef HAVE_TZSET
 
@@ -462,17 +504,8 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
-/* Define to 1 if you have the `usleep' function. */
-#undef HAVE_USLEEP
-
-/* Define to 1 if you have the `uv_handle_get_data' function. */
-#undef HAVE_UV_HANDLE_GET_DATA
-
-/* Define to 1 if you have the `uv_handle_set_data' function. */
-#undef HAVE_UV_HANDLE_SET_DATA
-
-/* Define to 1 if you have the `uv_import' function. */
-#undef HAVE_UV_IMPORT
+/* define if the compiler supports _Unwind_Backtrace() */
+#undef HAVE_UNWIND_BACKTRACE
 
 /* Use zlib library */
 #undef HAVE_ZLIB
@@ -488,9 +521,6 @@
 
 /* Define to allow building of objects for dlopen(). */
 #undef ISC_DLZ_DLOPEN
-
-/* Define to emulate atomic variables with mutexes. */
-#undef ISC_MUTEX_ATOMICS
 
 /* define if the linker supports --wrap option */
 #undef LD_WRAP
@@ -536,6 +566,9 @@
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
 #undef PTHREAD_CREATE_JOINABLE
+
+/* Exit code for skipped tests */
+#undef SKIPPED_TEST_EXIT_CODE
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS

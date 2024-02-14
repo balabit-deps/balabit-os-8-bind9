@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -29,6 +31,11 @@ strlcpy(char *dst, const char *src, size_t size);
 size_t
 strlcat(char *dst, const char *src, size_t size);
 #endif /* if !defined(HAVE_STRLCAT) */
+
+#if !defined(HAVE_STRNSTR)
+char *
+strnstr(const char *s, const char *find, size_t slen);
+#endif /* if !defined(HAVE_STRNSTR) */
 
 int
 isc_string_strerror_r(int errnum, char *buf, size_t buflen);

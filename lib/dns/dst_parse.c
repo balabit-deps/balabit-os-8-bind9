@@ -1,14 +1,18 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
- *
- * Portions Copyright (C) Network Associates, Inc.
+ */
+
+/*
+ * Copyright (C) Network Associates, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -61,7 +65,7 @@ static const char *timetags[TIMING_NTAGS] = {
 
 #define NUMERIC_NTAGS (DST_MAX_NUMERIC + 1)
 static const char *numerictags[NUMERIC_NTAGS] = {
-	"Predecessor:", "Successor:", "MaxTTL:", "RollPeriod:", NULL
+	"Predecessor:", "Successor:", "MaxTTL:", "RollPeriod:", NULL, NULL, NULL
 };
 
 struct parse_map {
@@ -120,7 +124,8 @@ find_value(const char *s, const unsigned int alg) {
 
 	for (i = 0; map[i].tag != NULL; i++) {
 		if (strcasecmp(s, map[i].tag) == 0 &&
-		    (TAG_ALG(map[i].value) == alg)) {
+		    (TAG_ALG(map[i].value) == alg))
+		{
 			return (map[i].value);
 		}
 	}

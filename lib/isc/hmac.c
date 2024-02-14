@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -25,9 +27,9 @@
 
 isc_hmac_t *
 isc_hmac_new(void) {
-	isc_hmac_t *hmac = HMAC_CTX_new();
+	HMAC_CTX *hmac = HMAC_CTX_new();
 	RUNTIME_CHECK(hmac != NULL);
-	return (hmac);
+	return ((struct hmac *)hmac);
 }
 
 void
@@ -41,7 +43,7 @@ isc_hmac_free(isc_hmac_t *hmac) {
 
 isc_result_t
 isc_hmac_init(isc_hmac_t *hmac, const void *key, size_t keylen,
-	      isc_md_type_t md_type) {
+	      const isc_md_type_t *md_type) {
 	REQUIRE(hmac != NULL);
 	REQUIRE(key != NULL);
 
@@ -95,7 +97,7 @@ isc_hmac_final(isc_hmac_t *hmac, unsigned char *digest,
 	return (ISC_R_SUCCESS);
 }
 
-isc_md_type_t
+const isc_md_type_t *
 isc_hmac_get_md_type(isc_hmac_t *hmac) {
 	REQUIRE(hmac != NULL);
 
@@ -117,13 +119,11 @@ isc_hmac_get_block_size(isc_hmac_t *hmac) {
 }
 
 isc_result_t
-isc_hmac(isc_md_type_t type, const void *key, const int keylen,
+isc_hmac(const isc_md_type_t *type, const void *key, const int keylen,
 	 const unsigned char *buf, const size_t len, unsigned char *digest,
 	 unsigned int *digestlen) {
-	isc_hmac_t *hmac = NULL;
 	isc_result_t res;
-
-	hmac = isc_hmac_new();
+	isc_hmac_t *hmac = isc_hmac_new();
 
 	res = isc_hmac_init(hmac, key, keylen, type);
 	if (res != ISC_R_SUCCESS) {

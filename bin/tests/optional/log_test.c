@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -98,10 +100,9 @@ main(int argc, char **argv) {
 
 	fprintf(stderr, "EXPECT:\n%s%d%s%s%s",
 		"8 lines to stderr (first 4 numbered, #3 repeated)\n",
-		file_versions == 0 || file_versions == ISC_LOG_ROLLNEVER
-			? 1
-			: file_versions > 0 ? file_versions + 1
-					    : FILE_VERSIONS + 1,
+		file_versions == 0 || file_versions == ISC_LOG_ROLLNEVER ? 1
+		: file_versions > 0 ? file_versions + 1
+				    : FILE_VERSIONS + 1,
 		" " TEST_FILE " files, and\n", "2 lines to syslog\n",
 		"lines ending with exclamation marks are errors\n\n");
 
@@ -112,9 +113,9 @@ main(int argc, char **argv) {
 	lcfg = NULL;
 
 	isc_mem_create(&mctx);
-	CHECK(isc_log_create(mctx, &lctx, &lcfg));
+	isc_log_create(mctx, &lctx, &lcfg);
 
-	CHECK(isc_log_settag(lcfg, progname));
+	isc_log_settag(lcfg, progname);
 
 	isc_log_setcontext(lctx);
 	dns_log_init(lctx);
@@ -147,20 +148,20 @@ main(int argc, char **argv) {
 	destination.file.maximum_size = 1;
 	destination.file.versions = file_versions;
 
-	CHECK(isc_log_createchannel(
+	isc_log_createchannel(
 		lcfg, "file_test", ISC_LOG_TOFILE, ISC_LOG_INFO, &destination,
 		ISC_LOG_PRINTTIME | ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL |
-			ISC_LOG_PRINTCATEGORY | ISC_LOG_PRINTMODULE));
+			ISC_LOG_PRINTCATEGORY | ISC_LOG_PRINTMODULE);
 
 	/*
 	 * Create a dynamic debugging channel to a file descriptor.
 	 */
 	destination.file.stream = stderr;
 
-	CHECK(isc_log_createchannel(lcfg, "debug_test", ISC_LOG_TOFILEDESC,
-				    ISC_LOG_DYNAMIC, &destination,
-				    ISC_LOG_PRINTTIME | ISC_LOG_PRINTLEVEL |
-					    ISC_LOG_DEBUGONLY));
+	isc_log_createchannel(lcfg, "debug_test", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination,
+			      ISC_LOG_PRINTTIME | ISC_LOG_PRINTLEVEL |
+				      ISC_LOG_DEBUGONLY);
 
 	/*
 	 * Test the usability of the four predefined logging channels.

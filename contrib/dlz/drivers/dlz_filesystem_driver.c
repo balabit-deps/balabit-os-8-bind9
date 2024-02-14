@@ -1,36 +1,15 @@
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
+ * SPDX-License-Identifier: MPL-2.0
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND STICHTING NLNET
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * STICHTING NLNET BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * The development of Dynamically Loadable Zones (DLZ) for Bind 9 was
- * conceived and contributed by Rob Butler.
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ROB BUTLER
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * ROB BUTLER BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
+ * See the COPYRIGHT file distributed with this work for additional
+ * information regarding copyright ownership.
  */
 
 /*
@@ -190,7 +169,8 @@ create_path_helper(char *out, const char *in, config_data_t *cd) {
 				break;
 			}
 			if (strlen((char *)&tmpPtr[i + 1]) <=
-			    (unsigned int)cd->splitcnt) {
+			    (unsigned int)cd->splitcnt)
+			{
 				break;
 			}
 			i += cd->splitcnt;
@@ -388,10 +368,12 @@ process_dir(isc_dir_t *dir, void *passback, config_data_t *cd,
 					 */
 					while ((tmpPtr = strrchr(
 							tmpString,
-							cd->pathsep)) != NULL) {
+							cd->pathsep)) != NULL)
+					{
 						if ((strlen(host) +
 						     strlen(tmpPtr + 1) + 2) >
-						    NAME_MAX) {
+						    NAME_MAX)
+						{
 							continue;
 						}
 						strcat(host, tmpPtr + 1);
@@ -399,7 +381,8 @@ process_dir(isc_dir_t *dir, void *passback, config_data_t *cd,
 						tmpPtr[0] = '\0';
 					}
 					if ((strlen(host) + strlen(tmpString) +
-					     1) <= NAME_MAX) {
+					     1) <= NAME_MAX)
+					{
 						strcat(host, tmpString);
 					}
 				}
@@ -415,13 +398,15 @@ process_dir(isc_dir_t *dir, void *passback, config_data_t *cd,
 			 */
 			while (isc_dir_read(dir) == ISC_R_SUCCESS) {
 				if (strncasecmp(".host", dir->entry.name, 5) ==
-				    0) {
+				    0)
+				{
 					/*
 					 * handle filesystem's special
 					 * wildcard "-"
 					 */
 					if (strcmp((char *)&dir->entry.name[6],
-						   "-") == 0) {
+						   "-") == 0)
+					{
 						strlcpy(host, "*",
 							sizeof(host));
 					} else {
@@ -489,7 +474,7 @@ process_dir(isc_dir_t *dir, void *passback, config_data_t *cd,
 				 * are performing a zone xfr and we
 				 * could not find a host entry.
 				 */
-			} else if (dir_list != NULL && foundHost == false) {
+			} else if (dir_list != NULL && !foundHost) {
 				continue;
 			}
 		} else { /* if we cannot stat entry, skip it. */

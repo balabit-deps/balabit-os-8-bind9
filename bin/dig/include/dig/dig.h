@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -68,6 +70,10 @@
 #define SERVER_TIMEOUT 1
 
 #define LOOKUP_LIMIT 64
+
+#define DEFAULT_EDNS_VERSION 0
+#define DEFAULT_EDNS_BUFSIZE 4096
+
 /*%
  * Lookup_limit is just a limiter, keeping too many lookups from being
  * created.  It's job is mainly to prevent the program from running away
@@ -123,33 +129,33 @@ struct dig_lookup {
 	isc_buffer_t	 namebuf;
 	isc_buffer_t	 onamebuf;
 	isc_buffer_t	 renderbuf;
-	char *		 sendspace;
-	dns_name_t *	 name;
+	char		*sendspace;
+	dns_name_t	*name;
 	isc_interval_t	 interval;
-	dns_message_t *	 sendmsg;
-	dns_name_t *	 oname;
+	dns_message_t	*sendmsg;
+	dns_name_t	*oname;
 	ISC_LINK(dig_lookup_t) link;
 	ISC_LIST(dig_query_t) q;
 	ISC_LIST(dig_query_t) connecting;
-	dig_query_t *	  current_query;
+	dig_query_t	 *current_query;
 	dig_serverlist_t  my_server_list;
 	dig_searchlist_t *origin;
-	dig_query_t *	  xfr_q;
+	dig_query_t	 *xfr_q;
 	uint32_t	  retries;
 	int		  nsfound;
-	uint16_t	  udpsize;
+	int16_t		  udpsize;
 	int16_t		  edns;
 	int16_t		  padding;
 	uint32_t	  ixfr_serial;
 	isc_buffer_t	  rdatabuf;
 	char		  rdatastore[MXNAME];
-	dst_context_t *	  tsigctx;
-	isc_buffer_t *	  querysig;
+	dst_context_t	 *tsigctx;
+	isc_buffer_t	 *querysig;
 	uint32_t	  msgcounter;
 	dns_fixedname_t	  fdomain;
-	isc_sockaddr_t *  ecs_addr;
-	char *		  cookie;
-	dns_ednsopt_t *	  ednsopts;
+	isc_sockaddr_t	 *ecs_addr;
+	char		 *cookie;
+	dns_ednsopt_t	 *ednsopts;
 	unsigned int	  ednsoptscnt;
 	isc_dscp_t	  dscp;
 	unsigned int	  ednsflags;
@@ -170,18 +176,19 @@ struct dig_query {
 	uint32_t      msg_count;
 	uint32_t      rr_count;
 	bool	      ixfr_axfr;
-	char *	      servname;
-	char *	      userarg;
+	char	     *servname;
+	char	     *userarg;
 	isc_buffer_t  recvbuf, lengthbuf, tmpsendbuf, sendbuf;
-	char *	      recvspace, *tmpsendspace, lengthspace[4];
+	char	     *recvspace, *tmpsendspace, lengthspace[4];
 	isc_socket_t *sock;
 	ISC_LINK(dig_query_t) link;
 	ISC_LINK(dig_query_t) clink;
+	dig_query_t   *saved_next;
 	isc_sockaddr_t sockaddr;
 	isc_time_t     time_sent;
 	isc_time_t     time_recv;
 	uint64_t       byte_count;
-	isc_timer_t *  timer;
+	isc_timer_t   *timer;
 };
 
 struct dig_server {
@@ -211,7 +218,7 @@ extern bool check_ra, have_ipv4, have_ipv6, specified_source, usesearch,
 	showsearch, yaml;
 extern in_port_t	 port;
 extern unsigned int	 timeout;
-extern isc_mem_t *	 mctx;
+extern isc_mem_t	*mctx;
 extern int		 sendcount;
 extern int		 ndots;
 extern int		 lookup_counter;
@@ -222,10 +229,10 @@ extern char		 keyfile[MXNAME];
 extern char		 keysecret[MXNAME];
 extern const dns_name_t *hmacname;
 extern unsigned int	 digestbits;
-extern dns_tsigkey_t *	 tsigkey;
+extern dns_tsigkey_t	*tsigkey;
 extern bool		 validated;
-extern isc_taskmgr_t *	 taskmgr;
-extern isc_task_t *	 global_task;
+extern isc_taskmgr_t	*taskmgr;
+extern isc_task_t	*global_task;
 extern bool		 free_now;
 extern bool		 debugging, debugtiming, memdebugging;
 extern bool		 keep_open;
@@ -333,7 +340,7 @@ set_search_domain(char *domain);
  * Routines to be defined in dig.c, host.c, and nslookup.c. and
  * then assigned to the appropriate function pointer
  */
-extern isc_result_t (*dighost_printmessage)(dig_query_t *	query,
+extern isc_result_t (*dighost_printmessage)(dig_query_t	       *query,
 					    const isc_buffer_t *msgbuf,
 					    dns_message_t *msg, bool headers);
 

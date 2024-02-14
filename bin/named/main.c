@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -16,6 +18,15 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uv.h>
+
+#if HAVE_LOCALE_H
+#include <locale.h>
+#endif /* HAVE_LOCALE_H */
+
+#ifdef HAVE_DNSTAP
+#include <protobuf-c/protobuf-c.h>
+#endif
 
 #include <isc/app.h>
 #include <isc/backtrace.h>
@@ -23,8 +34,8 @@
 #include <isc/dir.h>
 #include <isc/file.h>
 #include <isc/hash.h>
-#include <isc/hp.h>
 #include <isc/httpd.h>
+#include <isc/managers.h>
 #include <isc/netmgr.h>
 #include <isc/os.h>
 #include <isc/platform.h>
@@ -332,12 +343,15 @@ library_unexpected_error(const char *file, int line, const char *format,
 static void
 usage(void) {
 	fprintf(stderr, "usage: named [-4|-6] [-c conffile] [-d debuglevel] "
-			"[-E engine] [-f|-g]\n"
-			"             [-n number_of_cpus] [-p port] [-s] "
-			"[-S sockets] [-t chrootdir]\n"
-			"             [-u username] [-U listeners] "
-			"[-m {usage|trace|record|size|mctx}]\n"
-			"usage: named [-v|-V]\n");
+			"[-D comment] [-E engine]\n"
+			"             [-f|-g] [-L logfile] [-n number_of_cpus] "
+			"[-p port] [-s]\n"
+			"             [-S sockets] [-t chrootdir] [-u "
+			"username] [-U listeners]\n"
+			"             [-X lockfile] [-m "
+			"{usage|trace|record|size|mctx}]\n"
+			"             [-M external|internal|fill|nofill]\n"
+			"usage: named [-v|-V|-C]\n");
 }
 
 static void
@@ -355,11 +369,12 @@ save_command_line(int argc, char *argv[]) {
 		*dst++ = ' ';
 
 		while (*src != '\0' && dst < eob) {
-			if (isalnum(*src) || *src == ',' || *src == '-' ||
-			    *src == '_' || *src == '.' || *src == '/')
+			if (isalnum(*(unsigned char *)src) || *src == ',' ||
+			    *src == '-' || *src == '_' || *src == '.' ||
+			    *src == '/')
 			{
 				*dst++ = *src++;
-			} else if (isprint(*src)) {
+			} else if (isprint(*(unsigned char *)src)) {
 				if (dst + 2 >= eob) {
 					goto add_ellipsis;
 				}
@@ -442,6 +457,7 @@ static struct flag_def {
 			{ "mctx", ISC_MEM_DEBUGCTX, false },
 			{ NULL, 0, false } },
   mem_context_flags[] = { { "external", ISC_MEMFLAG_INTERNAL, true },
+			  { "internal", ISC_MEMFLAG_INTERNAL, false },
 			  { "fill", ISC_MEMFLAG_FILL, false },
 			  { "nofill", ISC_MEMFLAG_FILL, true },
 			  { NULL, 0, false } };
@@ -460,7 +476,8 @@ set_flags(const char *arg, struct flag_def *defs, unsigned int *ret) {
 		arglen = (int)(end - arg);
 		for (def = defs; def->name != NULL; def++) {
 			if (arglen == (int)strlen(def->name) &&
-			    memcmp(arg, def->name, arglen) == 0) {
+			    memcmp(arg, def->name, arglen) == 0)
+			{
 				if (def->value == 0) {
 					clear = true;
 				}
@@ -485,11 +502,133 @@ set_flags(const char *arg, struct flag_def *defs, unsigned int *ret) {
 	}
 }
 
+/*%
+ * Convert algorithm type to string.
+ */
+static const char *
+dst_hmac_algorithm_totext(dns_secalg_t alg) {
+	switch (alg) {
+	case DST_ALG_HMACMD5:
+		return ("hmac-md5");
+	case DST_ALG_HMACSHA1:
+		return ("hmac-sha1");
+	case DST_ALG_HMACSHA224:
+		return ("hmac-sha224");
+	case DST_ALG_HMACSHA256:
+		return ("hmac-sha256");
+	case DST_ALG_HMACSHA384:
+		return ("hmac-sha384");
+	case DST_ALG_HMACSHA512:
+		return ("hmac-sha512");
+	default:
+		return ("(unknown)");
+	}
+}
+
+#define DST_ALG_HMAC_FIRST DST_ALG_HMACMD5
+#define DST_ALG_HMAC_LAST  DST_ALG_HMACSHA512
+
+static void
+list_dnssec_algorithms(isc_buffer_t *b) {
+	for (size_t i = DST_ALG_UNKNOWN; i < DST_MAX_ALGS; i++) {
+		if (i == DST_ALG_DH || i == DST_ALG_GSSAPI ||
+		    (i >= DST_ALG_HMAC_FIRST && i <= DST_ALG_HMAC_LAST))
+		{
+			continue;
+		}
+		if (dst_algorithm_supported(i)) {
+			isc_buffer_putstr(b, " ");
+			(void)dns_secalg_totext(i, b);
+		}
+	}
+}
+
+static void
+list_ds_algorithms(isc_buffer_t *b) {
+	for (size_t i = 0; i < 256; i++) {
+		if (dst_ds_digest_supported(i)) {
+			isc_buffer_putstr(b, " ");
+			(void)dns_dsdigest_totext(i, b);
+		}
+	}
+}
+
+static void
+list_hmac_algorithms(isc_buffer_t *b) {
+	isc_buffer_t sb = *b;
+	for (size_t i = DST_ALG_HMAC_FIRST; i <= DST_ALG_HMAC_LAST; i++) {
+		if (i == DST_ALG_GSSAPI) {
+			continue;
+		}
+		if (dst_algorithm_supported(i)) {
+			isc_buffer_putstr(b, " ");
+			isc_buffer_putstr(b, dst_hmac_algorithm_totext(i));
+		}
+	}
+	for (unsigned char *s = isc_buffer_used(&sb); s != isc_buffer_used(b);
+	     s++)
+	{
+		*s = toupper(*s);
+	}
+}
+
+static void
+logit(isc_buffer_t *b) {
+	isc_log_write(named_g_lctx, NAMED_LOGCATEGORY_GENERAL,
+		      NAMED_LOGMODULE_MAIN, ISC_LOG_NOTICE, "%.*s",
+		      (int)isc_buffer_usedlength(b),
+		      (char *)isc_buffer_base(b));
+}
+
+static void
+printit(isc_buffer_t *b) {
+	printf("%.*s\n", (int)isc_buffer_usedlength(b),
+	       (char *)isc_buffer_base(b));
+}
+
+static void
+format_supported_algorithms(void (*emit)(isc_buffer_t *b)) {
+	isc_buffer_t b;
+	char buf[512];
+
+	isc_buffer_init(&b, buf, sizeof(buf));
+	isc_buffer_putstr(&b, "DNSSEC algorithms:");
+	list_dnssec_algorithms(&b);
+	(*emit)(&b);
+
+	isc_buffer_init(&b, buf, sizeof(buf));
+	isc_buffer_putstr(&b, "DS algorithms:");
+	list_ds_algorithms(&b);
+	(*emit)(&b);
+
+	isc_buffer_init(&b, buf, sizeof(buf));
+	isc_buffer_putstr(&b, "HMAC algorithms:");
+	list_hmac_algorithms(&b);
+	(*emit)(&b);
+
+	isc_buffer_init(&b, buf, sizeof(buf));
+	isc_buffer_printf(&b, "TKEY mode 2 support (Diffie-Hellman): %s",
+			  (dst_algorithm_supported(DST_ALG_DH) &&
+			   dst_algorithm_supported(DST_ALG_HMACMD5))
+				  ? "yes"
+				  : "non");
+	(*emit)(&b);
+
+	isc_buffer_init(&b, buf, sizeof(buf));
+	isc_buffer_printf(&b, "TKEY mode 3 support (GSS-API): %s",
+			  dst_algorithm_supported(DST_ALG_GSSAPI) ? "yes"
+								  : "no");
+	(*emit)(&b);
+}
+
 static void
 printversion(bool verbose) {
 	char rndcconf[PATH_MAX], *dot = NULL;
-#if defined(HAVE_GEOIP2)
 	isc_mem_t *mctx = NULL;
+	isc_result_t result;
+	isc_buffer_t b;
+	char buf[512];
+#if defined(HAVE_GEOIP2)
 	cfg_parser_t *parser = NULL;
 	cfg_obj_t *config = NULL;
 	const cfg_obj_t *defaults = NULL, *obj = NULL;
@@ -533,6 +672,9 @@ printversion(bool verbose) {
 	printf("linked to OpenSSL version: %s\n",
 	       SSLeay_version(SSLEAY_VERSION));
 #endif /* OPENSSL_VERSION_NUMBER >= 0x10100000L */
+	printf("compiled with libuv version: %d.%d.%d\n", UV_VERSION_MAJOR,
+	       UV_VERSION_MINOR, UV_VERSION_PATCH);
+	printf("linked to libuv version: %s\n", uv_version_string());
 #ifdef HAVE_LIBXML2
 	printf("compiled with libxml2 version: %s\n", LIBXML_DOTTED_VERSION);
 	printf("linked to libxml2 version: %s\n", xmlParserVersion);
@@ -553,7 +695,19 @@ printversion(bool verbose) {
 	printf("compiled with protobuf-c version: %s\n", PROTOBUF_C_VERSION);
 	printf("linked to protobuf-c version: %s\n", protobuf_c_version());
 #endif /* if defined(HAVE_DNSTAP) */
-	printf("threads support is enabled\n\n");
+	printf("threads support is enabled\n");
+
+	isc_mem_create(&mctx);
+	result = dst_lib_init(mctx, named_g_engine);
+	if (result == ISC_R_SUCCESS) {
+		isc_buffer_init(&b, buf, sizeof(buf));
+		format_supported_algorithms(printit);
+		printf("\n");
+		dst_lib_destroy();
+	} else {
+		printf("DST initialization failure: %s\n",
+		       isc_result_totext(result));
+	}
 
 	/*
 	 * The default rndc.conf and rndc.key paths are in the same
@@ -581,7 +735,6 @@ printversion(bool verbose) {
 	printf("  named lock file:      %s\n", named_g_defaultlockfile);
 #if defined(HAVE_GEOIP2)
 #define RTC(x) RUNTIME_CHECK((x) == ISC_R_SUCCESS)
-	isc_mem_create(&mctx);
 	RTC(cfg_parser_create(mctx, named_g_lctx, &parser));
 	RTC(named_config_parsedefaults(parser, &config));
 	RTC(cfg_map_get(config, "options", &defaults));
@@ -654,6 +807,8 @@ parse_T_opt(char *option) {
 		named_g_nosyslog = true;
 	} else if (!strcmp(option, "notcp")) {
 		notcp = true;
+	} else if (!strncmp(option, "maxcachesize=", 13)) {
+		named_g_maxcachesize = atoi(option + 13);
 	} else if (!strcmp(option, "maxudp512")) {
 		maxudp = 512;
 	} else if (!strcmp(option, "maxudp1460")) {
@@ -752,6 +907,11 @@ parse_command_line(int argc, char *argv[]) {
 			named_g_conffile = isc_commandline_argument;
 			named_g_conffileset = true;
 			break;
+		case 'C':
+			printf("# Built-in default values. "
+			       "This is NOT the run-time configuration!\n");
+			printf("%s", named_config_getdefault());
+			exit(0);
 		case 'd':
 			named_g_debuglevel = parse_int(isc_commandline_argument,
 						       "debug "
@@ -839,8 +999,8 @@ parse_command_line(int argc, char *argv[]) {
 			}
 			break;
 		case 'F':
-		/* Reserved for FIPS mode */
-		/* FALLTHROUGH */
+			/* Reserved for FIPS mode */
+			FALLTHROUGH;
 		case '?':
 			usage();
 			if (isc_commandline_option == '?') {
@@ -855,7 +1015,7 @@ parse_command_line(int argc, char *argv[]) {
 						      "an argument",
 						      isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		default:
 			named_main_earlyfatal("parsing options returned %d",
 					      ch);
@@ -902,23 +1062,11 @@ create_managers(void) {
 		      "using %u UDP listener%s per interface", named_g_udpdisp,
 		      named_g_udpdisp == 1 ? "" : "s");
 
-	/*
-	 * We have ncpus network threads, ncpus worker threads, ncpus
-	 * old network threads - make it 4x just to be safe. The memory
-	 * impact is negligible.
-	 */
-	isc_hp_init(4 * named_g_cpus);
-	named_g_nm = isc_nm_start(named_g_mctx, named_g_cpus);
-	if (named_g_nm == NULL) {
-		UNEXPECTED_ERROR(__FILE__, __LINE__, "isc_nm_start() failed");
-		return (ISC_R_UNEXPECTED);
-	}
-
-	result = isc_taskmgr_create(named_g_mctx, named_g_cpus, 0, named_g_nm,
-				    &named_g_taskmgr);
+	result = isc_managers_create(named_g_mctx, named_g_cpus, 0, &named_g_nm,
+				     &named_g_taskmgr);
 	if (result != ISC_R_SUCCESS) {
 		UNEXPECTED_ERROR(__FILE__, __LINE__,
-				 "isc_taskmgr_create() failed: %s",
+				 "isc_managers_create() failed: %s",
 				 isc_result_totext(result));
 		return (ISC_R_UNEXPECTED);
 	}
@@ -953,25 +1101,9 @@ create_managers(void) {
 
 static void
 destroy_managers(void) {
-	/*
-	 * isc_nm_closedown() closes all active connections, freeing
-	 * attached clients and other resources and preventing new
-	 * connections from being established, but it not does not
-	 * stop all processing or destroy the netmgr yet.
-	 */
-	isc_nm_closedown(named_g_nm);
-
-	/*
-	 * isc_taskmgr_destroy() will block until all tasks have exited.
-	 */
-	isc_taskmgr_destroy(&named_g_taskmgr);
+	isc_managers_destroy(&named_g_nm, &named_g_taskmgr);
 	isc_timermgr_destroy(&named_g_timermgr);
 	isc_socketmgr_destroy(&named_g_socketmgr);
-
-	/*
-	 * At this point is safe to destroy the netmgr.
-	 */
-	isc_nm_destroy(&named_g_nm);
 }
 
 static void
@@ -1147,6 +1279,13 @@ setup(void) {
 		      "linked to OpenSSL version: %s",
 		      SSLeay_version(SSLEAY_VERSION));
 #endif /* OPENSSL_VERSION_NUMBER >= 0x10100000L */
+	isc_log_write(named_g_lctx, NAMED_LOGCATEGORY_GENERAL,
+		      NAMED_LOGMODULE_MAIN, ISC_LOG_NOTICE,
+		      "compiled with libuv version: %d.%d.%d", UV_VERSION_MAJOR,
+		      UV_VERSION_MINOR, UV_VERSION_PATCH);
+	isc_log_write(named_g_lctx, NAMED_LOGCATEGORY_GENERAL,
+		      NAMED_LOGMODULE_MAIN, ISC_LOG_NOTICE,
+		      "linked to libuv version: %s", uv_version_string());
 #ifdef HAVE_LIBXML2
 	isc_log_write(named_g_lctx, NAMED_LOGCATEGORY_GENERAL,
 		      NAMED_LOGMODULE_MAIN, ISC_LOG_NOTICE,
@@ -1291,7 +1430,14 @@ setup(void) {
 #endif /* if CONTRIB_DLZ */
 
 	named_server_create(named_g_mctx, &named_g_server);
+	ENSURE(named_g_server != NULL);
 	sctx = named_g_server->sctx;
+
+	/*
+	 * Report supported algorithms now that dst_lib_init() has
+	 * been called via named_server_create().
+	 */
+	format_supported_algorithms(logit);
 
 	/*
 	 * Modify server context according to command line options
@@ -1484,8 +1630,22 @@ main(int argc, char *argv[]) {
 #endif /* ifdef WIN32 */
 
 #ifdef HAVE_LIBXML2
-	xmlInitThreads();
+	xmlInitParser();
 #endif /* HAVE_LIBXML2 */
+
+	/*
+	 * Technically, this call is superfluous because on startup of the main
+	 * program, the portable "C" locale is selected by default.  This
+	 * explicit call here is for a reference that the BIND 9 code base is
+	 * not locale aware and the locale MUST be set to "C" (or "POSIX") when
+	 * calling any BIND 9 library code.  If you are calling external
+	 * libraries that use locale, such calls must be wrapped into
+	 * setlocale(LC_ALL, ""); before the call and setlocale(LC_ALL, "C");
+	 * after the call, and no BIND 9 library calls must be made in between.
+	 */
+#if HAVE_SETLOCALE
+	setlocale(LC_ALL, "C");
+#endif /* HAVE_SETLOCALE */
 
 	/*
 	 * Record version in core image.
@@ -1515,15 +1675,6 @@ main(int argc, char *argv[]) {
 #if USE_PKCS11
 	pk11_result_register();
 #endif /* if USE_PKCS11 */
-
-#if !ISC_MEM_DEFAULTFILL
-	/*
-	 * Update the default flags to remove ISC_MEMFLAG_FILL
-	 * before we parse the command line. If disabled here,
-	 * it can be turned back on with -M fill.
-	 */
-	isc_mem_defaultflags &= ~ISC_MEMFLAG_FILL;
-#endif /* if !ISC_MEM_DEFAULTFILL */
 
 	parse_command_line(argc, argv);
 
@@ -1558,6 +1709,7 @@ main(int argc, char *argv[]) {
 	isc_mem_setname(named_g_mctx, "main", NULL);
 
 	setup();
+	INSIST(named_g_server != NULL);
 
 	/*
 	 * Start things running and then wait for a shutdown request
@@ -1625,7 +1777,7 @@ main(int argc, char *argv[]) {
 	named_os_shutdown();
 
 #ifdef HAVE_LIBXML2
-	xmlCleanupThreads();
+	xmlCleanupParser();
 #endif /* HAVE_LIBXML2 */
 
 #ifdef HAVE_GPERFTOOLS_PROFILER

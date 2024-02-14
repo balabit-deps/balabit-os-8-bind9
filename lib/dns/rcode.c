@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -219,7 +221,8 @@ maybe_numeric(unsigned int *valuep, isc_textregion_t *source, unsigned int max,
 	char buffer[NUMBERSIZE];
 	int v;
 
-	if (!isdigit(source->base[0] & 0xff) || source->length > NUMBERSIZE - 1)
+	if (!isdigit((unsigned char)source->base[0]) ||
+	    source->length > NUMBERSIZE - 1)
 	{
 		return (ISC_R_BADNUMBER);
 	}

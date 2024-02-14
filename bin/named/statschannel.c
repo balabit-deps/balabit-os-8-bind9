@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -54,6 +56,13 @@
 
 #include "bind9.xsl.h"
 
+#define CHECK(m)                             \
+	do {                                 \
+		result = (m);                \
+		if (result != ISC_R_SUCCESS) \
+			goto error;          \
+	} while (0)
+
 struct named_statschannel {
 	/* Unlocked */
 	isc_httpdmgr_t *httpdmgr;
@@ -97,8 +106,8 @@ user_zonetype(dns_zone_t *zone) {
 		const dns_zonetype_t type;
 		const char *const string;
 	} typemap[] = { { dns_zone_none, "none" },
-			{ dns_zone_master, "master" },
-			{ dns_zone_slave, "slave" },
+			{ dns_zone_primary, "master" },
+			{ dns_zone_secondary, "slave" },
 			{ dns_zone_mirror, "mirror" },
 			{ dns_zone_stub, "stub" },
 			{ dns_zone_staticstub, "static-stub" },
@@ -195,7 +204,7 @@ static int tcpoutsizestats_index[dns_sizecounter_out_max];
 static int dnstapstats_index[dns_dnstapcounter_max];
 static int gluecachestats_index[dns_gluecachestatscounter_max];
 
-static inline void
+static void
 set_desc(int counter, int maxcounter, const char *fdesc, const char **fdescs,
 	 const char *xdesc, const char **xdescs) {
 	REQUIRE(counter < maxcounter);
@@ -335,6 +344,7 @@ init_desc(void) {
 	SET_NSSTATDESC(reclimitdropped,
 		       "queries dropped due to recursive client limit",
 		       "RecLimitDropped");
+	SET_NSSTATDESC(updatequota, "Update quota exceeded", "UpdateQuota");
 
 	INSIST(i == ns_statscounter_max);
 
@@ -1447,7 +1457,8 @@ rdtypestat_dump(dns_rdatastatstype_t type, uint64_t val, void *arg) {
 #endif /* ifdef HAVE_JSON_C */
 
 	if ((DNS_RDATASTATSTYPE_ATTR(type) &
-	     DNS_RDATASTATSTYPE_ATTR_OTHERTYPE) == 0) {
+	     DNS_RDATASTATSTYPE_ATTR_OTHERTYPE) == 0)
+	{
 		dns_rdatatype_format(DNS_RDATASTATSTYPE_BASE(type), typebuf,
 				     sizeof(typebuf));
 		typestr = typebuf;
@@ -1519,7 +1530,8 @@ rdatasetstats_dump(dns_rdatastatstype_t type, uint64_t val, void *arg) {
 #endif /* ifdef HAVE_JSON_C */
 
 	if ((DNS_RDATASTATSTYPE_ATTR(type) &
-	     DNS_RDATASTATSTYPE_ATTR_NXDOMAIN) != 0) {
+	     DNS_RDATASTATSTYPE_ATTR_NXDOMAIN) != 0)
+	{
 		typestr = "NXDOMAIN";
 	} else if ((DNS_RDATASTATSTYPE_ATTR(type) &
 		    DNS_RDATASTATSTYPE_ATTR_OTHERTYPE) != 0)
@@ -1809,12 +1821,48 @@ zone_xmlrender(dns_zone_t *zone, void *arg) {
 	}
 	TRY0(xmlTextWriterEndElement(writer)); /* serial */
 
+	/*
+	 * Export zone timers to the statistics channel in XML format.  For
+	 * master zones, only include the loaded time.  For slave zones, also
+	 * include the expires and refresh times.
+	 */
+	isc_time_t timestamp;
+
+	result = dns_zone_getloadtime(zone, &timestamp);
+	if (result != ISC_R_SUCCESS) {
+		goto error;
+	}
+
+	isc_time_formatISO8601(&timestamp, buf, 64);
+	TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "loaded"));
+	TRY0(xmlTextWriterWriteString(writer, ISC_XMLCHAR buf));
+	TRY0(xmlTextWriterEndElement(writer));
+
+	if (dns_zone_gettype(zone) == dns_zone_secondary) {
+		result = dns_zone_getexpiretime(zone, &timestamp);
+		if (result != ISC_R_SUCCESS) {
+			goto error;
+		}
+		isc_time_formatISO8601(&timestamp, buf, 64);
+		TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "expires"));
+		TRY0(xmlTextWriterWriteString(writer, ISC_XMLCHAR buf));
+		TRY0(xmlTextWriterEndElement(writer));
+
+		result = dns_zone_getrefreshtime(zone, &timestamp);
+		if (result != ISC_R_SUCCESS) {
+			goto error;
+		}
+		isc_time_formatISO8601(&timestamp, buf, 64);
+		TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "refresh"));
+		TRY0(xmlTextWriterWriteString(writer, ISC_XMLCHAR buf));
+		TRY0(xmlTextWriterEndElement(writer));
+	}
+
 	if (statlevel == dns_zonestat_full) {
 		isc_stats_t *zonestats;
 		isc_stats_t *gluecachestats;
 		dns_stats_t *rcvquerystats;
 		dns_stats_t *dnssecsignstats;
-		dns_stats_t *dnssecrefreshstats;
 		uint64_t nsstat_values[ns_statscounter_max];
 		uint64_t gluecachestats_values[dns_gluecachestatscounter_max];
 
@@ -1880,6 +1928,7 @@ zone_xmlrender(dns_zone_t *zone, void *arg) {
 
 		dnssecsignstats = dns_zone_getdnssecsignstats(zone);
 		if (dnssecsignstats != NULL) {
+			/* counters type="dnssec-sign"*/
 			TRY0(xmlTextWriterStartElement(writer,
 						       ISC_XMLCHAR "counters"));
 			TRY0(xmlTextWriterWriteAttribute(
@@ -1887,19 +1936,17 @@ zone_xmlrender(dns_zone_t *zone, void *arg) {
 				ISC_XMLCHAR "dnssec-sign"));
 
 			dumparg.result = ISC_R_SUCCESS;
-			dns_dnssecsignstats_dump(dnssecsignstats,
-						 dnssecsignstat_dump, &dumparg,
-						 0);
+			dns_dnssecsignstats_dump(
+				dnssecsignstats, dns_dnssecsignstats_sign,
+				dnssecsignstat_dump, &dumparg, 0);
 			if (dumparg.result != ISC_R_SUCCESS) {
 				goto error;
 			}
 
 			/* counters type="dnssec-sign"*/
 			TRY0(xmlTextWriterEndElement(writer));
-		}
 
-		dnssecrefreshstats = dns_zone_getdnssecrefreshstats(zone);
-		if (dnssecrefreshstats != NULL) {
+			/* counters type="dnssec-refresh"*/
 			TRY0(xmlTextWriterStartElement(writer,
 						       ISC_XMLCHAR "counters"));
 			TRY0(xmlTextWriterWriteAttribute(
@@ -1907,9 +1954,9 @@ zone_xmlrender(dns_zone_t *zone, void *arg) {
 				ISC_XMLCHAR "dnssec-refresh"));
 
 			dumparg.result = ISC_R_SUCCESS;
-			dns_dnssecsignstats_dump(dnssecrefreshstats,
-						 dnssecsignstat_dump, &dumparg,
-						 0);
+			dns_dnssecsignstats_dump(
+				dnssecsignstats, dns_dnssecsignstats_refresh,
+				dnssecsignstat_dump, &dumparg, 0);
 			if (dumparg.result != ISC_R_SUCCESS) {
 				goto error;
 			}
@@ -1972,7 +2019,7 @@ generatexml(named_server_t *server, uint32_t flags, int *buflen,
 					      "href=\"/bind9.xsl\""));
 	TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "statistics"));
 	TRY0(xmlTextWriterWriteAttribute(writer, ISC_XMLCHAR "version",
-					 ISC_XMLCHAR "3.11"));
+					 ISC_XMLCHAR "3.11.1"));
 
 	/* Set common fields for statistics dump */
 	dumparg.type = isc_statsformat_xml;
@@ -2253,7 +2300,8 @@ generatexml(named_server_t *server, uint32_t flags, int *buflen,
 	view = ISC_LIST_HEAD(server->viewlist);
 	TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "views"));
 	while (view != NULL &&
-	       ((flags & (STATS_XML_SERVER | STATS_XML_ZONES)) != 0)) {
+	       ((flags & (STATS_XML_SERVER | STATS_XML_ZONES)) != 0))
+	{
 		TRY0(xmlTextWriterStartElement(writer, ISC_XMLCHAR "view"));
 		TRY0(xmlTextWriterWriteAttribute(writer, ISC_XMLCHAR "name",
 						 ISC_XMLCHAR view->name));
@@ -2261,11 +2309,8 @@ generatexml(named_server_t *server, uint32_t flags, int *buflen,
 		if ((flags & STATS_XML_ZONES) != 0) {
 			TRY0(xmlTextWriterStartElement(writer,
 						       ISC_XMLCHAR "zones"));
-			result = dns_zt_apply(view->zonetable, true, NULL,
-					      zone_xmlrender, writer);
-			if (result != ISC_R_SUCCESS) {
-				goto error;
-			}
+			CHECK(dns_zt_apply(view->zonetable, isc_rwlocktype_read,
+					   true, NULL, zone_xmlrender, writer));
 			TRY0(xmlTextWriterEndElement(writer)); /* /zones */
 		}
 
@@ -2372,12 +2417,12 @@ generatexml(named_server_t *server, uint32_t flags, int *buflen,
 	TRY0(xmlTextWriterEndElement(writer)); /* /statistics */
 	TRY0(xmlTextWriterEndDocument(writer));
 
-	xmlFreeTextWriter(writer);
-
 	xmlDocDumpFormatMemoryEnc(doc, buf, buflen, "UTF-8", 0);
 	if (*buf == NULL) {
 		goto error;
 	}
+
+	xmlFreeTextWriter(writer);
 	xmlFreeDoc(doc);
 	return (ISC_R_SUCCESS);
 
@@ -2538,13 +2583,6 @@ render_xml_traffic(const char *url, isc_httpdurl_t *urlinfo,
 #define STATS_JSON_TRAFFIC 0x20
 #define STATS_JSON_ALL	   0xff
 
-#define CHECK(m)                             \
-	do {                                 \
-		result = (m);                \
-		if (result != ISC_R_SUCCESS) \
-			goto error;          \
-	} while (0)
-
 #define CHECKMEM(m)                              \
 	do {                                     \
 		if (m == NULL) {                 \
@@ -2621,12 +2659,45 @@ zone_jsonrender(dns_zone_t *zone, void *arg) {
 		return (ISC_R_NOMEMORY);
 	}
 
+	/*
+	 * Export zone timers to the statistics channel in JSON format.  For
+	 * master zones, only include the loaded time.  For slave zones, also
+	 * include the expires and refresh times.
+	 */
+
+	isc_time_t timestamp;
+
+	result = dns_zone_getloadtime(zone, &timestamp);
+	if (result != ISC_R_SUCCESS) {
+		goto error;
+	}
+
+	isc_time_formatISO8601(&timestamp, buf, 64);
+	json_object_object_add(zoneobj, "loaded", json_object_new_string(buf));
+
+	if (dns_zone_gettype(zone) == dns_zone_secondary) {
+		result = dns_zone_getexpiretime(zone, &timestamp);
+		if (result != ISC_R_SUCCESS) {
+			goto error;
+		}
+		isc_time_formatISO8601(&timestamp, buf, 64);
+		json_object_object_add(zoneobj, "expires",
+				       json_object_new_string(buf));
+
+		result = dns_zone_getrefreshtime(zone, &timestamp);
+		if (result != ISC_R_SUCCESS) {
+			goto error;
+		}
+		isc_time_formatISO8601(&timestamp, buf, 64);
+		json_object_object_add(zoneobj, "refresh",
+				       json_object_new_string(buf));
+	}
+
 	if (statlevel == dns_zonestat_full) {
 		isc_stats_t *zonestats;
 		isc_stats_t *gluecachestats;
 		dns_stats_t *rcvquerystats;
 		dns_stats_t *dnssecsignstats;
-		dns_stats_t *dnssecrefreshstats;
 		uint64_t nsstat_values[ns_statscounter_max];
 		uint64_t gluecachestats_values[dns_gluecachestatscounter_max];
 
@@ -2708,50 +2779,50 @@ zone_jsonrender(dns_zone_t *zone, void *arg) {
 		dnssecsignstats = dns_zone_getdnssecsignstats(zone);
 		if (dnssecsignstats != NULL) {
 			stats_dumparg_t dumparg;
-			json_object *counters = json_object_new_object();
-			CHECKMEM(counters);
+			json_object *sign_counters = json_object_new_object();
+			CHECKMEM(sign_counters);
 
 			dumparg.type = isc_statsformat_json;
-			dumparg.arg = counters;
+			dumparg.arg = sign_counters;
 			dumparg.result = ISC_R_SUCCESS;
-			dns_dnssecsignstats_dump(dnssecsignstats,
-						 dnssecsignstat_dump, &dumparg,
-						 0);
+			dns_dnssecsignstats_dump(
+				dnssecsignstats, dns_dnssecsignstats_sign,
+				dnssecsignstat_dump, &dumparg, 0);
 			if (dumparg.result != ISC_R_SUCCESS) {
-				json_object_put(counters);
+				json_object_put(sign_counters);
 				goto error;
 			}
 
-			if (json_object_get_object(counters)->count != 0) {
+			if (json_object_get_object(sign_counters)->count != 0) {
 				json_object_object_add(zoneobj, "dnssec-sign",
-						       counters);
+						       sign_counters);
 			} else {
-				json_object_put(counters);
+				json_object_put(sign_counters);
 			}
-		}
 
-		dnssecrefreshstats = dns_zone_getdnssecrefreshstats(zone);
-		if (dnssecrefreshstats != NULL) {
-			stats_dumparg_t dumparg;
-			json_object *counters = json_object_new_object();
-			CHECKMEM(counters);
+			json_object *refresh_counters =
+				json_object_new_object();
+			CHECKMEM(refresh_counters);
 
 			dumparg.type = isc_statsformat_json;
-			dumparg.arg = counters;
+			dumparg.arg = refresh_counters;
 			dumparg.result = ISC_R_SUCCESS;
-			dns_dnssecsignstats_dump(dnssecrefreshstats,
-						 dnssecsignstat_dump, &dumparg,
-						 0);
+			dns_dnssecsignstats_dump(
+				dnssecsignstats, dns_dnssecsignstats_refresh,
+				dnssecsignstat_dump, &dumparg, 0);
 			if (dumparg.result != ISC_R_SUCCESS) {
-				json_object_put(counters);
+				json_object_put(refresh_counters);
 				goto error;
 			}
 
-			if (json_object_get_object(counters)->count != 0) {
-				json_object_object_add(
-					zoneobj, "dnssec-refresh", counters);
+			if (json_object_get_object(refresh_counters)->count !=
+			    0)
+			{
+				json_object_object_add(zoneobj,
+						       "dnssec-refresh",
+						       refresh_counters);
 			} else {
-				json_object_put(counters);
+				json_object_put(refresh_counters);
 			}
 		}
 	}
@@ -2808,7 +2879,7 @@ generatejson(named_server_t *server, size_t *msglen, const char **msg,
 	/*
 	 * These statistics are included no matter which URL we use.
 	 */
-	obj = json_object_new_string("1.5");
+	obj = json_object_new_string("1.5.1");
 	CHECKMEM(obj);
 	json_object_object_add(bindstats, "json-stats-version", obj);
 
@@ -3002,12 +3073,9 @@ generatejson(named_server_t *server, size_t *msglen, const char **msg,
 			CHECKMEM(za);
 
 			if ((flags & STATS_JSON_ZONES) != 0) {
-				result = dns_zt_apply(view->zonetable, true,
-						      NULL, zone_jsonrender,
-						      za);
-				if (result != ISC_R_SUCCESS) {
-					goto error;
-				}
+				CHECK(dns_zt_apply(view->zonetable,
+						   isc_rwlocktype_read, true,
+						   NULL, zone_jsonrender, za));
 			}
 
 			if (json_object_array_length(za) != 0) {
@@ -3500,7 +3568,8 @@ render_xsl(const char *url, isc_httpdurl_t *urlinfo, const char *querystring,
 		     line = strtok_r(NULL, "\n", &saveptr))
 		{
 			if (strncasecmp(line, if_modified_since,
-					strlen(if_modified_since)) == 0) {
+					strlen(if_modified_since)) == 0)
+			{
 				time_t t1, t2;
 				line += strlen(if_modified_since);
 				result = isc_time_parsehttptimestamp(line,

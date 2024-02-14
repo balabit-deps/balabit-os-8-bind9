@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -129,7 +131,8 @@ select_db(char *origintext) {
 	}
 
 	for (dbi = ISC_LIST_HEAD(dbs); dbi != NULL;
-	     dbi = ISC_LIST_NEXT(dbi, link)) {
+	     dbi = ISC_LIST_NEXT(dbi, link))
+	{
 		if (dns_name_compare(dns_db_origin(dbi->db), origin) == 0) {
 			break;
 		}
@@ -196,7 +199,7 @@ list(dbinfo *dbi, char *seektext) {
 		if (result != ISC_R_SUCCESS && result != DNS_R_NEWORIGIN) {
 			break;
 		}
-		result = dns_db_allrdatasets(dbi->db, node, dbi->iversion, 0,
+		result = dns_db_allrdatasets(dbi->db, node, dbi->iversion, 0, 0,
 					     &rdsiter);
 		if (result != ISC_R_SUCCESS) {
 			dns_db_detachnode(dbi->db, &node);
@@ -378,7 +381,8 @@ main(int argc, char *argv[]) {
 
 	snprintf(dbtype, sizeof(dbtype), "rbt");
 	while ((ch = isc_commandline_parse(argc, argv, "c:d:t:z:P:Q:glpqvT")) !=
-	       -1) {
+	       -1)
+	{
 		switch (ch) {
 		case 'c':
 			result = load(isc_commandline_argument, ".", true);
@@ -402,8 +406,7 @@ main(int argc, char *argv[]) {
 				    DNS_DBFIND_VALIDATEGLUE);
 			break;
 		case 'l':
-			RUNTIME_CHECK(isc_log_create(mctx, &lctx, NULL) ==
-				      ISC_R_SUCCESS);
+			isc_log_create(mctx, &lctx, NULL);
 			isc_log_setcontext(lctx);
 			dns_log_init(lctx);
 			dns_log_setcontext(lctx);
@@ -765,7 +768,8 @@ main(int argc, char *argv[]) {
 			result = dns_dbtable_find(dbtable, &name, zcoptions,
 						  &db);
 			if (result != ISC_R_SUCCESS &&
-			    result != DNS_R_PARTIALMATCH) {
+			    result != DNS_R_PARTIALMATCH)
+			{
 				if (!quiet) {
 					printf("\n");
 					print_result("", result);
@@ -844,7 +848,7 @@ main(int argc, char *argv[]) {
 			if (dns_rdataset_isassociated(&rdataset)) {
 				break;
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		default:
 			if (dbi == NULL) {
 				dns_db_detach(&db);
@@ -887,7 +891,7 @@ main(int argc, char *argv[]) {
 
 		if (!found_as && type == dns_rdatatype_any) {
 			rdsiter = NULL;
-			result = dns_db_allrdatasets(db, node, version, 0,
+			result = dns_db_allrdatasets(db, node, version, 0, 0,
 						     &rdsiter);
 			if (result == ISC_R_SUCCESS) {
 				if (!quiet) {

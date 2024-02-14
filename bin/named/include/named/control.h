@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -61,6 +63,7 @@
 #define NAMED_COMMAND_SHOWZONE	   "showzone"
 #define NAMED_COMMAND_SYNC	   "sync"
 #define NAMED_COMMAND_SIGNING	   "signing"
+#define NAMED_COMMAND_DNSSEC	   "dnssec"
 #define NAMED_COMMAND_ZONESTATUS   "zonestatus"
 #define NAMED_COMMAND_NTA	   "nta"
 #define NAMED_COMMAND_TESTGEN	   "testgen"

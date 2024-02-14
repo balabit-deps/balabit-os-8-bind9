@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -14,31 +16,29 @@
 
 #define RRTYPE_RKEY_ATTRIBUTES 0
 
-static inline isc_result_t
+static isc_result_t
 fromtext_rkey(ARGS_FROMTEXT) {
 	REQUIRE(type == dns_rdatatype_rkey);
 
-	return (generic_fromtext_key(rdclass, type, lexer, origin, options,
-				     target, callbacks));
+	return (generic_fromtext_key(CALL_FROMTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_rkey(ARGS_TOTEXT) {
 	REQUIRE(rdata != NULL);
 	REQUIRE(rdata->type == dns_rdatatype_rkey);
 
-	return (generic_totext_key(rdata, tctx, target));
+	return (generic_totext_key(CALL_TOTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_rkey(ARGS_FROMWIRE) {
 	REQUIRE(type == dns_rdatatype_rkey);
 
-	return (generic_fromwire_key(rdclass, type, source, dctx, options,
-				     target));
+	return (generic_fromwire_key(CALL_FROMWIRE));
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_rkey(ARGS_TOWIRE) {
 	isc_region_t sr;
 
@@ -52,7 +52,7 @@ towire_rkey(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
-static inline int
+static int
 compare_rkey(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
@@ -70,14 +70,14 @@ compare_rkey(ARGS_COMPARE) {
 	return (isc_region_compare(&r1, &r2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_rkey(ARGS_FROMSTRUCT) {
 	REQUIRE(type == dns_rdatatype_rkey);
 
-	return (generic_fromstruct_key(rdclass, type, source, target));
+	return (generic_fromstruct_key(CALL_FROMSTRUCT));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_rkey(ARGS_TOSTRUCT) {
 	dns_rdata_rkey_t *rkey = target;
 
@@ -89,10 +89,10 @@ tostruct_rkey(ARGS_TOSTRUCT) {
 	rkey->common.rdtype = rdata->type;
 	ISC_LINK_INIT(&rkey->common, link);
 
-	return (generic_tostruct_key(rdata, target, mctx));
+	return (generic_tostruct_key(CALL_TOSTRUCT));
 }
 
-static inline void
+static void
 freestruct_rkey(ARGS_FREESTRUCT) {
 	dns_rdata_rkey_t *rkey = (dns_rdata_rkey_t *)source;
 
@@ -102,7 +102,7 @@ freestruct_rkey(ARGS_FREESTRUCT) {
 	generic_freestruct_key(source);
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_rkey(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_rkey);
 
@@ -113,7 +113,7 @@ additionaldata_rkey(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_rkey(ARGS_DIGEST) {
 	isc_region_t r;
 
@@ -125,7 +125,7 @@ digest_rkey(ARGS_DIGEST) {
 	return ((digest)(arg, &r));
 }
 
-static inline bool
+static bool
 checkowner_rkey(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_rkey);
 
@@ -137,7 +137,7 @@ checkowner_rkey(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_rkey(ARGS_CHECKNAMES) {
 	REQUIRE(rdata != NULL);
 	REQUIRE(rdata->type == dns_rdatatype_rkey);
@@ -149,7 +149,7 @@ checknames_rkey(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_rkey(ARGS_COMPARE) {
 	/*
 	 * Treat ALG 253 (private DNS) subtype name case sensitively.

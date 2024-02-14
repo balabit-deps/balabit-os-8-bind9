@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -174,8 +176,7 @@ add_rdata_to_list(dns_message_t *msg, dns_name_t *name, dns_rdata_t *rdata,
 	dns_message_takebuffer(msg, &tmprdatabuf);
 
 	RETERR(dns_message_gettempname(msg, &newname));
-	dns_name_init(newname, NULL);
-	dns_name_dup(name, msg->mctx, newname);
+	dns_name_copynf(name, newname);
 
 	RETERR(dns_message_gettemprdatalist(msg, &newlist));
 	newlist->rdclass = newrdata->rdclass;
@@ -225,6 +226,9 @@ free_namelist(dns_message_t *msg, dns_namelist_t *namelist) {
 		while (!ISC_LIST_EMPTY(name->list)) {
 			set = ISC_LIST_HEAD(name->list);
 			ISC_LIST_UNLINK(name->list, set, link);
+			if (dns_rdataset_isassociated(set)) {
+				dns_rdataset_disassociate(set);
+			}
 			dns_message_puttemprdataset(msg, &set);
 		}
 		dns_message_puttempname(msg, &name);
@@ -507,7 +511,7 @@ process_gsstkey(dns_message_t *msg, dns_name_t *name, dns_rdata_tkey_t *tkeyin,
 	isc_stdtime_t now;
 	isc_region_t intoken;
 	isc_buffer_t *outtoken = NULL;
-	gss_ctx_id_t gss_ctx = NULL;
+	dns_gss_ctx_id_t gss_ctx = NULL;
 
 	/*
 	 * You have to define either a gss credential (principal) to
@@ -768,7 +772,8 @@ dns_tkey_processquery(dns_message_t *msg, dns_tkeyctx_t *tctx,
 	result = dns_message_signer(msg, &tsigner);
 	if (result != ISC_R_SUCCESS) {
 		if (tkeyin.mode == DNS_TKEYMODE_GSSAPI &&
-		    result == ISC_R_NOTFOUND) {
+		    result == ISC_R_NOTFOUND)
+		{
 			signer = NULL;
 		} else {
 			tkey_log("dns_tkey_processquery: query was not "
@@ -950,7 +955,7 @@ buildquery(dns_message_t *msg, const dns_name_t *name, dns_rdata_tkey_t *tkey,
 	dns_rdataset_t *question = NULL, *tkeyset = NULL;
 	dns_rdatalist_t *tkeylist = NULL;
 	dns_rdata_t *rdata = NULL;
-	isc_buffer_t *dynbuf = NULL, *anamebuf = NULL, *qnamebuf = NULL;
+	isc_buffer_t *dynbuf = NULL;
 	isc_result_t result;
 	unsigned int len;
 
@@ -967,8 +972,6 @@ buildquery(dns_message_t *msg, const dns_name_t *name, dns_rdata_tkey_t *tkey,
 
 	len = 16 + tkey->algorithm.length + tkey->keylen + tkey->otherlen;
 	isc_buffer_allocate(msg->mctx, &dynbuf, len);
-	isc_buffer_allocate(msg->mctx, &anamebuf, name->length);
-	isc_buffer_allocate(msg->mctx, &qnamebuf, name->length);
 	RETERR(dns_message_gettemprdata(msg, &rdata));
 
 	RETERR(dns_rdata_fromstruct(rdata, dns_rdataclass_any,
@@ -983,17 +986,13 @@ buildquery(dns_message_t *msg, const dns_name_t *name, dns_rdata_tkey_t *tkey,
 	RETERR(dns_message_gettemprdataset(msg, &tkeyset));
 	RETERR(dns_rdatalist_tordataset(tkeylist, tkeyset));
 
-	dns_name_init(qname, NULL);
-	RETERR(dns_name_copy(name, qname, qnamebuf));
-
-	dns_name_init(aname, NULL);
-	RETERR(dns_name_copy(name, aname, anamebuf));
+	dns_name_copynf(name, qname);
+	dns_name_copynf(name, aname);
 
 	ISC_LIST_APPEND(qname->list, question, link);
 	ISC_LIST_APPEND(aname->list, tkeyset, link);
 
 	dns_message_addname(msg, qname, DNS_SECTION_QUESTION);
-	dns_message_takebuffer(msg, &qnamebuf);
 
 	/*
 	 * Windows 2000 needs this in the answer section, not the additional
@@ -1004,7 +1003,6 @@ buildquery(dns_message_t *msg, const dns_name_t *name, dns_rdata_tkey_t *tkey,
 	} else {
 		dns_message_addname(msg, aname, DNS_SECTION_ADDITIONAL);
 	}
-	dns_message_takebuffer(msg, &anamebuf);
 
 	return (ISC_R_SUCCESS);
 
@@ -1022,11 +1020,17 @@ failure:
 	if (dynbuf != NULL) {
 		isc_buffer_free(&dynbuf);
 	}
-	if (qnamebuf != NULL) {
-		isc_buffer_free(&qnamebuf);
+	if (rdata != NULL) {
+		dns_message_puttemprdata(msg, &rdata);
 	}
-	if (anamebuf != NULL) {
-		isc_buffer_free(&anamebuf);
+	if (tkeylist != NULL) {
+		dns_message_puttemprdatalist(msg, &tkeylist);
+	}
+	if (tkeyset != NULL) {
+		if (dns_rdataset_isassociated(tkeyset)) {
+			dns_rdataset_disassociate(tkeyset);
+		}
+		dns_message_puttemprdataset(msg, &tkeyset);
 	}
 	return (result);
 }
@@ -1109,7 +1113,7 @@ failure:
 isc_result_t
 dns_tkey_buildgssquery(dns_message_t *msg, const dns_name_t *name,
 		       const dns_name_t *gname, isc_buffer_t *intoken,
-		       uint32_t lifetime, gss_ctx_id_t *context, bool win2k,
+		       uint32_t lifetime, dns_gss_ctx_id_t *context, bool win2k,
 		       isc_mem_t *mctx, char **err_message) {
 	dns_rdata_tkey_t tkey;
 	isc_result_t result;
@@ -1342,7 +1346,7 @@ failure:
 
 isc_result_t
 dns_tkey_processgssresponse(dns_message_t *qmsg, dns_message_t *rmsg,
-			    const dns_name_t *gname, gss_ctx_id_t *context,
+			    const dns_name_t *gname, dns_gss_ctx_id_t *context,
 			    isc_buffer_t *outtoken, dns_tsigkey_t **outkey,
 			    dns_tsig_keyring_t *ring, char **err_message) {
 	dns_rdata_t rtkeyrdata = DNS_RDATA_INIT, qtkeyrdata = DNS_RDATA_INIT;
@@ -1479,7 +1483,7 @@ failure:
 
 isc_result_t
 dns_tkey_gssnegotiate(dns_message_t *qmsg, dns_message_t *rmsg,
-		      const dns_name_t *server, gss_ctx_id_t *context,
+		      const dns_name_t *server, dns_gss_ctx_id_t *context,
 		      dns_tsigkey_t **outkey, dns_tsig_keyring_t *ring,
 		      bool win2k, char **err_message) {
 	dns_rdata_t rtkeyrdata = DNS_RDATA_INIT, qtkeyrdata = DNS_RDATA_INIT;
@@ -1506,7 +1510,7 @@ dns_tkey_gssnegotiate(dns_message_t *qmsg, dns_message_t *rmsg,
 	RETERR(dns_rdata_tostruct(&rtkeyrdata, &rtkey, NULL));
 	freertkey = true;
 
-	if (win2k == true) {
+	if (win2k) {
 		RETERR(find_tkey(qmsg, &tkeyname, &qtkeyrdata,
 				 DNS_SECTION_ANSWER));
 	} else {

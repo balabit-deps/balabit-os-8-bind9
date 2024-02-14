@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -36,8 +38,8 @@
 
 typedef enum {
 	dns_zone_none,
-	dns_zone_master,
-	dns_zone_slave,
+	dns_zone_primary,
+	dns_zone_secondary,
 	dns_zone_mirror,
 	dns_zone_stub,
 	dns_zone_staticstub,
@@ -45,6 +47,14 @@ typedef enum {
 	dns_zone_dlz,
 	dns_zone_redirect
 } dns_zonetype_t;
+
+#ifndef dns_zone_master
+#define dns_zone_master dns_zone_primary
+#endif /* dns_zone_master */
+
+#ifndef dns_zone_slave
+#define dns_zone_slave dns_zone_secondary
+#endif /* dns_zone_slave */
 
 typedef enum {
 	dns_zonestat_none = 0,
@@ -58,10 +68,11 @@ typedef enum {
 	DNS_ZONEOPT_NOMERGE = 1 << 2,	    /*%< don't merge journal */
 	DNS_ZONEOPT_CHECKNS = 1 << 3,	    /*%< check if NS's are addresses */
 	DNS_ZONEOPT_FATALNS = 1 << 4,	    /*%< DNS_ZONEOPT_CHECKNS is fatal */
-	DNS_ZONEOPT_MULTIMASTER = 1 << 5, /*%< this zone has multiple masters */
-	DNS_ZONEOPT_USEALTXFRSRC = 1 << 6,   /*%< use alternate transfer sources
-					      */
-	DNS_ZONEOPT_CHECKNAMES = 1 << 7,     /*%< check-names */
+	DNS_ZONEOPT_MULTIMASTER = 1 << 5,   /*%< this zone has multiple
+						 primaries */
+	DNS_ZONEOPT_USEALTXFRSRC = 1 << 6,  /*%< use alternate transfer sources
+					     */
+	DNS_ZONEOPT_CHECKNAMES = 1 << 7,    /*%< check-names */
 	DNS_ZONEOPT_CHECKNAMESFAIL = 1 << 8, /*%< fatal check-name failures */
 	DNS_ZONEOPT_CHECKWILDCARD = 1 << 9, /*%< check for internal wildcards */
 	DNS_ZONEOPT_CHECKMX = 1 << 10,	    /*%< check-mx */
@@ -345,6 +356,24 @@ dns_zone_getmaxttl(dns_zone_t *zone);
  *\li	dns_ttl_t maxttl.
  */
 
+void
+dns_zone_lock_keyfiles(dns_zone_t *zone);
+/*%<
+ *	Lock associated keyfiles for this zone.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
+void
+dns_zone_unlock_keyfiles(dns_zone_t *zone);
+/*%<
+ *	Unlock associated keyfiles for this zone.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
 isc_result_t
 dns_zone_load(dns_zone_t *zone, bool newonly);
 
@@ -448,16 +477,6 @@ dns_zone_idetach(dns_zone_t **zonep);
  * Require:
  *\li	The caller is running in the context of the zone's task.
  *\li	'zonep' to point to a valid zone.
- */
-
-void
-dns_zone_setflag(dns_zone_t *zone, unsigned int flags, bool value);
-/*%<
- *	Sets ('value' == 'true') / clears ('value' == 'IS_FALSE')
- *	zone flags.  Valid flag bits are DNS_ZONE_F_*.
- *
- * Requires
- *\li	'zone' to be a valid zone.
  */
 
 isc_result_t
@@ -606,24 +625,41 @@ dns_zone_maintenance(dns_zone_t *zone);
  */
 
 isc_result_t
-dns_zone_setmasters(dns_zone_t *zone, const isc_sockaddr_t *masters,
-		    uint32_t count);
+dns_zone_setprimaries(dns_zone_t *zone, const isc_sockaddr_t *primaries,
+		      uint32_t count);
 isc_result_t
-dns_zone_setmasterswithkeys(dns_zone_t *zone, const isc_sockaddr_t *masters,
-			    dns_name_t **keynames, uint32_t count);
+dns_zone_setprimarieswithkeys(dns_zone_t *zone, const isc_sockaddr_t *primaries,
+			      dns_name_t **keynames, uint32_t count);
 /*%<
  *	Set the list of master servers for the zone.
  *
  * Require:
  *\li	'zone' to be a valid zone.
- *\li	'masters' array of isc_sockaddr_t with port set or NULL.
- *\li	'count' the number of masters.
- *\li      'keynames' array of dns_name_t's for tsig keys or NULL.
+ *\li	'primaries' array of isc_sockaddr_t with port set or NULL.
+ *\li	'count' the number of primaries.
+ *\li	'keynames' array of dns_name_t's for tsig keys or NULL.
  *
- *  \li    dns_zone_setmasters() is just a wrapper to setmasterswithkeys(),
- *      passing NULL in the keynames field.
+ *\li	If 'primaries' is NULL then 'count' must be zero.
  *
- * \li	If 'masters' is NULL then 'count' must be zero.
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ *\li	#ISC_R_NOMEMORY
+ *\li      Any result dns_name_dup() can return, if keynames!=NULL
+ */
+
+isc_result_t
+dns_zone_setparentals(dns_zone_t *zone, const isc_sockaddr_t *parentals,
+		      dns_name_t **keynames, uint32_t count);
+/*%<
+ *	Set the list of parental agents for the zone.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ *\li	'parentals' array of isc_sockaddr_t with port set or NULL.
+ *\li	'count' the number of primaries.
+ *\li	'keynames' array of dns_name_t's for tsig keys or NULL.
+ *
+ *\li	If 'parentals' is NULL then 'count' must be zero.
  *
  * Returns:
  *\li	#ISC_R_SUCCESS
@@ -859,6 +895,94 @@ isc_result_t
 dns_zone_setaltxfrsource6dscp(dns_zone_t *zone, isc_dscp_t dscp);
 /*%<
  * Set the DSCP value associated with the transfer/alt-transfer source.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ */
+
+isc_result_t
+dns_zone_setparentalsrc4(dns_zone_t *zone, const isc_sockaddr_t *parentalsrc);
+/*%<
+ * 	Set the source address to be used with IPv4 parental DS queries.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ *\li	'parentalsrc' to contain the address.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ */
+
+isc_sockaddr_t *
+dns_zone_getparentalsrc4(dns_zone_t *zone);
+/*%<
+ *	Returns the source address set by a previous dns_zone_setparentalsrc4
+ *	call, or the default of inaddr_any, port 0.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
+isc_dscp_t
+dns_zone_getparentalsrc4dscp(dns_zone_t *zone);
+/*%/
+ * Get the DSCP value associated with the IPv4 parental source.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
+isc_result_t
+dns_zone_setparentalsrc4dscp(dns_zone_t *zone, isc_dscp_t dscp);
+/*%<
+ * Set the DSCP value associated with the IPv4 parental source.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ */
+
+isc_result_t
+dns_zone_setparentalsrc6(dns_zone_t *zone, const isc_sockaddr_t *parentalsrc);
+/*%<
+ * 	Set the source address to be used with IPv6 parental DS queries.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ *\li	'parentalsrc' to contain the address.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ */
+
+isc_sockaddr_t *
+dns_zone_getparentalsrc6(dns_zone_t *zone);
+/*%<
+ *	Returns the source address set by a previous dns_zone_setparentalsrc6
+ *	call, or the default of in6addr_any, port 0.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
+isc_dscp_t
+dns_zone_getparentalsrc6dscp(dns_zone_t *zone);
+/*%/
+ * Get the DSCP value associated with the IPv6 parental source.
+ *
+ * Require:
+ *\li	'zone' to be a valid zone.
+ */
+
+isc_result_t
+dns_zone_setparentalsrc6dscp(dns_zone_t *zone, isc_dscp_t dscp);
+/*%<
+ * Set the DSCP value associated with the IPv6 parental source.
  *
  * Require:
  *\li	'zone' to be a valid zone.
@@ -1320,8 +1444,8 @@ dns_zone_getredirecttype(dns_zone_t *zone);
  *\li	'zone' to be a redirect zone.
  *
  * Returns:
- *\li	'dns_zone_master'
- *\li	'dns_zone_slave'
+ *\li	'dns_zone_primary'
+ *\li	'dns_zone_secondary'
  */
 
 void
@@ -1533,7 +1657,7 @@ dns_zone_forwardupdate(dns_zone_t *zone, dns_message_t *msg,
 		       dns_updatecallback_t callback, void *callback_arg);
 /*%<
  * Forward 'msg' to each master in turn until we get an answer or we
- * have exhausted the list of masters. 'callback' will be called with
+ * have exhausted the list of primaries. 'callback' will be called with
  * ISC_R_SUCCESS if we get an answer and the returned message will be
  * passed as 'answer_message', otherwise a non ISC_R_SUCCESS result code
  * will be passed and answer_message will be NULL.  The callback function
@@ -1607,6 +1731,22 @@ dns_zone_getkeydirectory(dns_zone_t *zone);
  *
  * Returns:
  *	Pointer to null-terminated file name, or NULL.
+ */
+
+isc_result_t
+dns_zone_getdnsseckeys(dns_zone_t *zone, dns_db_t *db, dns_dbversion_t *ver,
+		       isc_stdtime_t now, dns_dnsseckeylist_t *keys);
+/*%
+ * Find DNSSEC keys used for signing with dnssec-policy. Load these keys
+ * into 'keys'.
+ *
+ * Requires:
+ *\li	'zone' to be valid initialised zone.
+ *\li	'keys' to be an initialised DNSSEC keylist.
+ *
+ * Returns:
+ *\li	#ISC_R_SUCCESS
+ *\li	Error
  */
 
 isc_result_t
@@ -1725,6 +1865,12 @@ dns_zonemgr_releasezone(dns_zonemgr_t *zmgr, dns_zone_t *zone);
  *\li	'zone->zmgr' == NULL;
  */
 
+isc_taskmgr_t *
+dns_zonemgr_gettaskmgr(dns_zonemgr_t *zmgr);
+/*%
+ * Get the tasmkgr object attached to 'zmgr'.
+ */
+
 void
 dns_zonemgr_settransfersin(dns_zonemgr_t *zmgr, uint32_t value);
 /*%<
@@ -1781,6 +1927,15 @@ dns_zonemgr_getiolimit(dns_zonemgr_t *zmgr);
  *
  * Requires:
  *\li	'zmgr' to be a valid zone manager.
+ */
+
+void
+dns_zonemgr_setcheckdsrate(dns_zonemgr_t *zmgr, unsigned int value);
+/*%<
+ *	Set the number of parental DS queries sent per second.
+ *
+ * Requires:
+ *\li	'zmgr' to be a valid zone manager
  */
 
 void
@@ -1940,9 +2095,6 @@ dns_zone_setrcvquerystats(dns_zone_t *zone, dns_stats_t *stats);
 
 void
 dns_zone_setdnssecsignstats(dns_zone_t *zone, dns_stats_t *stats);
-
-void
-dns_zone_setdnssecrefreshstats(dns_zone_t *zone, dns_stats_t *stats);
 /*%<
  * Set additional statistics sets to zone.  These are attached to the zone
  * but are not counted in the zone module; only the caller updates the
@@ -1962,9 +2114,6 @@ dns_zone_getrcvquerystats(dns_zone_t *zone);
 
 dns_stats_t *
 dns_zone_getdnssecsignstats(dns_zone_t *zone);
-
-dns_stats_t *
-dns_zone_getdnssecrefreshstats(dns_zone_t *zone);
 /*%<
  * Get the additional statistics for zone, if one is installed.
  *
@@ -1974,17 +2123,6 @@ dns_zone_getdnssecrefreshstats(dns_zone_t *zone);
  * Returns:
  * \li	when available, a pointer to the statistics set installed in zone;
  *	otherwise NULL.
- */
-
-/*%<
- * Set additional statistics sets to zone.  These are attached to the zone
- * but are not counted in the zone module; only the caller updates the
- * counters.
- *
- * Requires:
- * \li	'zone' to be a valid zone.
- *
- *\li	stats is a valid statistics.
  */
 
 void
@@ -2328,6 +2466,25 @@ dns_zone_setrequestixfr(dns_zone_t *zone, bool flag);
  * \li	'zone' to be valid.
  */
 
+uint32_t
+dns_zone_getixfrratio(dns_zone_t *zone);
+/*%
+ * Returns the zone's current IXFR ratio.
+ *
+ * Requires:
+ * \li	'zone' to be valid.
+ */
+
+void
+dns_zone_setixfrratio(dns_zone_t *zone, uint32_t ratio);
+/*%
+ * Sets the ratio of IXFR size to zone size above which we use an AXFR
+ * response, expressed as a percentage. Cannot exceed 100.
+ *
+ * Requires:
+ * \li	'zone' to be valid.
+ */
+
 void
 dns_zone_setserialupdatemethod(dns_zone_t *zone, dns_updatemethod_t method);
 /*%
@@ -2361,13 +2518,14 @@ dns_zone_keydone(dns_zone_t *zone, const char *data);
 isc_result_t
 dns_zone_setnsec3param(dns_zone_t *zone, uint8_t hash, uint8_t flags,
 		       uint16_t iter, uint8_t saltlen, unsigned char *salt,
-		       bool replace);
+		       bool replace, bool resalt);
 /*%
  * Set the NSEC3 parameters for the zone.
  *
  * If 'replace' is true, then the existing NSEC3 chain, if any, will
  * be replaced with the new one.  If 'hash' is zero, then the replacement
- * chain will be NSEC rather than NSEC3.
+ * chain will be NSEC rather than NSEC3. If 'resalt' is true, or if 'salt'
+ * is NULL, generate a new salt with the given salt length.
  *
  * Requires:
  * \li	'zone' to be valid.
@@ -2447,6 +2605,27 @@ dns_zone_catz_enable(dns_zone_t *zone, dns_catz_zones_t *catzs);
  * \li	'zone' is a valid zone object
  * \li	'catzs' is not NULL
  * \li	prior to calling, zone->catzs is NULL or is equal to 'catzs'
+ */
+
+void
+dns_zone_catz_disable(dns_zone_t *zone);
+/*%<
+ * Disable zone as catalog zone, if it is one.  Also disables any
+ * registered callbacks for the catalog zone.
+ *
+ * Requires:
+ *
+ * \li	'zone' is a valid zone object
+ */
+
+bool
+dns_zone_catz_is_enabled(dns_zone_t *zone);
+/*%<
+ * Return a boolean indicating whether the zone is enabled as catalog zone.
+ *
+ * Requires:
+ *
+ * \li	'zone' is a valid zone object
  */
 
 void
@@ -2536,6 +2715,12 @@ dns_zone_verifydb(dns_zone_t *zone, dns_db_t *db, dns_dbversion_t *ver);
  *				a trusted key
  *
  * \li	#DNS_R_VERIFYFAILURE	any other case
+ */
+
+const char *
+dns_zonetype_name(dns_zonetype_t type);
+/*%<
+ * Return the name of the zone type 'type'.
  */
 
 #endif /* DNS_ZONE_H */

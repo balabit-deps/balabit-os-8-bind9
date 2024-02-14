@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -49,9 +51,9 @@ typedef struct rpsdb {
 	int		    ref_cnt;
 	librpz_result_id_t  hit_id;
 	librpz_result_t	    result;
-	librpz_rsp_t *	    rsp;
+	librpz_rsp_t	   *rsp;
 	librpz_domain_buf_t origin_buf;
-	const dns_name_t *  qname;
+	const dns_name_t   *qname;
 	rpsnode_t	    origin_node;
 	rpsnode_t	    data_node;
 } rpsdb_t;

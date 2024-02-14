@@ -1,16 +1,17 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
  */
 
-#ifndef DNS_MESSAGE_H
-#define DNS_MESSAGE_H 1
+#pragma once
 
 /***
  ***	Imports
@@ -21,6 +22,7 @@
 
 #include <isc/lang.h>
 #include <isc/magic.h>
+#include <isc/refcount.h>
 
 #include <dns/compress.h>
 #include <dns/masterdump.h>
@@ -74,8 +76,7 @@
  * \code
  *	buffer = isc_buffer_allocate(mctx, 512);
  *	name = NULL;
- *	name = dns_message_gettempname(message, &name);
- *	dns_name_init(name, NULL);
+ *	result = dns_message_gettempname(message, &name);
  *	result = dns_name_fromtext(name, &source, dns_rootname, 0, buffer);
  *	dns_message_takebuffer(message, &buffer);
  * \endcode
@@ -107,6 +108,7 @@
 #define DNS_OPT_TCP_KEEPALIVE 11 /*%< TCP keepalive opt code */
 #define DNS_OPT_PAD	      12 /*%< PAD opt code */
 #define DNS_OPT_KEY_TAG	      14 /*%< Key tag opt code */
+#define DNS_OPT_EDE	      15 /*%< Extended DNS Error opt code */
 #define DNS_OPT_CLIENT_TAG    16 /*%< Client tag opt code */
 #define DNS_OPT_SERVER_TAG    17 /*%< Server tag opt code */
 
@@ -194,14 +196,15 @@ typedef int dns_messagetextflag_t;
 typedef struct dns_msgblock dns_msgblock_t;
 
 struct dns_sortlist_arg {
-	dns_aclenv_t *		env;
-	const dns_acl_t *	acl;
+	dns_aclenv_t	       *env;
+	const dns_acl_t	       *acl;
 	const dns_aclelement_t *element;
 };
 
 struct dns_message {
 	/* public from here down */
-	unsigned int magic;
+	unsigned int   magic;
+	isc_refcount_t refcount;
 
 	dns_messageid_t	 id;
 	unsigned int	 flags;
@@ -214,24 +217,24 @@ struct dns_message {
 
 	/* private from here down */
 	dns_namelist_t	sections[DNS_SECTION_MAX];
-	dns_name_t *	cursors[DNS_SECTION_MAX];
+	dns_name_t     *cursors[DNS_SECTION_MAX];
 	dns_rdataset_t *opt;
 	dns_rdataset_t *sig0;
 	dns_rdataset_t *tsig;
 
 	int	     state;
-	unsigned int from_to_wire : 2;
-	unsigned int header_ok : 1;
-	unsigned int question_ok : 1;
+	unsigned int from_to_wire     : 2;
+	unsigned int header_ok	      : 1;
+	unsigned int question_ok      : 1;
 	unsigned int tcp_continuation : 1;
-	unsigned int verified_sig : 1;
+	unsigned int verified_sig     : 1;
 	unsigned int verify_attempted : 1;
-	unsigned int free_query : 1;
-	unsigned int free_saved : 1;
-	unsigned int cc_ok : 1;
-	unsigned int cc_bad : 1;
-	unsigned int tkey : 1;
-	unsigned int rdclass_set : 1;
+	unsigned int free_query	      : 1;
+	unsigned int free_saved	      : 1;
+	unsigned int cc_ok	      : 1;
+	unsigned int cc_bad	      : 1;
+	unsigned int tkey	      : 1;
+	unsigned int rdclass_set      : 1;
 
 	unsigned int opt_reserved;
 	unsigned int sig_reserved;
@@ -240,10 +243,10 @@ struct dns_message {
 	uint16_t     padding;
 	unsigned int padding_off;
 
-	isc_buffer_t *	buffer;
+	isc_buffer_t   *buffer;
 	dns_compress_t *cctx;
 
-	isc_mem_t *    mctx;
+	isc_mem_t     *mctx;
 	isc_mempool_t *namepool;
 	isc_mempool_t *rdspool;
 
@@ -262,14 +265,14 @@ struct dns_message {
 	dns_name_t *tsigname; /* Owner name of TSIG, if any
 			       * */
 	dns_rdataset_t *querytsig;
-	dns_tsigkey_t * tsigkey;
-	dst_context_t * tsigctx;
+	dns_tsigkey_t  *tsigkey;
+	dst_context_t  *tsigctx;
 	int		sigstart;
 	int		timeadjust;
 
 	dns_name_t *sig0name; /* Owner name of SIG0, if any
 			       * */
-	dst_key_t *  sig0key;
+	dst_key_t   *sig0key;
 	dns_rcode_t  sig0status;
 	isc_region_t query;
 	isc_region_t saved;
@@ -292,7 +295,7 @@ struct dns_ednsopt {
 
 ISC_LANG_BEGINDECLS
 
-isc_result_t
+void
 dns_message_create(isc_mem_t *mctx, unsigned int intent, dns_message_t **msgp);
 
 /*%<
@@ -323,8 +326,8 @@ dns_message_reset(dns_message_t *msg, unsigned int intent);
 /*%<
  * Reset a message structure to default state.  All internal lists are freed
  * or reset to a default state as well.  This is simply a more efficient
- * way to call dns_message_destroy() followed by dns_message_allocate(),
- * since it avoid many memory allocations.
+ * way to call dns_message_detach() (assuming last reference is hold),
+ * followed by dns_message_create(), since it avoid many memory allocations.
  *
  * If any data loanouts (buffers, names, rdatas, etc) were requested,
  * the caller must no longer use them after this call.
@@ -339,16 +342,23 @@ dns_message_reset(dns_message_t *msg, unsigned int intent);
  */
 
 void
-dns_message_destroy(dns_message_t **msgp);
+dns_message_attach(dns_message_t *source, dns_message_t **target);
 /*%<
- * Destroy all state in the message.
+ * Attach to message 'source'.
  *
  * Requires:
+ *\li	'source' to be a valid message.
+ *\li	'target' to be non NULL and '*target' to be NULL.
+ */
+
+void
+dns_message_detach(dns_message_t **messagep);
+/*%<
+ * Detach *messagep from its message.
+ * list.
  *
- *\li	'msgp' be valid.
- *
- * Ensures:
- *\li	'*msgp' == NULL
+ * Requires:
+ *\li	'*messagep' to be a valid message.
  */
 
 isc_result_t
@@ -360,7 +370,7 @@ isc_result_t
 dns_message_pseudosectiontotext(dns_message_t *msg, dns_pseudosection_t section,
 				const dns_master_style_t *style,
 				dns_messagetextflag_t	  flags,
-				isc_buffer_t *		  target);
+				isc_buffer_t		 *target);
 /*%<
  * Convert section 'section' or 'pseudosection' of message 'msg' to
  * a cleartext representation
@@ -532,7 +542,7 @@ dns_message_renderbegin(dns_message_t *msg, dns_compress_t *cctx,
  *
  *\li	'cctx' be valid.
  *
- *\li	'buffer' is a valid buffer.
+ *\li	'buffer' is a valid buffer with length less than 65536.
  *
  * Side Effects:
  *
@@ -791,44 +801,6 @@ dns_message_findtype(const dns_name_t *name, dns_rdatatype_t type,
  *\li	#ISC_R_NOTFOUND		-- the desired type does not exist.
  */
 
-isc_result_t
-dns_message_find(const dns_name_t *name, dns_rdataclass_t rdclass,
-		 dns_rdatatype_t type, dns_rdatatype_t covers,
-		 dns_rdataset_t **rdataset);
-/*%<
- * Search the name for the specified rdclass and type.  If it is found,
- * *rdataset is filled in with a pointer to that rdataset.
- *
- * Requires:
- *\li	if '**rdataset' is non-NULL, *rdataset needs to be NULL.
- *
- *\li	'type' be a valid type, and NOT dns_rdatatype_any.
- *
- *\li	If 'type' is dns_rdatatype_rrsig, 'covers' must be a valid type.
- *	Otherwise it should be 0.
- *
- * Returns:
- *\li	#ISC_R_SUCCESS		-- all is well.
- *\li	#ISC_R_NOTFOUND		-- the desired type does not exist.
- */
-
-void
-dns_message_movename(dns_message_t *msg, dns_name_t *name,
-		     dns_section_t fromsection, dns_section_t tosection);
-/*%<
- * Move a name from one section to another.
- *
- * Requires:
- *
- *\li	'msg' be valid.
- *
- *\li	'name' must be a name already in 'fromsection'.
- *
- *\li	'fromsection' must be a valid section.
- *
- *\li	'tosection' must be a valid section.
- */
-
 void
 dns_message_addname(dns_message_t *msg, dns_name_t *name,
 		    dns_section_t section);
@@ -881,24 +853,8 @@ dns_message_gettempname(dns_message_t *msg, dns_name_t **item);
  * to the message code using dns_message_puttempname() or inserted into
  * one of the message's sections before the message is destroyed.
  *
- * It is the caller's responsibility to initialize this name.
- *
- * Requires:
- *\li	msg be a valid message
- *
- *\li	item != NULL && *item == NULL
- *
- * Returns:
- *\li	#ISC_R_SUCCESS		-- All is well.
- *\li	#ISC_R_NOMEMORY		-- No item can be allocated.
- */
-
-isc_result_t
-dns_message_gettempoffsets(dns_message_t *msg, dns_offsets_t **item);
-/*%<
- * Return an offsets array that can be used for any temporary purpose,
- * such as attaching to a temporary name.  The offsets will be freed
- * when the message is destroyed or reset.
+ * The name will be associated with a dns_fixedname object, and will
+ * be initialized.
  *
  * Requires:
  *\li	msg be a valid message
@@ -1485,6 +1441,14 @@ dns_message_setpadding(dns_message_t *msg, uint16_t padding);
  * \li	msg be a valid message.
  */
 
-ISC_LANG_ENDDECLS
+void
+dns_message_clonebuffer(dns_message_t *msg);
+/*%<
+ * Clone the query or saved buffers if they where not cloned
+ * when parsing.
+ *
+ * Requires:
+ * \li   msg be a valid message.
+ */
 
-#endif /* DNS_MESSAGE_H */
+ISC_LANG_ENDDECLS

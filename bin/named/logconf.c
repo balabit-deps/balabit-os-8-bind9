@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -92,7 +94,7 @@ category_fromconf(const cfg_obj_t *ccat, isc_logconfig_t *logconfig) {
  */
 static isc_result_t
 channel_fromconf(const cfg_obj_t *channel, isc_logconfig_t *logconfig) {
-	isc_result_t result;
+	isc_result_t result = ISC_R_SUCCESS;
 	isc_logdestination_t dest;
 	unsigned int type;
 	unsigned int flags = 0;
@@ -159,8 +161,7 @@ channel_fromconf(const cfg_obj_t *channel, isc_logconfig_t *logconfig) {
 			maxoffset = 0x7fffffffffffffffULL;
 			break;
 		default:
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 
 		type = ISC_LOG_TOFILE;
@@ -271,14 +272,12 @@ channel_fromconf(const cfg_obj_t *channel, isc_logconfig_t *logconfig) {
 		}
 	}
 
-	if (logconfig == NULL) {
-		result = ISC_R_SUCCESS;
-	} else {
-		result = isc_log_createchannel(logconfig, channelname, type,
-					       level, &dest, flags);
+	if (logconfig != NULL) {
+		isc_log_createchannel(logconfig, channelname, type, level,
+				      &dest, flags);
 	}
 
-	if (result == ISC_R_SUCCESS && type == ISC_LOG_TOFILE) {
+	if (type == ISC_LOG_TOFILE) {
 		FILE *fp;
 
 		/*
@@ -301,10 +300,6 @@ channel_fromconf(const cfg_obj_t *channel, isc_logconfig_t *logconfig) {
 					       dest.file.name,
 					       isc_result_totext(result));
 				}
-				fprintf(stderr,
-					"isc_stdio_open '%s' failed: %s\n",
-					dest.file.name,
-					isc_result_totext(result));
 			} else {
 				(void)isc_stdio_close(fp);
 			}
@@ -314,8 +309,6 @@ channel_fromconf(const cfg_obj_t *channel, isc_logconfig_t *logconfig) {
 			syslog(LOG_ERR, "isc_file_isplainfile '%s' failed: %s",
 			       dest.file.name, isc_result_totext(result));
 		}
-		fprintf(stderr, "isc_file_isplainfile '%s' failed: %s\n",
-			dest.file.name, isc_result_totext(result));
 	}
 
 done:
@@ -333,7 +326,7 @@ named_logconfig(isc_logconfig_t *logconfig, const cfg_obj_t *logstmt) {
 	const cfg_obj_t *catname;
 
 	if (logconfig != NULL) {
-		CHECK(named_log_setdefaultchannels(logconfig));
+		named_log_setdefaultchannels(logconfig);
 	}
 
 	(void)cfg_map_get(logstmt, "channel", &channels);

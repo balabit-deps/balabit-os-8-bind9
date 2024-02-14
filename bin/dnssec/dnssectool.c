@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -128,7 +130,6 @@ sig_format(dns_rdata_rrsig_t *sig, char *cp, unsigned int size) {
 
 void
 setup_logging(isc_mem_t *mctx, isc_log_t **logp) {
-	isc_result_t result;
 	isc_logdestination_t destination;
 	isc_logconfig_t *logconfig = NULL;
 	isc_log_t *log = NULL;
@@ -153,12 +154,11 @@ setup_logging(isc_mem_t *mctx, isc_log_t **logp) {
 		break;
 	}
 
-	RUNTIME_CHECK(isc_log_create(mctx, &log, &logconfig) == ISC_R_SUCCESS);
+	isc_log_create(mctx, &log, &logconfig);
 	isc_log_setcontext(log);
 	dns_log_init(log);
 	dns_log_setcontext(log);
-
-	RUNTIME_CHECK(isc_log_settag(logconfig, program) == ISC_R_SUCCESS);
+	isc_log_settag(logconfig, program);
 
 	/*
 	 * Set up a channel similar to default_stderr except:
@@ -170,10 +170,9 @@ setup_logging(isc_mem_t *mctx, isc_log_t **logp) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	result = isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
-				       level, &destination,
-				       ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL);
-	check_result(result, "isc_log_createchannel()");
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC, level,
+			      &destination,
+			      ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL);
 
 	RUNTIME_CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL) ==
 		      ISC_R_SUCCESS);
@@ -221,7 +220,7 @@ time_units(isc_stdtime_t offset, char *suffix, const char *str) {
 		default:
 			fatal("time value %s is invalid", str);
 		}
-		/* NOTREACHED */
+		UNREACHABLE();
 		break;
 	case 'W':
 	case 'w':
@@ -239,11 +238,11 @@ time_units(isc_stdtime_t offset, char *suffix, const char *str) {
 	default:
 		fatal("time value %s is invalid", str);
 	}
-	/* NOTREACHED */
+	UNREACHABLE();
 	return (0); /* silence compiler warning */
 }
 
-static inline bool
+static bool
 isnone(const char *str) {
 	return ((strcasecmp(str, "none") == 0) ||
 		(strcasecmp(str, "never") == 0));
@@ -279,7 +278,7 @@ strtokeystate(const char *str) {
 			return ((dst_key_state_t)i);
 		}
 	}
-	fatal("unknown key state");
+	fatal("unknown key state %s", str);
 }
 
 isc_stdtime_t
@@ -314,7 +313,8 @@ strtotime(const char *str, int64_t now, int64_t base, bool *setp) {
 	 */
 	n = strspn(str, "0123456789");
 	if ((n == 8u || n == 14u) &&
-	    (str[n] == '\0' || str[n] == '-' || str[n] == '+')) {
+	    (str[n] == '\0' || str[n] == '-' || str[n] == '+'))
+	{
 		char timestr[15];
 
 		strlcpy(timestr, str, sizeof(timestr));

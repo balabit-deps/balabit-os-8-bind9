@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -182,8 +184,8 @@ iterate(dns_rbt_t *rbt, bool forward) {
 	dns_rbtnodechain_t chain;
 	dns_fixedname_t fixedorigin;
 	isc_result_t result;
-	isc_result_t (*move)(dns_rbtnodechain_t * chain, dns_name_t * name,
-			     dns_name_t * origin);
+	isc_result_t (*move)(dns_rbtnodechain_t *chain, dns_name_t *name,
+			     dns_name_t *origin);
 
 	dns_rbtnodechain_init(&chain);
 
@@ -214,7 +216,8 @@ iterate(dns_rbt_t *rbt, bool forward) {
 			}
 
 			if (result == ISC_R_SUCCESS ||
-			    result == DNS_R_NEWORIGIN) {
+			    result == DNS_R_NEWORIGIN)
+			{
 				print_name(&foundname);
 				printf("\n");
 			} else {

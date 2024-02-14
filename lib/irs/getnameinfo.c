@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -137,9 +139,15 @@ static struct afd {
 			goto cleanup; \
 	} while (0)
 
+#ifdef _WIN32
+int
+getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
+	    DWORD hostlen, char *serv, DWORD servlen, int flags) {
+#else
 int
 getnameinfo(const struct sockaddr *sa, socklen_t salen, char *host,
 	    socklen_t hostlen, char *serv, socklen_t servlen, int flags) {
+#endif
 	struct afd *afd = NULL;
 	struct servent *sp;
 	unsigned short port = 0;
@@ -198,8 +206,7 @@ found:
 		break;
 
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	proto = ((flags & NI_DGRAM) != 0) ? "udp" : "tcp";
 
@@ -253,12 +260,14 @@ found:
 		 */
 	} else if ((flags & NI_NUMERICHOST) != 0) {
 		if (inet_ntop(afd->a_af, addr, numaddr, sizeof(numaddr)) ==
-		    NULL) {
+		    NULL)
+		{
 			ERR(EAI_SYSTEM);
 		}
 #if defined(IRS_HAVE_SIN6_SCOPE_ID)
 		if (afd->a_af == AF_INET6 &&
-		    ((const struct sockaddr_in6 *)sa)->sin6_scope_id) {
+		    ((const struct sockaddr_in6 *)sa)->sin6_scope_id)
+		{
 			char *p = numaddr + strlen(numaddr);
 			const char *stringscope = NULL;
 #ifdef VENDOR_SPECIFIC
@@ -313,9 +322,8 @@ found:
 
 		/* Get the PTR RRset */
 		ISC_LIST_INIT(answerlist);
-		iresult = dns_client_resolve(
-			client, ptrname, dns_rdataclass_in, dns_rdatatype_ptr,
-			DNS_CLIENTRESOPT_ALLOWRUN, &answerlist);
+		iresult = dns_client_resolve(client, ptrname, dns_rdataclass_in,
+					     dns_rdatatype_ptr, 0, &answerlist);
 		switch (iresult) {
 		case ISC_R_SUCCESS:
 		/*
@@ -413,7 +421,8 @@ found:
 				ERR(EAI_NONAME);
 			}
 			if (inet_ntop(afd->a_af, addr, numaddr,
-				      sizeof(numaddr)) == NULL) {
+				      sizeof(numaddr)) == NULL)
+			{
 				ERR(EAI_SYSTEM);
 			}
 			if ((strlen(numaddr) + 1) > hostlen) {

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -66,7 +68,7 @@ static dns_dbimplementation_t rbtimp;
 
 static void
 initialize(void) {
-	RUNTIME_CHECK(isc_rwlock_init(&implock, 0, 0) == ISC_R_SUCCESS);
+	isc_rwlock_init(&implock, 0, 0);
 
 	rbtimp.name = "rbt";
 	rbtimp.create = dns_rbtdb_create;
@@ -78,7 +80,7 @@ initialize(void) {
 	ISC_LIST_APPEND(implementations, &rbtimp, link);
 }
 
-static inline dns_dbimplementation_t *
+static dns_dbimplementation_t *
 impfind(const char *name) {
 	dns_dbimplementation_t *imp;
 
@@ -410,7 +412,7 @@ dns_db_closeversion(dns_db_t *db, dns_dbversion_t **versionp, bool commit) {
 
 	(db->methods->closeversion)(db, versionp, commit);
 
-	if (commit == true) {
+	if (commit) {
 		for (listener = ISC_LIST_HEAD(db->update_listeners);
 		     listener != NULL; listener = ISC_LIST_NEXT(listener, link))
 		{
@@ -682,7 +684,8 @@ dns_db_findrdataset(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 
 isc_result_t
 dns_db_allrdatasets(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
-		    isc_stdtime_t now, dns_rdatasetiter_t **iteratorp) {
+		    unsigned int options, isc_stdtime_t now,
+		    dns_rdatasetiter_t **iteratorp) {
 	/*
 	 * Make '*iteratorp' an rdataset iteratator for all rdatasets at
 	 * 'node' in version 'version' of 'db'.
@@ -691,7 +694,8 @@ dns_db_allrdatasets(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 	REQUIRE(DNS_DB_VALID(db));
 	REQUIRE(iteratorp != NULL && *iteratorp == NULL);
 
-	return ((db->methods->allrdatasets)(db, node, version, now, iteratorp));
+	return ((db->methods->allrdatasets)(db, node, version, options, now,
+					    iteratorp));
 }
 
 isc_result_t
@@ -831,6 +835,17 @@ dns_db_hashsize(dns_db_t *db) {
 	return ((db->methods->hashsize)(db));
 }
 
+isc_result_t
+dns_db_adjusthashsize(dns_db_t *db, size_t size) {
+	REQUIRE(DNS_DB_VALID(db));
+
+	if (db->methods->adjusthashsize != NULL) {
+		return ((db->methods->adjusthashsize)(db, size));
+	}
+
+	return (ISC_R_NOTIMPLEMENTED);
+}
+
 void
 dns_db_settask(dns_db_t *db, isc_task_t *task) {
 	REQUIRE(DNS_DB_VALID(db));
@@ -890,7 +905,7 @@ dns_db_unregister(dns_dbimplementation_t **dbimp) {
 isc_result_t
 dns_db_getoriginnode(dns_db_t *db, dns_dbnode_t **nodep) {
 	REQUIRE(DNS_DB_VALID(db));
-	REQUIRE(dns_db_iszone(db) == true);
+	REQUIRE(dns_db_iszone(db));
 	REQUIRE(nodep != NULL && *nodep == NULL);
 
 	if (db->methods->getoriginnode != NULL) {
@@ -928,7 +943,7 @@ dns_db_getnsec3parameters(dns_db_t *db, dns_dbversion_t *version,
 			  uint16_t *iterations, unsigned char *salt,
 			  size_t *salt_length) {
 	REQUIRE(DNS_DB_VALID(db));
-	REQUIRE(dns_db_iszone(db) == true);
+	REQUIRE(dns_db_iszone(db));
 
 	if (db->methods->getnsec3parameters != NULL) {
 		return ((db->methods->getnsec3parameters)(db, version, hash,
@@ -943,7 +958,7 @@ isc_result_t
 dns_db_getsize(dns_db_t *db, dns_dbversion_t *version, uint64_t *records,
 	       uint64_t *bytes) {
 	REQUIRE(DNS_DB_VALID(db));
-	REQUIRE(dns_db_iszone(db) == true);
+	REQUIRE(dns_db_iszone(db));
 
 	if (db->methods->getsize != NULL) {
 		return ((db->methods->getsize)(db, version, records, bytes));
@@ -1000,7 +1015,7 @@ dns_db_rpz_ready(dns_db_t *db) {
 	return ((db->methods->rpz_ready)(db));
 }
 
-/**
+/*
  * Attach a notify-on-update function the database
  */
 isc_result_t
@@ -1010,6 +1025,16 @@ dns_db_updatenotify_register(dns_db_t *db, dns_dbupdate_callback_t fn,
 
 	REQUIRE(db != NULL);
 	REQUIRE(fn != NULL);
+
+	for (listener = ISC_LIST_HEAD(db->update_listeners); listener != NULL;
+	     listener = ISC_LIST_NEXT(listener, link))
+	{
+		if ((listener->onupdate == fn) &&
+		    (listener->onupdate_arg == fn_arg))
+		{
+			return (ISC_R_SUCCESS);
+		}
+	}
 
 	listener = isc_mem_get(db->mctx, sizeof(dns_dbonupdatelistener_t));
 
@@ -1033,7 +1058,8 @@ dns_db_updatenotify_unregister(dns_db_t *db, dns_dbupdate_callback_t fn,
 	     listener = ISC_LIST_NEXT(listener, link))
 	{
 		if ((listener->onupdate == fn) &&
-		    (listener->onupdate_arg == fn_arg)) {
+		    (listener->onupdate_arg == fn_arg))
+		{
 			ISC_LIST_UNLINK(db->update_listeners, listener, link);
 			isc_mem_put(db->mctx, listener,
 				    sizeof(dns_dbonupdatelistener_t));
@@ -1074,6 +1100,28 @@ dns_db_getservestalettl(dns_db_t *db, dns_ttl_t *ttl) {
 
 	if (db->methods->getservestalettl != NULL) {
 		return ((db->methods->getservestalettl)(db, ttl));
+	}
+	return (ISC_R_NOTIMPLEMENTED);
+}
+
+isc_result_t
+dns_db_setservestalerefresh(dns_db_t *db, uint32_t interval) {
+	REQUIRE(DNS_DB_VALID(db));
+	REQUIRE((db->attributes & DNS_DBATTR_CACHE) != 0);
+
+	if (db->methods->setservestalerefresh != NULL) {
+		return ((db->methods->setservestalerefresh)(db, interval));
+	}
+	return (ISC_R_NOTIMPLEMENTED);
+}
+
+isc_result_t
+dns_db_getservestalerefresh(dns_db_t *db, uint32_t *interval) {
+	REQUIRE(DNS_DB_VALID(db));
+	REQUIRE((db->attributes & DNS_DBATTR_CACHE) != 0);
+
+	if (db->methods->getservestalerefresh != NULL) {
+		return ((db->methods->getservestalerefresh)(db, interval));
 	}
 	return (ISC_R_NOTIMPLEMENTED);
 }

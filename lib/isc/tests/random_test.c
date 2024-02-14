@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -351,7 +353,8 @@ random_test(pvalue_func_t *func, isc_random_func test_func) {
 			uniform_values = (uint16_t *)values;
 			for (i = 0;
 			     i < (sizeof(values) / (sizeof(*uniform_values)));
-			     i++) {
+			     i++)
+			{
 				uniform_values[i] =
 					isc_random_uniform(UINT16_MAX);
 			}
@@ -885,7 +888,7 @@ main(int argc, char **argv) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

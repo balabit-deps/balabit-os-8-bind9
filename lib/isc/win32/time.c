@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -20,6 +22,7 @@
 #include <windows.h>
 
 #include <isc/assertions.h>
+#include <isc/once.h>
 #include <isc/string.h>
 #include <isc/time.h>
 #include <isc/tm.h>
@@ -120,6 +123,15 @@ isc_time_now(isc_time_t *t) {
 	REQUIRE(t != NULL);
 
 	GetSystemTimeAsFileTime(&t->absolute);
+
+	return (ISC_R_SUCCESS);
+}
+
+isc_result_t
+isc_time_now_hires(isc_time_t *t) {
+	REQUIRE(t != NULL);
+
+	GetSystemTimePreciseAsFileTime(&t->absolute);
 
 	return (ISC_R_SUCCESS);
 }
@@ -404,6 +416,35 @@ isc_time_formatISO8601Lms(const isc_time_t *t, char *buf, unsigned int len) {
 }
 
 void
+isc_time_formatISO8601Lus(const isc_time_t *t, char *buf, unsigned int len) {
+	SYSTEMTIME st;
+	char DateBuf[50];
+	char TimeBuf[50];
+
+	/* strtime() format: "%Y-%m-%dT%H:%M:%S.SSSSSS" */
+
+	REQUIRE(t != NULL);
+	REQUIRE(buf != NULL);
+	REQUIRE(len > 0);
+
+	if (FileTimeToSystemTime(&t->absolute, &st)) {
+		ULARGE_INTEGER i;
+
+		GetDateFormat(LOCALE_USER_DEFAULT, 0, &st, "yyyy-MM-dd",
+			      DateBuf, 50);
+		GetTimeFormat(LOCALE_USER_DEFAULT,
+			      TIME_NOTIMEMARKER | TIME_FORCE24HOURFORMAT, &st,
+			      "hh':'mm':'ss", TimeBuf, 50);
+		i.LowPart = t->absolute.dwLowDateTime;
+		i.HighPart = t->absolute.dwHighDateTime;
+		snprintf(buf, len, "%sT%s.%06u", DateBuf, TimeBuf,
+			 (uint32_t)(i.QuadPart % 10000000) / 10);
+	} else {
+		buf[0] = 0;
+	}
+}
+
+void
 isc_time_formatISO8601(const isc_time_t *t, char *buf, unsigned int len) {
 	SYSTEMTIME st;
 	char DateBuf[50];
@@ -453,6 +494,35 @@ isc_time_formatISO8601ms(const isc_time_t *t, char *buf, unsigned int len) {
 }
 
 void
+isc_time_formatISO8601us(const isc_time_t *t, char *buf, unsigned int len) {
+	SYSTEMTIME st;
+	char DateBuf[50];
+	char TimeBuf[50];
+
+	/* strtime() format: "%Y-%m-%dT%H:%M:%S.SSSSSSZ" */
+
+	REQUIRE(t != NULL);
+	REQUIRE(buf != NULL);
+	REQUIRE(len > 0);
+
+	if (FileTimeToSystemTime(&t->absolute, &st)) {
+		ULARGE_INTEGER i;
+
+		GetDateFormat(LOCALE_NEUTRAL, 0, &st, "yyyy-MM-dd", DateBuf,
+			      50);
+		GetTimeFormat(LOCALE_NEUTRAL,
+			      TIME_NOTIMEMARKER | TIME_FORCE24HOURFORMAT, &st,
+			      "hh':'mm':'ss", TimeBuf, 50);
+		i.LowPart = t->absolute.dwLowDateTime;
+		i.HighPart = t->absolute.dwHighDateTime;
+		snprintf(buf, len, "%sT%s.%06uZ", DateBuf, TimeBuf,
+			 (uint32_t)(i.QuadPart % 10000000) / 10);
+	} else {
+		buf[0] = 0;
+	}
+}
+
+void
 isc_time_formatshorttimestamp(const isc_time_t *t, char *buf,
 			      unsigned int len) {
 	SYSTEMTIME st;
@@ -475,4 +545,107 @@ isc_time_formatshorttimestamp(const isc_time_t *t, char *buf,
 	} else {
 		buf[0] = 0;
 	}
+}
+
+/*
+ * POSIX Shims
+ */
+
+struct tm *
+gmtime_r(const time_t *clock, struct tm *result) {
+	errno_t ret = gmtime_s(result, clock);
+	if (ret != 0) {
+		errno = ret;
+		return (NULL);
+	}
+	return (result);
+}
+
+struct tm *
+localtime_r(const time_t *clock, struct tm *result) {
+	errno_t ret = localtime_s(result, clock);
+	if (ret != 0) {
+		errno = ret;
+		return (NULL);
+	}
+	return (result);
+}
+
+#define BILLION 1000000000
+
+static isc_once_t nsec_ticks_once = ISC_ONCE_INIT;
+static double nsec_ticks = 0;
+
+static void
+nsec_ticks_init(void) {
+	LARGE_INTEGER ticks;
+	RUNTIME_CHECK(QueryPerformanceFrequency(&ticks) != 0);
+	nsec_ticks = (double)ticks.QuadPart / 1000000000.0;
+	RUNTIME_CHECK(nsec_ticks != 0.0);
+}
+
+int
+nanosleep(const struct timespec *req, struct timespec *rem) {
+	int_fast64_t sleep_msec;
+	uint_fast64_t ticks, until;
+	LARGE_INTEGER before, after;
+
+	RUNTIME_CHECK(isc_once_do(&nsec_ticks_once, nsec_ticks_init) ==
+		      ISC_R_SUCCESS);
+
+	if (req->tv_nsec < 0 || BILLION <= req->tv_nsec) {
+		errno = EINVAL;
+		return (-1);
+	}
+
+	/* Sleep() is not interruptible; there is no remaining delay ever  */
+	if (rem != NULL) {
+		rem->tv_sec = 0;
+		rem->tv_nsec = 0;
+	}
+
+	if (req->tv_sec >= 0) {
+		/*
+		 * For requested delays of one second or more, 15ms resolution
+		 * granularity is sufficient.
+		 */
+		Sleep(req->tv_sec * 1000 + req->tv_nsec / 1000000);
+
+		return (0);
+	}
+
+	/* Sleep has <-8,8> ms precision, so substract 10 milliseconds */
+	sleep_msec = (int64_t)req->tv_nsec / 1000000 - 10;
+	ticks = req->tv_nsec * nsec_ticks;
+
+	RUNTIME_CHECK(QueryPerformanceCounter(&before) != 0);
+
+	until = before.QuadPart + ticks;
+
+	if (sleep_msec > 0) {
+		Sleep(sleep_msec);
+	}
+
+	while (true) {
+		LARGE_INTEGER after;
+		RUNTIME_CHECK(QueryPerformanceCounter(&after) != 0);
+		if (after.QuadPart >= until) {
+			break;
+		}
+	}
+
+done:
+	return (0);
+}
+
+int
+usleep(useconds_t useconds) {
+	struct timespec req;
+
+	req.tv_sec = useconds / 1000000;
+	req.tv_nsec = (useconds * 1000) % 1000000000;
+
+	nanosleep(&req, NULL);
+
+	return (0);
 }

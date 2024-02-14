@@ -1,19 +1,52 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0 AND BSD-2-Clause
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
  */
 
+/*
+ * duration_fromtext initially taken from OpenDNSSEC code base.
+ * Modified to fit the BIND 9 code.
+ *
+ * Copyright (c) 2009-2018 NLNet Labs.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+ * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+ * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+ * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /*! \file */
 
 #include <ctype.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 #include <isc/buffer.h>
@@ -390,8 +423,7 @@ cfg_tuple_get(const cfg_obj_t *tupleobj, const char *name) {
 			return (tupleobj->value.tuple[i]);
 		}
 	}
-	INSIST(0);
-	ISC_UNREACHABLE();
+	UNREACHABLE();
 }
 
 isc_result_t
@@ -1011,7 +1043,7 @@ cfg_print_duration(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	char *str;
 	const char *indicators = "YMWDHMS";
 	int count, i;
-	int durationlen[7];
+	int durationlen[7] = { 0 };
 	cfg_duration_t duration;
 	/*
 	 * D ? The duration has a date part.
@@ -1043,10 +1075,8 @@ cfg_print_duration(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 			} else {
 				T = true;
 			}
-		} else {
-			durationlen[i] = 0;
+			count += durationlen[i];
 		}
-		count += durationlen[i];
 	}
 	/*
 	 * Special case for seconds which is not taken into account in the
@@ -1055,7 +1085,8 @@ cfg_print_duration(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	 * case this function will print "PT0S".
 	 */
 	if (duration.parts[6] > 0 ||
-	    (!D && !duration.parts[4] && !duration.parts[5])) {
+	    (!D && !duration.parts[4] && !duration.parts[5]))
+	{
 		durationlen[6] = 1 + numlen(duration.parts[6]);
 		T = true;
 		count += durationlen[6];
@@ -1075,7 +1106,7 @@ cfg_print_duration(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 		if (duration.parts[i] > 0) {
 			snprintf(str, durationlen[i] + 2, "%u%c",
 				 (uint32_t)duration.parts[i], indicators[i]);
-			str += durationlen[i] + 1;
+			str += durationlen[i];
 		}
 		if (i == 3 && T) {
 			snprintf(str, 2, "T");
@@ -1084,7 +1115,8 @@ cfg_print_duration(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	}
 	/* Special case for seconds. */
 	if (duration.parts[6] > 0 ||
-	    (!D && !duration.parts[4] && !duration.parts[3])) {
+	    (!D && !duration.parts[4] && !duration.parts[5]))
+	{
 		snprintf(str, durationlen[6] + 2, "%u%c",
 			 (uint32_t)duration.parts[6], indicators[6]);
 	}
@@ -1115,60 +1147,38 @@ cfg_obj_isduration(const cfg_obj_t *obj) {
 
 uint32_t
 cfg_obj_asduration(const cfg_obj_t *obj) {
+	uint64_t seconds = 0;
+	cfg_duration_t duration;
+
 	REQUIRE(obj != NULL && obj->type->rep == &cfg_rep_duration);
-	uint32_t duration = 0;
-	duration += obj->value.duration.parts[6];	      /* Seconds */
-	duration += obj->value.duration.parts[5] * 60;	      /* Minutes */
-	duration += obj->value.duration.parts[4] * 3600;      /* Hours */
-	duration += obj->value.duration.parts[3] * 86400;     /* Days */
-	duration += obj->value.duration.parts[2] * 86400 * 7; /* Weaks */
+
+	duration = obj->value.duration;
+
+	seconds += (uint64_t)duration.parts[6];		    /* Seconds */
+	seconds += (uint64_t)duration.parts[5] * 60;	    /* Minutes */
+	seconds += (uint64_t)duration.parts[4] * 3600;	    /* Hours */
+	seconds += (uint64_t)duration.parts[3] * 86400;	    /* Days */
+	seconds += (uint64_t)duration.parts[2] * 86400 * 7; /* Weeks */
 	/*
 	 * The below additions are not entirely correct
-	 * because days may very per month and per year.
+	 * because days may vary per month and per year.
 	 */
-	duration += obj->value.duration.parts[1] * 86400 * 31;	/* Months */
-	duration += obj->value.duration.parts[0] * 86400 * 365; /* Years */
-	return (duration);
+	seconds += (uint64_t)duration.parts[1] * 86400 * 31;  /* Months */
+	seconds += (uint64_t)duration.parts[0] * 86400 * 365; /* Years */
+
+	return (seconds > UINT32_MAX ? UINT32_MAX : (uint32_t)seconds);
 }
 
-/*
- * duration_fromtext initially taken from OpenDNSSEC code base.
- * Modified to fit the BIND 9 code.
- *
- * Copyright (c) 2009-2018 NLNet Labs.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
 static isc_result_t
 duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
-	char buf[CFG_DURATION_MAXLEN];
+	char buf[CFG_DURATION_MAXLEN] = { 0 };
 	char *P, *X, *T, *W, *str;
 	bool not_weeks = false;
 	int i;
+	long long int lli;
 
 	/*
 	 * Copy the buffer as it may not be NULL terminated.
-	 * Anyone having a duration longer than 63 characters is crazy.
 	 */
 	if (source->length > sizeof(buf) - 1) {
 		return (ISC_R_BADNUMBER);
@@ -1194,7 +1204,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	/* Record years. */
 	X = strpbrk(str, "Yy");
 	if (X != NULL) {
-		duration->parts[0] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[0] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1207,7 +1222,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	 * part, or this M indicator is before the time indicator.
 	 */
 	if (X != NULL && (T == NULL || (size_t)(X - P) < (size_t)(T - P))) {
-		duration->parts[1] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[1] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1215,7 +1235,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	/* Record days. */
 	X = strpbrk(str, "Dd");
 	if (X != NULL) {
-		duration->parts[3] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[3] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1229,7 +1254,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	/* Record hours. */
 	X = strpbrk(str, "Hh");
 	if (X != NULL && T != NULL) {
-		duration->parts[4] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[4] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1242,7 +1272,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	 * part and the M indicator is behind the time indicator.
 	 */
 	if (X != NULL && T != NULL && (size_t)(X - P) > (size_t)(T - P)) {
-		duration->parts[5] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[5] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1250,7 +1285,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 	/* Record seconds. */
 	X = strpbrk(str, "Ss");
 	if (X != NULL && T != NULL) {
-		duration->parts[6] = atoi(str + 1);
+		errno = 0;
+		lli = strtoll(str + 1, NULL, 10);
+		if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+			return (ISC_R_BADNUMBER);
+		}
+		duration->parts[6] = (uint32_t)lli;
 		str = X;
 		not_weeks = true;
 	}
@@ -1262,7 +1302,12 @@ duration_fromtext(isc_textregion_t *source, cfg_duration_t *duration) {
 			/* Mix of weeks and other indicators is not allowed */
 			return (ISC_R_BADNUMBER);
 		} else {
-			duration->parts[2] = atoi(str + 1);
+			errno = 0;
+			lli = strtoll(str + 1, NULL, 10);
+			if (errno != 0 || lli < 0 || lli > UINT32_MAX) {
+				return (ISC_R_BADNUMBER);
+			}
+			duration->parts[2] = (uint32_t)lli;
 			str = W;
 		}
 	}
@@ -1283,7 +1328,7 @@ parse_duration(cfg_parser_t *pctx, cfg_obj_t **ret) {
 
 	duration.unlimited = false;
 
-	if (toupper(TOKEN_STRING(pctx)[0]) == 'P') {
+	if (toupper((unsigned char)TOKEN_STRING(pctx)[0]) == 'P') {
 		result = duration_fromtext(&pctx->token.value.as_textregion,
 					   &duration);
 		duration.iso8601 = true;
@@ -1667,7 +1712,12 @@ cfg_print_ustring(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 static void
 print_qstring(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	cfg_print_cstr(pctx, "\"");
-	cfg_print_ustring(pctx, obj);
+	for (size_t i = 0; i < obj->value.string.length; i++) {
+		if (obj->value.string.base[i] == '"') {
+			cfg_print_cstr(pctx, "\\");
+		}
+		cfg_print_chars(pctx, &obj->value.string.base[i], 1);
+	}
 	cfg_print_cstr(pctx, "\"");
 }
 
@@ -1781,7 +1831,8 @@ parse_geoip(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 	if (pctx->token.type == isc_tokentype_string) {
 		CHECK(cfg_gettoken(pctx, 0));
 		if (strcasecmp(TOKEN_STRING(pctx), "db") == 0 &&
-		    obj->value.tuple[1] == NULL) {
+		    obj->value.tuple[1] == NULL)
+		{
 			CHECK(cfg_parse_obj(pctx, fields[1].type,
 					    &obj->value.tuple[1]));
 		} else {
@@ -2169,7 +2220,8 @@ print_list(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	const cfg_listelt_t *elt;
 
 	for (elt = ISC_LIST_HEAD(*list); elt != NULL;
-	     elt = ISC_LIST_NEXT(elt, link)) {
+	     elt = ISC_LIST_NEXT(elt, link))
+	{
 		if ((pctx->flags & CFG_PRINTER_ONELINE) != 0) {
 			cfg_print_obj(pctx, elt->obj);
 			cfg_print_cstr(pctx, "; ");
@@ -2259,14 +2311,17 @@ cleanup:
 
 void
 cfg_print_spacelist(cfg_printer_t *pctx, const cfg_obj_t *obj) {
-	const cfg_list_t *list = &obj->value.list;
-	const cfg_listelt_t *elt;
+	const cfg_list_t *list = NULL;
+	const cfg_listelt_t *elt = NULL;
 
 	REQUIRE(pctx != NULL);
 	REQUIRE(obj != NULL);
 
+	list = &obj->value.list;
+
 	for (elt = ISC_LIST_HEAD(*list); elt != NULL;
-	     elt = ISC_LIST_NEXT(elt, link)) {
+	     elt = ISC_LIST_NEXT(elt, link))
+	{
 		cfg_print_obj(pctx, elt->obj);
 		if (ISC_LIST_NEXT(elt, link) != NULL) {
 			cfg_print_cstr(pctx, " ");
@@ -2396,9 +2451,11 @@ cfg_parse_mapbody(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 		clause = NULL;
 		for (clauseset = clausesets; *clauseset != NULL; clauseset++) {
 			for (clause = *clauseset; clause->name != NULL;
-			     clause++) {
+			     clause++)
+			{
 				if (strcasecmp(TOKEN_STRING(pctx),
-					       clause->name) == 0) {
+					       clause->name) == 0)
+				{
 					goto done;
 				}
 			}
@@ -2664,7 +2721,8 @@ cfg_print_mapbody(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 	REQUIRE(obj != NULL);
 
 	for (clauseset = obj->value.map.clausesets; *clauseset != NULL;
-	     clauseset++) {
+	     clauseset++)
+	{
 		isc_symvalue_t symval;
 		const cfg_clausedef_t *clause;
 
@@ -2680,7 +2738,8 @@ cfg_print_mapbody(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 					cfg_listelt_t *elt;
 					for (elt = ISC_LIST_HEAD(*list);
 					     elt != NULL;
-					     elt = ISC_LIST_NEXT(elt, link)) {
+					     elt = ISC_LIST_NEXT(elt, link))
+					{
 						print_symval(pctx, clause->name,
 							     elt->obj);
 					}
@@ -2692,8 +2751,7 @@ cfg_print_mapbody(cfg_printer_t *pctx, const cfg_obj_t *obj) {
 			} else if (result == ISC_R_NOTFOUND) {
 				/* do nothing */
 			} else {
-				INSIST(0);
-				ISC_UNREACHABLE();
+				UNREACHABLE();
 			}
 		}
 	}
@@ -3028,8 +3086,7 @@ token_addr(cfg_parser_t *pctx, unsigned int flags, isc_netaddr_t *na) {
 			isc_netaddr_any6(na);
 			return (ISC_R_SUCCESS);
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		if ((flags & (CFG_ADDR_V4OK | CFG_ADDR_V4PREFIXOK)) != 0) {
@@ -3218,6 +3275,7 @@ parse_netaddr(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 	CHECK(cfg_create_obj(pctx, type, &obj));
 	CHECK(cfg_parse_rawaddr(pctx, flags, &netaddr));
 	isc_sockaddr_fromnetaddr(&obj->value.sockaddr, &netaddr, 0);
+	obj->value.sockaddrdscp.dscp = -1;
 	*ret = obj;
 	return (ISC_R_SUCCESS);
 cleanup:
@@ -3311,8 +3369,7 @@ cfg_parse_netprefix(cfg_parser_t *pctx, const cfg_type_t *type,
 		addrlen = 128;
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	expectprefix = (result == ISC_R_IPV4PREFIX);
 	CHECK(cfg_peektoken(pctx, 0));
@@ -3413,6 +3470,12 @@ parse_sockaddrsub(cfg_parser_t *pctx, const cfg_type_t *type, int flags,
 			} else if ((flags & CFG_ADDR_DSCPOK) != 0 &&
 				   strcasecmp(TOKEN_STRING(pctx), "dscp") == 0)
 			{
+				if ((pctx->flags & CFG_PCTX_NODEPRECATED) == 0)
+				{
+					cfg_parser_warning(
+						pctx, 0,
+						"token 'dscp' is deprecated");
+				}
 				CHECK(cfg_gettoken(pctx, 0)); /* read "dscp" */
 				CHECK(cfg_parse_dscp(pctx, &dscp));
 				++have_dscp;

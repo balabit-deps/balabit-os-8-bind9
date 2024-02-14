@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,6 +20,7 @@
 #include <isc/buffer.h>
 #include <isc/log.h>
 #include <isc/mem.h>
+#include <isc/netmgr.h>
 #include <isc/parseint.h>
 #include <isc/region.h>
 #include <isc/result.h>
@@ -48,50 +51,52 @@ options {\n\
 	answer-cookie true;\n\
 	automatic-interface-scan yes;\n\
 	bindkeys-file \"" NAMED_SYSCONFDIR "/bind.keys\";\n\
-#	blackhole {none;};\n"
-			    "	cookie-algorithm siphash24;\n"
+#	blackhole {none;};\n\
+	cookie-algorithm siphash24;\n"
 #ifndef WIN32
 			    "	coresize default;\n\
 	datasize default;\n"
 #endif /* ifndef WIN32 */
 			    "\
-#	deallocate-on-exit <obsolete>;\n\
 #	directory <none>\n\
 	dnssec-policy \"none\";\n\
 	dump-file \"named_dump.db\";\n\
-	edns-udp-size 4096;\n\
-#	fake-iquery <obsolete>;\n"
+	edns-udp-size 1232;\n"
 #ifndef WIN32
 			    "	files unlimited;\n"
 #endif /* ifndef WIN32 */
 #if defined(HAVE_GEOIP2) && !defined(WIN32)
-			    "	geoip-directory \"" MAXMINDDB_PREFIX "/share/"
-			    "GeoIP\";"
-			    "\n"
+			    "	geoip-directory \"" MAXMINDDB_PREFIX
+			    "/share/GeoIP\";\n"
 #elif defined(HAVE_GEOIP2)
 			    "	geoip-directory \".\";\n"
 #endif /* if defined(HAVE_GEOIP2) && !defined(WIN32) */
 			    "\
-#	has-old-clients <obsolete>;\n\
 	heartbeat-interval 60;\n\
-#	host-statistics <obsolete>;\n\
 	interface-interval 60;\n\
 #	keep-response-order {none;};\n\
 	listen-on {any;};\n\
 	listen-on-v6 {any;};\n\
 #	lock-file \"" NAMED_LOCALSTATEDIR "/run/named/named.lock\";\n\
 	match-mapped-addresses no;\n\
+	max-ixfr-ratio unlimited;\n\
 	max-rsa-exponent-size 0; /* no limit */\n\
-	max-udp-size 4096;\n\
+	max-udp-size 1232;\n\
 	memstatistics-file \"named.memstats\";\n\
-#	multiple-cnames <obsolete>;\n\
-#	named-xfer <obsolete>;\n\
 	nocookie-udp-size 4096;\n\
 	notify-rate 20;\n\
 	nta-lifetime 3600;\n\
 	nta-recheck 300;\n\
 #	pid-file \"" NAMED_LOCALSTATEDIR "/run/named/named.pid\"; \n\
-	port 53;\n\
+	port 53;\n"
+#if HAVE_SO_REUSEPORT_LB
+			    "\
+	reuseport yes;\n"
+#else
+			    "\
+	reuseport no;\n"
+#endif
+			    "\
 	prefetch 2 9;\n\
 	recursing-file \"named.recursing\";\n\
 	recursive-clients 1000;\n\
@@ -101,7 +106,6 @@ options {\n\
 	rrset-order { order random; };\n\
 	secroots-file \"named.secroots\";\n\
 	send-cookie true;\n\
-#	serial-queries <obsolete>;\n\
 	serial-query-rate 20;\n\
 	server-id none;\n\
 	session-keyalg hmac-sha256;\n\
@@ -112,7 +116,6 @@ options {\n\
 #endif /* ifndef WIN32 */
 			    "	startup-notify-rate 20;\n\
 	statistics-file \"named.stats\";\n\
-#	statistics-interval <obsolete>;\n\
 	tcp-advertised-timeout 300;\n\
 	tcp-clients 150;\n\
 	tcp-idle-timeout 300;\n\
@@ -126,10 +129,8 @@ options {\n\
 	transfers-in 10;\n\
 	transfers-out 10;\n\
 	transfers-per-ns 2;\n\
-#	treat-cr-as-space <obsolete>;\n\
 	trust-anchor-telemetry yes;\n\
-#	use-id-pool <obsolete>;\n\
-#	use-ixfr <obsolete>;\n\
+	update-quota 100;\n\
 \n\
 	/* view */\n\
 	allow-new-zones no;\n\
@@ -139,13 +140,12 @@ options {\n\
 	allow-recursion { localnets; localhost; };\n\
 	allow-recursion-on { any; };\n\
 	allow-update-forwarding {none;};\n\
-#	allow-v6-synthesis <obsolete>;\n\
 	auth-nxdomain false;\n\
 	check-dup-records warn;\n\
 	check-mx warn;\n\
-	check-names master fail;\n\
+	check-names primary fail;\n\
 	check-names response ignore;\n\
-	check-names slave warn;\n\
+	check-names secondary warn;\n\
 	check-spf warn;\n\
 	clients-per-query 10;\n\
 	dnssec-accept-expired no;\n\
@@ -154,12 +154,11 @@ options {\n\
 			    "	dnstap-identity hostname;\n"
 #endif /* ifdef HAVE_DNSTAP */
 			    "\
-#	fetch-glue <obsolete>;\n\
 	fetch-quota-params 100 0.1 0.3 0.7;\n\
 	fetches-per-server 0;\n\
 	fetches-per-zone 0;\n\
 	glue-cache yes;\n\
-	lame-ttl 600;\n"
+	lame-ttl 0;\n"
 #ifdef HAVE_LMDB
 			    "	lmdb-mapsize 32M;\n"
 #endif /* ifdef HAVE_LMDB */
@@ -168,17 +167,18 @@ options {\n\
 	max-clients-per-query 100;\n\
 	max-ncache-ttl 10800; /* 3 hours */\n\
 	max-recursion-depth 7;\n\
-	max-recursion-queries 75;\n\
-	max-stale-ttl 604800; /* 1 week */\n\
+	max-recursion-queries 100;\n\
+	max-stale-ttl 86400; /* 1 day */\n\
 	message-compression yes;\n\
 	min-ncache-ttl 0; /* 0 hours */\n\
 	min-cache-ttl 0; /* 0 seconds */\n\
-#	min-roots <obsolete>;\n\
 	minimal-any false;\n\
 	minimal-responses no-auth-recursive;\n\
 	notify-source *;\n\
 	notify-source-v6 *;\n\
 	nsec3-test-zone no;\n\
+	parental-source *;\n\
+	parental-source-v6 *;\n\
 	provide-ixfr true;\n\
 	qname-minimization relaxed;\n\
 	query-source address *;\n\
@@ -189,12 +189,14 @@ options {\n\
 	require-server-cookie no;\n\
 	resolver-nonbackoff-tries 3;\n\
 	resolver-retry-interval 800; /* in milliseconds */\n\
-#	rfc2308-type1 <obsolete>;\n\
 	root-key-sentinel yes;\n\
 	servfail-ttl 1;\n\
 #	sortlist <none>\n\
+	stale-answer-client-timeout off;\n\
 	stale-answer-enable false;\n\
-	stale-answer-ttl 1; /* 1 second */\n\
+	stale-answer-ttl 30; /* 30 seconds */\n\
+	stale-cache-enable true;\n\
+	stale-refresh-time 30; /* 30 seconds */\n\
 	synth-from-dnssec no;\n\
 #	topology <none>\n\
 	transfer-format many-answers;\n\
@@ -220,10 +222,8 @@ options {\n\
 	dnssec-update-mode maintain;\n\
 #	forward <none>\n\
 #	forwarders <none>\n\
-	inline-signing no;\n\
+#	inline-signing no;\n\
 	ixfr-from-differences false;\n\
-#	maintain-ixfr-base <obsolete>;\n\
-#	max-ixfr-log-size <obsolete>\n\
 	max-journal-size default;\n\
 	max-records 0;\n\
 	max-refresh-time 2419200; /* 4 weeks */\n\
@@ -260,6 +260,7 @@ view \"_bind\" chaos {\n\
 	recursion no;\n\
 	notify no;\n\
 	allow-new-zones no;\n\
+	max-cache-size 2M;\n\
 \n\
 	# Prevent use of this zone in DNS amplified reflection DoS attacks\n\
 	rate-limit {\n\
@@ -269,22 +270,22 @@ view \"_bind\" chaos {\n\
 	};\n\
 \n\
 	zone \"version.bind\" chaos {\n\
-		type master;\n\
+		type primary;\n\
 		database \"_builtin version\";\n\
 	};\n\
 \n\
 	zone \"hostname.bind\" chaos {\n\
-		type master;\n\
+		type primary;\n\
 		database \"_builtin hostname\";\n\
 	};\n\
 \n\
 	zone \"authors.bind\" chaos {\n\
-		type master;\n\
+		type primary;\n\
 		database \"_builtin authors\";\n\
 	};\n\
 \n\
 	zone \"id.server\" chaos {\n\
-		type master;\n\
+		type primary;\n\
 		database \"_builtin id\";\n\
 	};\n\
 };\n\
@@ -292,22 +293,24 @@ view \"_bind\" chaos {\n\
 			    "#\n\
 #  Default trusted key(s), used if \n\
 # \"dnssec-validation auto;\" is set and\n\
-#  sysconfdir/bind.keys doesn't exist).\n\
+#  " NAMED_SYSCONFDIR "/bind.keys doesn't exist).\n\
 #\n\
-# BEGIN DNSSEC KEYS\n"
+# BEGIN TRUST ANCHORS\n"
 
 	/* Imported from bind.keys.h: */
 	TRUST_ANCHORS
 
-			    "# END MANAGED KEYS\n\
+			    "# END TRUST ANCHORS\n\
 \n\
-masters " DEFAULT_IANA_ROOT_ZONE_MASTERS " {\n\
-	2001:500:84::b;		# b.root-servers.net\n\
+primaries " DEFAULT_IANA_ROOT_ZONE_PRIMARIES " {\n\
+	2801:1b8:10::b;		# b.root-servers.net\n\
+	2001:500:2::c;		# c.root-servers.net\n\
 	2001:500:2f::f;		# f.root-servers.net\n\
+	2001:500:12::d0d;	# g.root-servers.net\n\
 	2001:7fd::1;		# k.root-servers.net\n\
 	2620:0:2830:202::132;	# xfr.cjr.dns.icann.org\n\
 	2620:0:2d0:202::132;	# xfr.lax.dns.icann.org\n\
-	192.228.79.201;		# b.root-servers.net\n\
+	170.247.170.2;		# b.root-servers.net\n\
 	192.33.4.12;		# c.root-servers.net\n\
 	192.5.5.241;		# f.root-servers.net\n\
 	192.112.36.4;		# g.root-servers.net\n\
@@ -327,23 +330,26 @@ named_config_parsedefaults(cfg_parser_t *parser, cfg_obj_t **conf) {
 				 CFG_PCTX_NODEPRECATED, conf));
 }
 
+const char *
+named_config_getdefault(void) {
+	return (defaultconf);
+}
+
 isc_result_t
 named_config_get(cfg_obj_t const *const *maps, const char *name,
 		 const cfg_obj_t **obj) {
 	int i;
 
-	for (i = 0;; i++) {
-		if (maps[i] == NULL) {
-			return (ISC_R_NOTFOUND);
-		}
+	for (i = 0; maps[i] != NULL; i++) {
 		if (cfg_map_get(maps[i], name, obj) == ISC_R_SUCCESS) {
 			return (ISC_R_SUCCESS);
 		}
 	}
+	return (ISC_R_NOTFOUND);
 }
 
 isc_result_t
-named_checknames_get(const cfg_obj_t **maps, const char *which,
+named_checknames_get(const cfg_obj_t **maps, const char *const names[],
 		     const cfg_obj_t **obj) {
 	const cfg_listelt_t *element;
 	const cfg_obj_t *checknames;
@@ -351,13 +357,15 @@ named_checknames_get(const cfg_obj_t **maps, const char *which,
 	const cfg_obj_t *value;
 	int i;
 
-	for (i = 0;; i++) {
-		if (maps[i] == NULL) {
-			return (ISC_R_NOTFOUND);
-		}
+	REQUIRE(maps != NULL);
+	REQUIRE(names != NULL);
+	REQUIRE(obj != NULL && *obj == NULL);
+
+	for (i = 0; maps[i] != NULL; i++) {
 		checknames = NULL;
 		if (cfg_map_get(maps[i], "check-names", &checknames) ==
-		    ISC_R_SUCCESS) {
+		    ISC_R_SUCCESS)
+		{
 			/*
 			 * Zone map entry is not a list.
 			 */
@@ -370,14 +378,20 @@ named_checknames_get(const cfg_obj_t **maps, const char *which,
 			{
 				value = cfg_listelt_value(element);
 				type = cfg_tuple_get(value, "type");
-				if (strcasecmp(cfg_obj_asstring(type), which) ==
-				    0) {
-					*obj = cfg_tuple_get(value, "mode");
-					return (ISC_R_SUCCESS);
+
+				for (size_t j = 0; names[j] != NULL; j++) {
+					if (strcasecmp(cfg_obj_asstring(type),
+						       names[j]) == 0)
+					{
+						*obj = cfg_tuple_get(value,
+								     "mode");
+						return (ISC_R_SUCCESS);
+					}
 				}
 			}
 		}
 	}
+	return (ISC_R_NOTFOUND);
 }
 
 int
@@ -439,10 +453,11 @@ named_config_getzonetype(const cfg_obj_t *zonetypeobj) {
 
 	str = cfg_obj_asstring(zonetypeobj);
 	if (strcasecmp(str, "primary") == 0 || strcasecmp(str, "master") == 0) {
-		ztype = dns_zone_master;
+		ztype = dns_zone_primary;
 	} else if (strcasecmp(str, "secondary") == 0 ||
-		   strcasecmp(str, "slave") == 0) {
-		ztype = dns_zone_slave;
+		   strcasecmp(str, "slave") == 0)
+	{
+		ztype = dns_zone_secondary;
 	} else if (strcasecmp(str, "mirror") == 0) {
 		ztype = dns_zone_mirror;
 	} else if (strcasecmp(str, "stub") == 0) {
@@ -452,8 +467,7 @@ named_config_getzonetype(const cfg_obj_t *zonetypeobj) {
 	} else if (strcasecmp(str, "redirect") == 0) {
 		ztype = dns_zone_redirect;
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	return (ztype);
 }
@@ -561,36 +575,56 @@ named_config_putiplist(isc_mem_t *mctx, isc_sockaddr_t **addrsp,
 	}
 }
 
-isc_result_t
-named_config_getmastersdef(const cfg_obj_t *cctx, const char *name,
-			   const cfg_obj_t **ret) {
+static isc_result_t
+getremotesdef(const cfg_obj_t *cctx, const char *list, const char *name,
+	      const cfg_obj_t **ret) {
 	isc_result_t result;
-	const cfg_obj_t *masters = NULL;
+	const cfg_obj_t *obj = NULL;
 	const cfg_listelt_t *elt;
 
-	result = cfg_map_get(cctx, "masters", &masters);
+	REQUIRE(cctx != NULL);
+	REQUIRE(name != NULL);
+	REQUIRE(ret != NULL && *ret == NULL);
+
+	result = cfg_map_get(cctx, list, &obj);
 	if (result != ISC_R_SUCCESS) {
 		return (result);
 	}
-	for (elt = cfg_list_first(masters); elt != NULL;
-	     elt = cfg_list_next(elt)) {
-		const cfg_obj_t *list;
-		const char *listname;
-
-		list = cfg_listelt_value(elt);
-		listname = cfg_obj_asstring(cfg_tuple_get(list, "name"));
-
-		if (strcasecmp(listname, name) == 0) {
-			*ret = list;
+	elt = cfg_list_first(obj);
+	while (elt != NULL) {
+		obj = cfg_listelt_value(elt);
+		if (strcasecmp(cfg_obj_asstring(cfg_tuple_get(obj, "name")),
+			       name) == 0)
+		{
+			*ret = obj;
 			return (ISC_R_SUCCESS);
 		}
+		elt = cfg_list_next(elt);
 	}
 	return (ISC_R_NOTFOUND);
 }
 
 isc_result_t
-named_config_getipandkeylist(const cfg_obj_t *config, const cfg_obj_t *list,
-			     isc_mem_t *mctx, dns_ipkeylist_t *ipkl) {
+named_config_getremotesdef(const cfg_obj_t *cctx, const char *list,
+			   const char *name, const cfg_obj_t **ret) {
+	isc_result_t result;
+
+	if (strcmp(list, "parental-agents") == 0) {
+		return (getremotesdef(cctx, list, name, ret));
+	} else if (strcmp(list, "primaries") == 0) {
+		result = getremotesdef(cctx, list, name, ret);
+		if (result != ISC_R_SUCCESS) {
+			result = getremotesdef(cctx, "masters", name, ret);
+		}
+		return (result);
+	}
+	return (ISC_R_NOTFOUND);
+}
+
+isc_result_t
+named_config_getipandkeylist(const cfg_obj_t *config, const char *listtype,
+			     const cfg_obj_t *list, isc_mem_t *mctx,
+			     dns_ipkeylist_t *ipkl) {
 	uint32_t addrcount = 0, dscpcount = 0, keycount = 0, i = 0;
 	uint32_t listcount = 0, l = 0, j;
 	uint32_t stackcount = 0, pushed = 0;
@@ -673,7 +707,7 @@ resume:
 		isc_buffer_t b;
 
 		addr = cfg_tuple_get(cfg_listelt_value(element),
-				     "masterselement");
+				     "remoteselement");
 		key = cfg_tuple_get(cfg_listelt_value(element), "key");
 
 		if (!cfg_obj_issockaddr(addr)) {
@@ -705,11 +739,12 @@ resume:
 			if (j < l) {
 				continue;
 			}
-			tresult = named_config_getmastersdef(config, listname,
-							     &list);
+			list = NULL;
+			tresult = named_config_getremotesdef(config, listtype,
+							     listname, &list);
 			if (tresult == ISC_R_NOTFOUND) {
 				cfg_obj_log(addr, named_g_lctx, ISC_LOG_ERROR,
-					    "masters \"%s\" not found",
+					    "%s \"%s\" not found", listtype,
 					    listname);
 
 				result = tresult;
@@ -960,13 +995,15 @@ named_config_getdscp(const cfg_obj_t *config, isc_dscp_t *dscpp) {
 
 struct keyalgorithms {
 	const char *str;
-	enum { hmacnone,
-	       hmacmd5,
-	       hmacsha1,
-	       hmacsha224,
-	       hmacsha256,
-	       hmacsha384,
-	       hmacsha512 } hmac;
+	enum {
+		hmacnone,
+		hmacmd5,
+		hmacsha1,
+		hmacsha224,
+		hmacsha256,
+		hmacsha384,
+		hmacsha512
+	} hmac;
 	unsigned int type;
 	uint16_t size;
 } algorithms[] = { { "hmac-md5", hmacmd5, DST_ALG_HMACMD5, 128 },
@@ -1040,8 +1077,7 @@ named_config_getkeyalgorithm2(const char *str, const dns_name_t **name,
 			*name = dns_tsig_hmacsha512_name;
 			break;
 		default:
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	}
 	if (typep != NULL) {

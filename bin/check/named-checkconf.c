@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -184,7 +186,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 	const char *zname;
 	const char *zfile = NULL;
 	const cfg_obj_t *maps[4];
-	const cfg_obj_t *mastersobj = NULL;
+	const cfg_obj_t *primariesobj = NULL;
 	const cfg_obj_t *inviewobj = NULL;
 	const cfg_obj_t *zoptions = NULL;
 	const cfg_obj_t *classobj = NULL;
@@ -278,8 +280,12 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 	 * Is the redirect zone configured as a slave?
 	 */
 	if (strcasecmp(cfg_obj_asstring(typeobj), "redirect") == 0) {
-		cfg_map_get(zoptions, "masters", &mastersobj);
-		if (mastersobj != NULL) {
+		cfg_map_get(zoptions, "primaries", &primariesobj);
+		if (primariesobj == NULL) {
+			cfg_map_get(zoptions, "masters", &primariesobj);
+		}
+
+		if (primariesobj != NULL) {
 			return (ISC_R_SUCCESS);
 		}
 	}
@@ -300,8 +306,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 			zone_options &= ~DNS_ZONEOPT_CHECKDUPRR;
 			zone_options &= ~DNS_ZONEOPT_CHECKDUPRRFAIL;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_CHECKDUPRR;
@@ -320,8 +325,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 			zone_options &= ~DNS_ZONEOPT_CHECKMX;
 			zone_options &= ~DNS_ZONEOPT_CHECKMXFAIL;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_CHECKMX;
@@ -351,8 +355,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 			zone_options |= DNS_ZONEOPT_WARNMXCNAME;
 			zone_options |= DNS_ZONEOPT_IGNOREMXCNAME;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_WARNMXCNAME;
@@ -371,8 +374,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 			zone_options |= DNS_ZONEOPT_WARNSRVCNAME;
 			zone_options |= DNS_ZONEOPT_IGNORESRVCNAME;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_WARNSRVCNAME;
@@ -395,11 +397,21 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 		} else if (strcasecmp(cfg_obj_asstring(obj), "ignore") == 0) {
 			zone_options &= ~DNS_ZONEOPT_CHECKSPF;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_CHECKSPF;
+	}
+
+	obj = NULL;
+	if (get_maps(maps, "check-wildcard", &obj)) {
+		if (cfg_obj_asboolean(obj)) {
+			zone_options |= DNS_ZONEOPT_CHECKWILDCARD;
+		} else {
+			zone_options &= ~DNS_ZONEOPT_CHECKWILDCARD;
+		}
+	} else {
+		zone_options |= DNS_ZONEOPT_CHECKWILDCARD;
 	}
 
 	obj = NULL;
@@ -414,8 +426,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 			zone_options &= ~DNS_ZONEOPT_CHECKNAMES;
 			zone_options &= ~DNS_ZONEOPT_CHECKNAMESFAIL;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	} else {
 		zone_options |= DNS_ZONEOPT_CHECKNAMES;
@@ -433,8 +444,7 @@ configure_zone(const char *vclass, const char *view, const cfg_obj_t *zconfig,
 		} else if (strcasecmp(masterformatstr, "map") == 0) {
 			masterformat = dns_masterformat_map;
 		} else {
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 	}
 
@@ -529,7 +539,12 @@ load_zones_fromconfig(const cfg_obj_t *config, isc_mem_t *mctx,
 		}
 
 		classobj = cfg_tuple_get(vconfig, "class");
-		CHECK(config_getclass(classobj, dns_rdataclass_in, &viewclass));
+		tresult = config_getclass(classobj, dns_rdataclass_in,
+					  &viewclass);
+		if (tresult != ISC_R_SUCCESS) {
+			CHECK(tresult);
+		}
+
 		if (dns_rdataclass_ismeta(viewclass)) {
 			CHECK(ISC_R_FAILURE);
 		}
@@ -674,7 +689,7 @@ main(int argc, char **argv) {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			usage();
 

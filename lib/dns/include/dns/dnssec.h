@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -59,6 +61,7 @@ struct dns_dnsseckey {
 	bool		hint_remove; /*% metadata says *don't* publish */
 	bool		is_active;   /*% key is already active */
 	bool		first_sign;  /*% key is newly becoming active */
+	bool		purge;	     /*% remove key files */
 	unsigned int	prepublish;  /*% how long until active? */
 	dns_keysource_t source;	     /*% how the key was found */
 	bool		ksk;	     /*% this is a key-signing key */
@@ -357,6 +360,28 @@ dns_dnssec_syncupdate(dns_dnsseckeylist_t *keys, dns_dnsseckeylist_t *rmkeys,
 		      isc_mem_t *mctx);
 /*%<
  * Update the CDS and CDNSKEY RRsets, adding and removing keys as needed.
+ *
+ * Returns:
+ *\li   ISC_R_SUCCESS
+ *\li   Other values indicate error
+ */
+
+isc_result_t
+dns_dnssec_syncdelete(dns_rdataset_t *cds, dns_rdataset_t *cdnskey,
+		      dns_name_t *origin, dns_rdataclass_t zclass,
+		      dns_ttl_t ttl, dns_diff_t *diff, isc_mem_t *mctx,
+		      bool expect_cds_delete, bool expect_cdnskey_delete);
+/*%<
+ * Add or remove the CDS DELETE record and the CDNSKEY DELETE record.
+ * If 'expect_cds_delete' is true, the CDS DELETE record should be present.
+ * Otherwise, the CDS DELETE record must be removed from the RRsets (if
+ * present). If 'expect_cdnskey_delete' is true, the CDNSKEY DELETE record
+ * should be present. Otherwise, the CDNSKEY DELETE record must be removed
+ * from the RRsets (if present).
+ *
+ * Returns:
+ *\li   ISC_R_SUCCESS
+ *\li   Other values indicate error
  */
 
 isc_result_t

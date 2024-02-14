@@ -1,9 +1,11 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -97,11 +99,11 @@ ISC_LANG_BEGINDECLS
 #define DNS_DLZ_VALID(dlz) ISC_MAGIC_VALID(dlz, DNS_DLZ_MAGIC)
 
 typedef isc_result_t (*dns_dlzallowzonexfr_t)(void *driverarg, void *dbdata,
-					      isc_mem_t *	    mctx,
+					      isc_mem_t		   *mctx,
 					      dns_rdataclass_t	    rdclass,
-					      const dns_name_t *    name,
+					      const dns_name_t	   *name,
 					      const isc_sockaddr_t *clientaddr,
-					      dns_db_t **	    dbp);
+					      dns_db_t		  **dbp);
 
 /*%<
  * Method prototype.  Drivers implementing the DLZ interface MUST
@@ -135,12 +137,12 @@ typedef void (*dns_dlzdestroy_t)(void *driverarg, void **dbdata);
  */
 
 typedef isc_result_t (*dns_dlzfindzone_t)(void *driverarg, void *dbdata,
-					  isc_mem_t *		   mctx,
+					  isc_mem_t		  *mctx,
 					  dns_rdataclass_t	   rdclass,
-					  const dns_name_t *	   name,
+					  const dns_name_t	  *name,
 					  dns_clientinfomethods_t *methods,
-					  dns_clientinfo_t *	   clientinfo,
-					  dns_db_t **		   dbp);
+					  dns_clientinfo_t	  *clientinfo,
+					  dns_db_t		 **dbp);
 
 /*%<
  * Method prototype.  Drivers implementing the DLZ interface MUST
@@ -167,7 +169,7 @@ typedef isc_result_t (*dns_dlzfindzone_t)(void *driverarg, void *dbdata,
  */
 
 typedef isc_result_t (*dns_dlzconfigure_t)(void *driverarg, void *dbdata,
-					   dns_view_t * view,
+					   dns_view_t  *view,
 					   dns_dlzdb_t *dlzdb);
 /*%<
  * Method prototype.  Drivers implementing the DLZ interface may
@@ -176,8 +178,8 @@ typedef isc_result_t (*dns_dlzconfigure_t)(void *driverarg, void *dbdata,
  * may call configuration functions during the configure call
  */
 
-typedef bool (*dns_dlzssumatch_t)(const dns_name_t *   signer,
-				  const dns_name_t *   name,
+typedef bool (*dns_dlzssumatch_t)(const dns_name_t    *signer,
+				  const dns_name_t    *name,
 				  const isc_netaddr_t *tcpaddr,
 				  dns_rdatatype_t type, const dst_key_t *key,
 				  void *driverarg, void *dbdata);
@@ -199,10 +201,10 @@ typedef struct dns_dlzmethods {
 
 /*% information about a DLZ driver */
 struct dns_dlzimplementation {
-	const char *		name;
+	const char	       *name;
 	const dns_dlzmethods_t *methods;
-	isc_mem_t *		mctx;
-	void *			driverarg;
+	isc_mem_t	       *mctx;
+	void		       *driverarg;
 	ISC_LINK(dns_dlzimplementation_t) link;
 };
 
@@ -212,12 +214,12 @@ typedef isc_result_t (*dlzconfigure_callback_t)(dns_view_t *, dns_dlzdb_t *,
 /*% An instance of a DLZ driver */
 struct dns_dlzdb {
 	unsigned int		 magic;
-	isc_mem_t *		 mctx;
+	isc_mem_t		*mctx;
 	dns_dlzimplementation_t *implementation;
-	void *			 dbdata;
+	void			*dbdata;
 	dlzconfigure_callback_t	 configure_callback;
 	bool			 search;
-	char *			 dlzname;
+	char			*dlzname;
 	ISC_LINK(dns_dlzdb_t) link;
 	dns_ssutable_t *ssutable;
 };
@@ -306,8 +308,8 @@ dns_dlzunregister(dns_dlzimplementation_t **dlzimp);
  */
 
 typedef isc_result_t
-			dns_dlz_writeablezone_t(dns_view_t *view, dns_dlzdb_t *dlzdb,
-						const char *zone_name);
+dns_dlz_writeablezone_t(dns_view_t *view, dns_dlzdb_t *dlzdb,
+			const char *zone_name);
 dns_dlz_writeablezone_t dns_dlz_writeablezone;
 /*%<
  * creates a writeable DLZ zone. Must be called from within the

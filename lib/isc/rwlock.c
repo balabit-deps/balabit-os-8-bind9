@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -31,14 +33,13 @@
 #include <errno.h>
 #include <pthread.h>
 
-isc_result_t
+void
 isc_rwlock_init(isc_rwlock_t *rwl, unsigned int read_quota,
 		unsigned int write_quota) {
 	UNUSED(read_quota);
 	UNUSED(write_quota);
 	REQUIRE(pthread_rwlock_init(&rwl->rwlock, NULL) == 0);
 	atomic_init(&rwl->downgrade, false);
-	return (ISC_R_SUCCESS);
 }
 
 isc_result_t
@@ -62,8 +63,7 @@ isc_rwlock_lock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 		}
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	return (ISC_R_SUCCESS);
 }
@@ -83,7 +83,7 @@ isc_rwlock_trylock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 		}
 		break;
 	default:
-		INSIST(0);
+		UNREACHABLE();
 	}
 
 	switch (ret) {
@@ -94,8 +94,7 @@ isc_rwlock_trylock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 	case EAGAIN:
 		return (ISC_R_LOCKBUSY);
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 }
 
@@ -114,9 +113,12 @@ isc_rwlock_tryupgrade(isc_rwlock_t *rwl) {
 
 void
 isc_rwlock_downgrade(isc_rwlock_t *rwl) {
+	isc_result_t result;
 	atomic_store_release(&rwl->downgrade, true);
-	isc_rwlock_unlock(rwl, isc_rwlocktype_write);
-	isc_rwlock_lock(rwl, isc_rwlocktype_read);
+	result = isc_rwlock_unlock(rwl, isc_rwlocktype_write);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
+	result = isc_rwlock_lock(rwl, isc_rwlocktype_read);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
 	atomic_store_release(&rwl->downgrade, false);
 }
 
@@ -176,7 +178,7 @@ isc__rwlock_lock(isc_rwlock_t *rwl, isc_rwlocktype_t type);
 static void
 print_lock(const char *operation, isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 	fprintf(stderr,
-		"rwlock %p thread %lu %s(%s): "
+		"rwlock %p thread %" PRIuPTR " %s(%s): "
 		"write_requests=%u, write_completions=%u, "
 		"cnt_and_flag=0x%x, readers_waiting=%u, "
 		"write_granted=%u, write_quota=%u\n",
@@ -189,7 +191,7 @@ print_lock(const char *operation, isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 }
 #endif			/* ISC_RWLOCK_TRACE */
 
-isc_result_t
+void
 isc_rwlock_init(isc_rwlock_t *rwl, unsigned int read_quota,
 		unsigned int write_quota) {
 	REQUIRE(rwl != NULL);
@@ -221,8 +223,6 @@ isc_rwlock_init(isc_rwlock_t *rwl, unsigned int read_quota,
 	isc_condition_init(&rwl->writeable);
 
 	rwl->magic = RWLOCK_MAGIC;
-
-	return (ISC_R_SUCCESS);
 }
 
 void
@@ -336,7 +336,8 @@ isc__rwlock_lock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 		POST(cntflag);
 		while (1) {
 			if ((atomic_load_acquire(&rwl->cnt_and_flag) &
-			     WRITER_ACTIVE) == 0) {
+			     WRITER_ACTIVE) == 0)
+			{
 				break;
 			}
 
@@ -344,7 +345,8 @@ isc__rwlock_lock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 			LOCK(&rwl->lock);
 			rwl->readers_waiting++;
 			if ((atomic_load_acquire(&rwl->cnt_and_flag) &
-			     WRITER_ACTIVE) != 0) {
+			     WRITER_ACTIVE) != 0)
+			{
 				WAIT(&rwl->readable, &rwl->lock);
 			}
 			rwl->readers_waiting--;
@@ -388,10 +390,12 @@ isc__rwlock_lock(isc_rwlock_t *rwl, isc_rwlocktype_t type) {
 		/* enter the waiting queue, and wait for our turn */
 		prev_writer = atomic_fetch_add_release(&rwl->write_requests, 1);
 		while (atomic_load_acquire(&rwl->write_completions) !=
-		       prev_writer) {
+		       prev_writer)
+		{
 			LOCK(&rwl->lock);
 			if (atomic_load_acquire(&rwl->write_completions) !=
-			    prev_writer) {
+			    prev_writer)
+			{
 				WAIT(&rwl->writeable, &rwl->lock);
 				UNLOCK(&rwl->lock);
 				continue;

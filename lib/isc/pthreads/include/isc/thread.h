@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -23,11 +25,18 @@
 #include <isc/lang.h>
 #include <isc/result.h>
 
+#if defined(HAVE_THREAD_LOCAL)
+#include <threads.h>
+extern thread_local size_t isc_tid_v;
+#elif defined(HAVE___THREAD)
+extern __thread size_t isc_tid_v;
+#endif /* if defined(HAVE_THREAD_LOCAL) */
+
 ISC_LANG_BEGINDECLS
 
 typedef pthread_t isc_thread_t;
-typedef void *	  isc_threadresult_t;
-typedef void *	  isc_threadarg_t;
+typedef void	 *isc_threadresult_t;
+typedef void	 *isc_threadarg_t;
 typedef isc_threadresult_t (*isc_threadfunc_t)(isc_threadarg_t);
 
 void
@@ -37,18 +46,12 @@ void
 isc_thread_join(isc_thread_t thread, isc_threadresult_t *result);
 
 void
-isc_thread_setconcurrency(unsigned int level);
-
-void
 isc_thread_yield(void);
 
 void
 isc_thread_setname(isc_thread_t thread, const char *name);
 
-isc_result_t
-isc_thread_setaffinity(int cpu);
-
-#define isc_thread_self (unsigned long)pthread_self
+#define isc_thread_self (uintptr_t) pthread_self
 
 /***
  *** Thread-Local Storage
@@ -56,7 +59,6 @@ isc_thread_setaffinity(int cpu);
 
 #if defined(HAVE_TLS)
 #if defined(HAVE_THREAD_LOCAL)
-#include <threads.h>
 #define ISC_THREAD_LOCAL static thread_local
 #elif defined(HAVE___THREAD)
 #define ISC_THREAD_LOCAL static __thread

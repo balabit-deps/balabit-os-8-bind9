@@ -1,10 +1,12 @@
 #!/bin/sh
-#
+
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -19,21 +21,24 @@ rm -f ./*/named.run ./*/named.run.prev
 rm -f ./*/named.secroots
 rm -f ./*/tmp* ./*/*.jnl ./*/*.bk ./*/*.jbk
 rm -f ./*/trusted.conf ./*/managed.conf ./*/revoked.conf
-rm -f ./Kexample.*
+rm -f ./Kexample.* ./Kkeygen* ./keygen*.err
+rm -f ./ans10/query.log ./ans10/ans.run
 rm -f ./canonical?.*
 rm -f ./delv.out*
 rm -f ./delve.out*
 rm -f ./dig.out.*
+rm -f ./ns2/too-many-iterations.db
 rm -f ./dnssectools.out*
 rm -f ./dsfromkey.out.*
 rm -f ./keygen.err
 rm -f ./named.secroots.test*
 rm -f ./nosign.before
 rm -f ./ns*/*.nta
-rm -f ./ns*/managed-keys.bind* ./ns*/*.mkeys*
+rm -f ./ns*/managed-keys.bind ./ns*/managed-keys.bind.jnl ./ns*/*.mkeys*
 rm -f ./ns*/named.lock
 rm -f ./ns1/managed.key.id
 rm -f ./ns1/root.db ./ns2/example.db ./ns2/managed.db ./ns2/trusted.db
+rm -f ./ns1/trusted.keys
 rm -f ./ns2/algroll.db
 rm -f ./ns2/badparam.db ./ns2/badparam.db.bad
 rm -f ./ns2/cdnskey-kskonly.secure.db
@@ -91,7 +96,6 @@ rm -f ./ns3/ttlpatch.example.db ./ns3/ttlpatch.example.db.signed
 rm -f ./ns3/ttlpatch.example.db.patched
 rm -f ./ns3/unsecure.example.db ./ns3/bogus.example.db ./ns3/keyless.example.db
 rm -f ./ns3/unsupported.managed.db.tmp ./ns3/unsupported.trusted.db.tmp
-rm -f ./ns4/managed-keys.bind*
 rm -f ./ns4/named_dump.db*
 rm -f ./ns6/optout-tld.db
 rm -f ./ns7/multiple.example.bk ./ns7/nsec3.example.bk ./ns7/optout.example.bk

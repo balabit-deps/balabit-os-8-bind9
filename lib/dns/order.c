@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -73,7 +75,8 @@ dns_order_add(dns_order_t *order, const dns_name_t *name,
 	REQUIRE(DNS_ORDER_VALID(order));
 	REQUIRE(mode == DNS_RDATASETATTR_RANDOMIZE ||
 		mode == DNS_RDATASETATTR_FIXEDORDER ||
-		mode == DNS_RDATASETATTR_CYCLIC);
+		mode == DNS_RDATASETATTR_CYCLIC ||
+		mode == DNS_RDATASETATTR_NONE);
 
 	ent = isc_mem_get(order->mctx, sizeof(*ent));
 
@@ -87,7 +90,7 @@ dns_order_add(dns_order_t *order, const dns_name_t *name,
 	return (ISC_R_SUCCESS);
 }
 
-static inline bool
+static bool
 match(const dns_name_t *name1, const dns_name_t *name2) {
 	if (dns_name_iswildcard(name2)) {
 		return (dns_name_matcheswildcard(name1, name2));
@@ -108,7 +111,8 @@ dns_order_find(dns_order_t *order, const dns_name_t *name,
 			continue;
 		}
 		if (ent->rdclass != rdclass &&
-		    ent->rdclass != dns_rdataclass_any) {
+		    ent->rdclass != dns_rdataclass_any)
+		{
 			continue;
 		}
 		if (match(name, dns_fixedname_name(&ent->name))) {

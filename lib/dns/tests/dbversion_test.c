@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -204,10 +206,10 @@ allrdatasets(void **state) {
 	res = dns_db_findnode(db1, dns_rootname, false, &node);
 	assert_int_equal(res, ISC_R_SUCCESS);
 
-	res = dns_db_allrdatasets(db1, node, v1, 0, &iterator);
+	res = dns_db_allrdatasets(db1, node, v1, 0, 0, &iterator);
 	assert_int_equal(res, ISC_R_SUCCESS);
 
-	check_assertion(dns_db_allrdatasets(db1, node, v2, 0, &iterator));
+	check_assertion(dns_db_allrdatasets(db1, node, v2, 0, 0, &iterator));
 
 	dns_rdatasetiter_destroy(&iterator);
 	assert_null(iterator);
@@ -491,7 +493,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

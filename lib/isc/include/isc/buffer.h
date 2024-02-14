@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,7 +23,7 @@
  * \brief A buffer is a region of memory, together with a set of related
  * subregions. Buffers are used for parsing and I/O operations.
  *
- * The 'used region' and the 'available' region are disjoint, and their
+ * The 'used region' and the 'available region' are disjoint, and their
  * union is the buffer's region.  The used region extends from the beginning
  * of the buffer region to the last used byte.  The available region
  * extends from one byte greater than the last used byte to the end of the
@@ -32,7 +34,7 @@
  * 'consumed region' and the 'remaining region'.  The union of these two
  * regions is the used region.  The consumed region extends from the beginning
  * of the used region to the byte before the 'current' offset (if any).  The
- * 'remaining' region the current pointer to the end of the used
+ * 'remaining' region extends from the current offset to the end of the used
  * region.  The size of the consumed region can be changed using various
  * buffer commands.  Initially, the consumed region is empty.
  *
@@ -106,6 +108,7 @@
 #include <isc/formatcheck.h>
 #include <isc/lang.h>
 #include <isc/likely.h>
+#include <isc/list.h>
 #include <isc/magic.h>
 #include <isc/types.h>
 
@@ -172,7 +175,7 @@ ISC_LANG_BEGINDECLS
 
 struct isc_buffer {
 	unsigned int magic;
-	void *	     base;
+	void	    *base;
 	/*@{*/
 	/*! The following integers are byte offsets from 'base'. */
 	unsigned int length;
@@ -496,7 +499,7 @@ isc_buffer_getuint8(isc_buffer_t *b);
  *
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the available region of 'b' is at least 1.
+ *\li	The length of the remaining region of 'b' is at least 1.
  *
  * Ensures:
  *
@@ -515,7 +518,7 @@ isc__buffer_putuint8(isc_buffer_t *b, uint8_t val);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the unused region of 'b' is at least 1
+ *\li	The length of the available region of 'b' is at least 1
  *	or the buffer has autoreallocation enabled.
  *
  * Ensures:
@@ -532,8 +535,7 @@ isc_buffer_getuint16(isc_buffer_t *b);
  *
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the available region of 'b' is at least 2
- *	or the buffer has autoreallocation enabled.
+ *\li	The length of the remaining region of 'b' is at least 2.
  *
  * Ensures:
  *
@@ -553,7 +555,7 @@ isc__buffer_putuint16(isc_buffer_t *b, uint16_t val);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the unused region of 'b' is at least 2
+ *\li	The length of the available region of 'b' is at least 2
  *	or the buffer has autoreallocation enabled.
  *
  * Ensures:
@@ -570,7 +572,7 @@ isc_buffer_getuint32(isc_buffer_t *b);
  *
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the available region of 'b' is at least 4.
+ *\li	The length of the remaining region of 'b' is at least 4.
  *
  * Ensures:
  *
@@ -590,7 +592,7 @@ isc__buffer_putuint32(isc_buffer_t *b, uint32_t val);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the unused region of 'b' is at least 4
+ *\li	The length of the available region of 'b' is at least 4
  *	or the buffer has autoreallocation enabled.
  *
  * Ensures:
@@ -607,7 +609,7 @@ isc_buffer_getuint48(isc_buffer_t *b);
  *
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the available region of 'b' is at least 6.
+ *\li	The length of the remaining region of 'b' is at least 6.
  *
  * Ensures:
  *
@@ -627,7 +629,7 @@ isc__buffer_putuint48(isc_buffer_t *b, uint64_t val);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	The length of the unused region of 'b' is at least 6
+ *\li	The length of the available region of 'b' is at least 6
  *	or the buffer has autoreallocation enabled.
  *
  * Ensures:
@@ -643,7 +645,7 @@ isc__buffer_putuint24(isc_buffer_t *b, uint32_t val);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *	The length of the unused region of 'b' is at least 3
+ *\li	The length of the available region of 'b' is at least 3
  *	or the buffer has autoreallocation enabled.
  *
  * Ensures:
@@ -657,11 +659,15 @@ isc__buffer_putmem(isc_buffer_t *b, const unsigned char *base,
  * \brief Copy 'length' bytes of memory at 'base' into 'b'.
  *
  * Requires:
- *\li	'b' is a valid buffer, and it has at least 'length'
- *	or the buffer has autoreallocation enabled.
+ *\li	'b' is a valid buffer.
  *
  *\li	'base' points to 'length' bytes of valid memory.
  *
+ *\li	The length of the available region of 'b' is at least 'length'
+ *	or the buffer has autoreallocation enabled.
+ *
+ * Ensures:
+ *\li	The used pointer in 'b' is advanced by 'length'.
  */
 
 void
@@ -672,9 +678,13 @@ isc__buffer_putstr(isc_buffer_t *b, const char *source);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	'source' to be a valid NULL terminated string.
+ *\li	'source' is a valid NULL terminated string.
  *
- *\li	strlen(source) <= isc_buffer_available(b) || b->mctx != NULL
+ *\li	The length of the available region of 'b' is at least strlen('source')
+ *	or the buffer has autoreallocation enabled.
+ *
+ * Ensures:
+ *\li	The used pointer in 'b' is advanced by strlen('source').
  */
 
 void
@@ -685,7 +695,11 @@ isc_buffer_putdecint(isc_buffer_t *b, int64_t v);
  * Requires:
  *\li	'b' is a valid buffer.
  *
- *\li	strlen(dec(v)) <= isc_buffer_available(b) || b->mctx != NULL
+ *\li	The length of the available region of 'b' is at least strlen(dec('v'))
+ *	or the buffer has autoreallocation enabled.
+ *
+ * Ensures:
+ *\li	The used pointer in 'b' is advanced by strlen(dec('v')).
  */
 
 isc_result_t
@@ -693,13 +707,16 @@ isc_buffer_copyregion(isc_buffer_t *b, const isc_region_t *r);
 /*!<
  * \brief Copy the contents of 'r' into 'b'.
  *
+ * Notes:
+ *\li	If 'b' has autoreallocation enabled, and the length of 'r' is greater
+ *	than the length of the available region of 'b', 'b' is reallocated.
+ *
  * Requires:
  *\li	'b' is a valid buffer.
  *
  *\li	'r' is a valid region.
  *
  * Returns:
- *
  *\li	ISC_R_SUCCESS
  *\li	ISC_R_NOSPACE			The available region of 'b' is not
  *					big enough.
@@ -708,17 +725,14 @@ isc_buffer_copyregion(isc_buffer_t *b, const isc_region_t *r);
 isc_result_t
 isc_buffer_dup(isc_mem_t *mctx, isc_buffer_t **dstp, const isc_buffer_t *src);
 /*!<
- * \brief Allocate 'dst' and copy used contents  of 'src' into it
+ * \brief Allocate 'dst' and copy used contents of 'src' into it.
  *
  * Requires:
- *\li	'dstp' is not NULL and *dst is NULL
+ *\li	'dstp' is not NULL and *dst is NULL.
  *\li	'src' is a valid buffer.
  *
  * Returns:
- *
  *\li	ISC_R_SUCCESS
- *\li	ISC_R_NOSPACE			The available region of 'b' is not
- *					big enough.
  */
 
 isc_result_t
@@ -732,8 +746,9 @@ isc_buffer_printf(isc_buffer_t *b, const char *format, ...)
  *\li	The 'format' argument is a printf(3) string, with additional arguments
  *	as necessary.
  *
- *\li	If 'b' has autoreallocation enabled, and the formatted string
- *	would overrun the buffer, the buffer is reallocated.
+ *\li	If 'b' has autoreallocation enabled, and the length of the formatted
+ *	string is greater than the length of the available region of 'b', 'b'
+ *	is reallocated.
  *
  * Requires:
  *
@@ -781,6 +796,7 @@ ISC_LANG_ENDDECLS
  */
 #define ISC__BUFFER_INIT(_b, _base, _length)    \
 	do {                                    \
+		ISC_REQUIRE((_b) != NULL);      \
 		(_b)->base = _base;             \
 		(_b)->length = (_length);       \
 		(_b)->used = 0;                 \
@@ -794,41 +810,54 @@ ISC_LANG_ENDDECLS
 
 #define ISC__BUFFER_INITNULL(_b) ISC__BUFFER_INIT(_b, NULL, 0)
 
-#define ISC__BUFFER_INVALIDATE(_b) \
-	do {                       \
-		(_b)->magic = 0;   \
-		(_b)->base = NULL; \
-		(_b)->length = 0;  \
-		(_b)->used = 0;    \
-		(_b)->current = 0; \
-		(_b)->active = 0;  \
+#define ISC__BUFFER_INVALIDATE(_b)                         \
+	do {                                               \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));         \
+		ISC_REQUIRE(!ISC_LINK_LINKED((_b), link)); \
+		ISC_REQUIRE((_b)->mctx == NULL);           \
+		(_b)->magic = 0;                           \
+		(_b)->base = NULL;                         \
+		(_b)->length = 0;                          \
+		(_b)->used = 0;                            \
+		(_b)->current = 0;                         \
+		(_b)->active = 0;                          \
 	} while (0)
 
-#define ISC__BUFFER_REGION(_b, _r)           \
-	do {                                 \
-		(_r)->base = (_b)->base;     \
-		(_r)->length = (_b)->length; \
+#define ISC__BUFFER_REGION(_b, _r)                 \
+	do {                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b)); \
+		ISC_REQUIRE((_r) != NULL);         \
+		(_r)->base = (_b)->base;           \
+		(_r)->length = (_b)->length;       \
 	} while (0)
 
-#define ISC__BUFFER_USEDREGION(_b, _r)     \
-	do {                               \
-		(_r)->base = (_b)->base;   \
-		(_r)->length = (_b)->used; \
+#define ISC__BUFFER_USEDREGION(_b, _r)             \
+	do {                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b)); \
+		ISC_REQUIRE((_r) != NULL);         \
+		(_r)->base = (_b)->base;           \
+		(_r)->length = (_b)->used;         \
 	} while (0)
 
 #define ISC__BUFFER_AVAILABLEREGION(_b, _r)                    \
 	do {                                                   \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));             \
+		ISC_REQUIRE((_r) != NULL);                     \
 		(_r)->base = isc_buffer_used(_b);              \
 		(_r)->length = isc_buffer_availablelength(_b); \
 	} while (0)
 
-#define ISC__BUFFER_ADD(_b, _n)     \
-	do {                        \
-		(_b)->used += (_n); \
+#define ISC__BUFFER_ADD(_b, _n)                                 \
+	do {                                                    \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));              \
+		ISC_REQUIRE((_b)->used + (_n) <= (_b)->length); \
+		(_b)->used += (_n);                             \
 	} while (0)
 
 #define ISC__BUFFER_SUBTRACT(_b, _n)                \
 	do {                                        \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));  \
+		ISC_REQUIRE((_b)->used >= (_n));    \
 		(_b)->used -= (_n);                 \
 		if ((_b)->current > (_b)->used)     \
 			(_b)->current = (_b)->used; \
@@ -836,27 +865,34 @@ ISC_LANG_ENDDECLS
 			(_b)->active = (_b)->used;  \
 	} while (0)
 
-#define ISC__BUFFER_CLEAR(_b)      \
-	do {                       \
-		(_b)->used = 0;    \
-		(_b)->current = 0; \
-		(_b)->active = 0;  \
+#define ISC__BUFFER_CLEAR(_b)                      \
+	do {                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b)); \
+		(_b)->used = 0;                    \
+		(_b)->current = 0;                 \
+		(_b)->active = 0;                  \
 	} while (0)
 
-#define ISC__BUFFER_CONSUMEDREGION(_b, _r)    \
-	do {                                  \
-		(_r)->base = (_b)->base;      \
-		(_r)->length = (_b)->current; \
+#define ISC__BUFFER_CONSUMEDREGION(_b, _r)         \
+	do {                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b)); \
+		ISC_REQUIRE((_r) != NULL);         \
+		(_r)->base = (_b)->base;           \
+		(_r)->length = (_b)->current;      \
 	} while (0)
 
 #define ISC__BUFFER_REMAININGREGION(_b, _r)                    \
 	do {                                                   \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));             \
+		ISC_REQUIRE((_r) != NULL);                     \
 		(_r)->base = isc_buffer_current(_b);           \
 		(_r)->length = isc_buffer_remaininglength(_b); \
 	} while (0)
 
 #define ISC__BUFFER_ACTIVEREGION(_b, _r)                            \
 	do {                                                        \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                  \
+		ISC_REQUIRE((_r) != NULL);                          \
 		if ((_b)->current < (_b)->active) {                 \
 			(_r)->base = isc_buffer_current(_b);        \
 			(_r)->length = isc_buffer_activelength(_b); \
@@ -866,28 +902,36 @@ ISC_LANG_ENDDECLS
 		}                                                   \
 	} while (0)
 
-#define ISC__BUFFER_SETACTIVE(_b, _n)                \
-	do {                                         \
-		(_b)->active = (_b)->current + (_n); \
+#define ISC__BUFFER_SETACTIVE(_b, _n)                            \
+	do {                                                     \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));               \
+		ISC_REQUIRE((_b)->current + (_n) <= (_b)->used); \
+		(_b)->active = (_b)->current + (_n);             \
 	} while (0)
 
-#define ISC__BUFFER_FIRST(_b)      \
-	do {                       \
-		(_b)->current = 0; \
+#define ISC__BUFFER_FIRST(_b)                      \
+	do {                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b)); \
+		(_b)->current = 0;                 \
 	} while (0)
 
-#define ISC__BUFFER_FORWARD(_b, _n)    \
-	do {                           \
-		(_b)->current += (_n); \
+#define ISC__BUFFER_FORWARD(_b, _n)                              \
+	do {                                                     \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));               \
+		ISC_REQUIRE((_b)->current + (_n) <= (_b)->used); \
+		(_b)->current += (_n);                           \
 	} while (0)
 
-#define ISC__BUFFER_BACK(_b, _n)       \
-	do {                           \
-		(_b)->current -= (_n); \
+#define ISC__BUFFER_BACK(_b, _n)                    \
+	do {                                        \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));  \
+		ISC_REQUIRE((_n) <= (_b)->current); \
+		(_b)->current -= (_n);              \
 	} while (0)
 
 #define ISC__BUFFER_PUTMEM(_b, _base, _length)                            \
 	do {                                                              \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                        \
 		if (ISC_UNLIKELY((_b)->autore)) {                         \
 			isc_buffer_t *_tmp = _b;                          \
 			ISC_REQUIRE(isc_buffer_reserve(&_tmp, _length) == \
@@ -905,6 +949,8 @@ ISC_LANG_ENDDECLS
 	do {                                                              \
 		unsigned int   _length;                                   \
 		unsigned char *_cp;                                       \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                        \
+		ISC_REQUIRE((_source) != NULL);                           \
 		_length = (unsigned int)strlen(_source);                  \
 		if (ISC_UNLIKELY((_b)->autore)) {                         \
 			isc_buffer_t *_tmp = _b;                          \
@@ -922,6 +968,7 @@ ISC_LANG_ENDDECLS
 		unsigned char *_cp;                                 \
 		/* evaluate (_val) only once */                     \
 		uint8_t _val2 = (_val);                             \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                  \
 		if (ISC_UNLIKELY((_b)->autore)) {                   \
 			isc_buffer_t *_tmp = _b;                    \
 			ISC_REQUIRE(isc_buffer_reserve(&_tmp, 1) == \
@@ -938,6 +985,7 @@ ISC_LANG_ENDDECLS
 		unsigned char *_cp;                                 \
 		/* evaluate (_val) only once */                     \
 		uint16_t _val2 = (_val);                            \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                  \
 		if (ISC_UNLIKELY((_b)->autore)) {                   \
 			isc_buffer_t *_tmp = _b;                    \
 			ISC_REQUIRE(isc_buffer_reserve(&_tmp, 2) == \
@@ -955,6 +1003,7 @@ ISC_LANG_ENDDECLS
 		unsigned char *_cp;                                 \
 		/* evaluate (_val) only once */                     \
 		uint32_t _val2 = (_val);                            \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                  \
 		if (ISC_UNLIKELY((_b)->autore)) {                   \
 			isc_buffer_t *_tmp = _b;                    \
 			ISC_REQUIRE(isc_buffer_reserve(&_tmp, 3) == \
@@ -973,6 +1022,7 @@ ISC_LANG_ENDDECLS
 		unsigned char *_cp;                                 \
 		/* evaluate (_val) only once */                     \
 		uint32_t _val2 = (_val);                            \
+		ISC_REQUIRE(ISC_BUFFER_VALID(_b));                  \
 		if (ISC_UNLIKELY((_b)->autore)) {                   \
 			isc_buffer_t *_tmp = _b;                    \
 			ISC_REQUIRE(isc_buffer_reserve(&_tmp, 4) == \
@@ -1038,7 +1088,7 @@ ISC_LANG_ENDDECLS
 #define isc_buffer_constinit(_b, _d, _l)                    \
 	do {                                                \
 		union {                                     \
-			void *	    _var;                   \
+			void	   *_var;                   \
 			const void *_const;                 \
 		} _deconst;                                 \
 		_deconst._const = (_d);                     \

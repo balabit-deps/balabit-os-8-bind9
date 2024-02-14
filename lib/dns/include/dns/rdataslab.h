@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -94,6 +96,15 @@ dns_rdataslab_size(unsigned char *slab, unsigned int reservelen);
  *
  * Returns:
  *\li	The number of bytes in the slab, including the reservelen.
+ */
+
+unsigned int
+dns_rdataslab_rdatasize(unsigned char *slab, unsigned int reservelen);
+/*%<
+ * Return the size of the rdata in an rdataslab.
+ *
+ * Requires:
+ *\li	'slab' points to a slab.
  */
 
 unsigned int

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -145,9 +147,10 @@ load_plugin(isc_mem_t *mctx, const char *modpath, ns_plugin_t **pluginp) {
 	REQUIRE(pluginp != NULL && *pluginp == NULL);
 
 	flags = RTLD_LAZY | RTLD_LOCAL;
-#if defined(RTLD_DEEPBIND) && !__SANITIZE_ADDRESS__
+#if defined(RTLD_DEEPBIND) && !__SANITIZE_ADDRESS__ && !__SANITIZE_THREAD__
 	flags |= RTLD_DEEPBIND;
-#endif /* if defined(RTLD_DEEPBIND) && !__SANITIZE_ADDRESS__ */
+#endif /* if defined(RTLD_DEEPBIND) && !__SANITIZE_ADDRESS__ && \
+	  !__SANITIZE_THREAD__ */
 
 	handle = dlopen(modpath, flags);
 	if (handle == NULL) {
@@ -473,7 +476,8 @@ ns_hooktable_free(isc_mem_t *mctx, void **tablep) {
 
 	for (i = 0; i < NS_HOOKPOINTS_COUNT; i++) {
 		for (hook = ISC_LIST_HEAD((*table)[i]); hook != NULL;
-		     hook = next) {
+		     hook = next)
+		{
 			next = ISC_LIST_NEXT(hook, link);
 			ISC_LIST_UNLINK((*table)[i], hook, link);
 			if (hook->mctx != NULL) {

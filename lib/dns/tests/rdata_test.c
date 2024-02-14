@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,8 +23,9 @@
 #include <unistd.h>
 
 #define UNIT_TESTING
-#include <cmocka.h>
 
+#include <isc/cmocka.h>
+#include <isc/commandline.h>
 #include <isc/hex.h>
 #include <isc/lex.h>
 #include <isc/print.h>
@@ -46,6 +49,12 @@ struct compare_ok {
 	int lineno;	   /* source line defining this RDATA */
 };
 typedef struct compare_ok compare_ok_t;
+
+struct textvsunknown {
+	const char *text1;
+	const char *text2;
+};
+typedef struct textvsunknown textvsunknown_t;
 
 static int
 _setup(void **state) {
@@ -75,6 +84,7 @@ typedef struct text_ok {
 	const char *text_in;  /* text passed to fromtext_*() */
 	const char *text_out; /* text expected from totext_*();
 			       * NULL indicates text_in is invalid */
+	unsigned int loop;
 } text_ok_t;
 
 /*
@@ -84,6 +94,7 @@ typedef struct wire_ok {
 	unsigned char data[512]; /* RDATA in wire format */
 	size_t len;		 /* octets of data to parse */
 	bool ok;		 /* is this RDATA valid? */
+	unsigned int loop;
 } wire_ok_t;
 
 #define COMPARE(r1, r2, answer)          \
@@ -97,32 +108,41 @@ typedef struct wire_ok {
 
 #define TEXT_VALID_CHANGED(data_in, data_out) \
 	{                                     \
-		data_in, data_out             \
+		data_in, data_out, 0          \
 	}
-#define TEXT_VALID(data)   \
-	{                  \
-		data, data \
+#define TEXT_VALID(data)      \
+	{                     \
+		data, data, 0 \
 	}
-#define TEXT_INVALID(data) \
-	{                  \
-		data, NULL \
+#define TEXT_VALID_LOOP(loop, data) \
+	{                           \
+		data, data, loop    \
+	}
+#define TEXT_VALID_LOOPCHG(loop, data_in, data_out) \
+	{                                           \
+		data_in, data_out, loop             \
+	}
+#define TEXT_INVALID(data)    \
+	{                     \
+		data, NULL, 0 \
 	}
 #define TEXT_SENTINEL() TEXT_INVALID(NULL)
 
 #define VARGC(...) (sizeof((unsigned char[]){ __VA_ARGS__ }))
-#define WIRE_TEST(ok, ...)                              \
-	{                                               \
-		{ __VA_ARGS__ }, VARGC(__VA_ARGS__), ok \
+#define WIRE_TEST(ok, loop, ...)                              \
+	{                                                     \
+		{ __VA_ARGS__ }, VARGC(__VA_ARGS__), ok, loop \
 	}
-#define WIRE_VALID(...) WIRE_TEST(true, __VA_ARGS__)
+#define WIRE_VALID(...)		   WIRE_TEST(true, 0, __VA_ARGS__)
+#define WIRE_VALID_LOOP(loop, ...) WIRE_TEST(true, loop, __VA_ARGS__)
 /*
  * WIRE_INVALID() test cases must always have at least one octet specified to
  * distinguish them from WIRE_SENTINEL().  Use the 'empty_ok' parameter passed
  * to check_wire_ok() for indicating whether empty RDATA is allowed for a given
  * RR type or not.
  */
-#define WIRE_INVALID(FIRST, ...) WIRE_TEST(false, FIRST, __VA_ARGS__)
-#define WIRE_SENTINEL()		 WIRE_TEST(false)
+#define WIRE_INVALID(FIRST, ...) WIRE_TEST(false, 0, FIRST, __VA_ARGS__)
+#define WIRE_SENTINEL()		 WIRE_TEST(false, 0)
 
 /*
  * Call dns_rdata_fromwire() for data in 'src', which is 'srclen' octets in
@@ -252,13 +272,15 @@ rdata_checknames(dns_rdata_t *rdata) {
  * check_text_ok_single() and check_wire_ok_single().
  */
 static void
-check_struct_conversions(dns_rdata_t *rdata, size_t structsize) {
+check_struct_conversions(dns_rdata_t *rdata, size_t structsize,
+			 unsigned int loop) {
 	dns_rdataclass_t rdclass = rdata->rdclass;
 	dns_rdatatype_t type = rdata->type;
 	isc_result_t result;
 	isc_buffer_t target;
 	void *rdata_struct;
 	char buf[1024];
+	unsigned int count = 0;
 
 	rdata_struct = isc_mem_allocate(dt_mctx, structsize);
 	assert_non_null(rdata_struct);
@@ -284,6 +306,62 @@ check_struct_conversions(dns_rdata_t *rdata, size_t structsize) {
 
 	assert_memory_equal(buf, rdata->data, rdata->length);
 
+	/*
+	 * Check that one can walk hip rendezvous servers and
+	 * https/svcb parameters.
+	 */
+	switch (type) {
+	case dns_rdatatype_hip: {
+		dns_rdata_hip_t *hip = rdata_struct;
+
+		for (result = dns_rdata_hip_first(hip); result == ISC_R_SUCCESS;
+		     result = dns_rdata_hip_next(hip))
+		{
+			dns_name_t name;
+			dns_name_init(&name, NULL);
+			dns_rdata_hip_current(hip, &name);
+			assert_int_not_equal(dns_name_countlabels(&name), 0);
+			assert_true(dns_name_isabsolute(&name));
+			count++;
+		}
+		assert_int_equal(result, ISC_R_NOMORE);
+		assert_int_equal(count, loop);
+		break;
+	}
+	case dns_rdatatype_https: {
+		dns_rdata_in_https_t *https = rdata_struct;
+
+		for (result = dns_rdata_in_https_first(https);
+		     result == ISC_R_SUCCESS;
+		     result = dns_rdata_in_https_next(https))
+		{
+			isc_region_t region;
+			dns_rdata_in_https_current(https, &region);
+			assert_true(region.length >= 4);
+			count++;
+		}
+		assert_int_equal(result, ISC_R_NOMORE);
+		assert_int_equal(count, loop);
+		break;
+	}
+	case dns_rdatatype_svcb: {
+		dns_rdata_in_svcb_t *svcb = rdata_struct;
+
+		for (result = dns_rdata_in_svcb_first(svcb);
+		     result == ISC_R_SUCCESS;
+		     result = dns_rdata_in_svcb_next(svcb))
+		{
+			isc_region_t region;
+			dns_rdata_in_svcb_current(svcb, &region);
+			assert_true(region.length >= 4);
+			count++;
+		}
+		assert_int_equal(result, ISC_R_NOMORE);
+		assert_int_equal(count, loop);
+		break;
+	}
+	}
+
 	isc_mem_free(dt_mctx, rdata_struct);
 }
 
@@ -302,6 +380,10 @@ check_text_ok_single(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 	isc_result_t result;
 	size_t length = 0;
 
+	if (debug) {
+		fprintf(stdout, "#check_text_ok_single(%s)\n",
+			text_ok->text_in);
+	}
 	/*
 	 * Try converting text form RDATA into uncompressed wire form.
 	 */
@@ -313,7 +395,9 @@ check_text_ok_single(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 	 */
 	if (text_ok->text_out != NULL) {
 		if (debug && result != ISC_R_SUCCESS) {
-			fprintf(stdout, "#'%s'\n", text_ok->text_in);
+			fprintf(stdout, "# '%s'\n", text_ok->text_in);
+			fprintf(stdout, "# result=%s\n",
+				dns_result_totext(result));
 		}
 		assert_int_equal(result, ISC_R_SUCCESS);
 	} else {
@@ -337,6 +421,18 @@ check_text_ok_single(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 	 */
 	isc_buffer_init(&target, buf_totext, sizeof(buf_totext));
 	result = dns_rdata_totext(&rdata, NULL, &target);
+	if (result != ISC_R_SUCCESS && debug) {
+		size_t i;
+		fprintf(stdout, "# dns_rdata_totext -> %s",
+			dns_result_totext(result));
+		for (i = 0; i < rdata.length; i++) {
+			if ((i % 16) == 0) {
+				fprintf(stdout, "\n#");
+			}
+			fprintf(stdout, " %02x", rdata.data[i]);
+		}
+		fprintf(stdout, "\n");
+	}
 	assert_int_equal(result, ISC_R_SUCCESS);
 	/*
 	 * Ensure buf_totext is properly NUL terminated as dns_rdata_totext()
@@ -349,6 +445,10 @@ check_text_ok_single(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 			text_ok->text_out);
 	}
 	assert_string_equal(buf_totext, text_ok->text_out);
+
+	if (debug) {
+		fprintf(stdout, "#dns_rdata_totext -> '%s'\n", buf_totext);
+	}
 
 	/*
 	 * Ensure that fromtext_*() output is valid input for fromwire_*().
@@ -382,7 +482,7 @@ check_text_ok_single(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 	 * Perform two-way conversion checks between uncompressed wire form and
 	 * type-specific struct.
 	 */
-	check_struct_conversions(&rdata, structsize);
+	check_struct_conversions(&rdata, structsize, text_ok->loop);
 }
 
 /*
@@ -426,6 +526,10 @@ check_text_conversions(dns_rdata_t *rdata) {
 	result = dns_test_rdatafromstring(&rdata2, rdata->rdclass, rdata->type,
 					  buf_fromtext, sizeof(buf_fromtext),
 					  buf_totext, false);
+	if (debug && result != ISC_R_SUCCESS) {
+		fprintf(stdout, "# result = %s\n", dns_result_totext(result));
+		fprintf(stdout, "# '%s'\n", buf_fromtext);
+	}
 	assert_int_equal(result, ISC_R_SUCCESS);
 	assert_int_equal(rdata2.length, rdata->length);
 	assert_memory_equal(buf_fromtext, rdata->data, rdata->length);
@@ -521,7 +625,7 @@ check_wire_ok_single(const wire_ok_t *wire_ok, dns_rdataclass_t rdclass,
 	 *   - uncompressed wire form and text form,
 	 *   - uncompressed wire form and multi-line text form.
 	 */
-	check_struct_conversions(&rdata, structsize);
+	check_struct_conversions(&rdata, structsize, wire_ok->loop);
 	if (!dns_rdatatype_ismeta(rdata.type)) {
 		check_text_conversions(&rdata);
 		check_multiline_text_conversions(&rdata);
@@ -576,13 +680,17 @@ check_text_ok(const text_ok_t *text_ok, dns_rdataclass_t rdclass,
 static void
 check_wire_ok(const wire_ok_t *wire_ok, bool empty_ok, dns_rdataclass_t rdclass,
 	      dns_rdatatype_t type, size_t structsize) {
-	wire_ok_t empty_wire = WIRE_TEST(empty_ok);
+	wire_ok_t empty_wire = WIRE_TEST(empty_ok, 0);
 	size_t i;
 
 	/*
 	 * Check all entries in the supplied array.
 	 */
 	for (i = 0; wire_ok[i].len != 0; i++) {
+		if (debug) {
+			fprintf(stderr, "calling check_wire_ok_single on %zu\n",
+				i);
+		}
 		check_wire_ok_single(&wire_ok[i], rdclass, type, structsize);
 	}
 
@@ -682,6 +790,64 @@ check_rdata(const text_ok_t *text_ok, const wire_ok_t *wire_ok,
 	}
 	if (compare_ok != NULL) {
 		check_compare_ok(compare_ok, rdclass, type);
+	}
+}
+
+/*
+ * Check presentation vs unknown format of the record.
+ */
+static void
+check_textvsunknown_single(const textvsunknown_t *textvsunknown,
+			   dns_rdataclass_t rdclass, dns_rdatatype_t type) {
+	dns_rdata_t rdata1 = DNS_RDATA_INIT, rdata2 = DNS_RDATA_INIT;
+	unsigned char buf1[1024], buf2[1024];
+	isc_result_t result;
+
+	result = dns_test_rdatafromstring(&rdata1, rdclass, type, buf1,
+					  sizeof(buf1), textvsunknown->text1,
+					  false);
+	if (debug && result != ISC_R_SUCCESS) {
+		fprintf(stdout, "# '%s'\n", textvsunknown->text1);
+		fprintf(stdout, "# result=%s\n", dns_result_totext(result));
+	}
+	assert_int_equal(result, ISC_R_SUCCESS);
+	result = dns_test_rdatafromstring(&rdata2, rdclass, type, buf2,
+					  sizeof(buf2), textvsunknown->text2,
+					  false);
+	if (debug && result != ISC_R_SUCCESS) {
+		fprintf(stdout, "# '%s'\n", textvsunknown->text2);
+		fprintf(stdout, "# result=%s\n", dns_result_totext(result));
+	}
+	assert_int_equal(result, ISC_R_SUCCESS);
+	if (debug && rdata1.length != rdata2.length) {
+		fprintf(stdout, "# '%s'\n", textvsunknown->text1);
+		fprintf(stdout, "# rdata1.length (%u) != rdata2.length (%u)\n",
+			rdata1.length, rdata2.length);
+	}
+	assert_int_equal(rdata1.length, rdata2.length);
+	if (debug && memcmp(rdata1.data, rdata2.data, rdata1.length) != 0) {
+		unsigned int i;
+		fprintf(stdout, "# '%s'\n", textvsunknown->text1);
+		for (i = 0; i < rdata1.length; i++) {
+			if (rdata1.data[i] != rdata2.data[i]) {
+				fprintf(stderr, "# %u: %02x != %02x\n", i,
+					rdata1.data[i], rdata2.data[i]);
+			}
+		}
+	}
+	assert_memory_equal(rdata1.data, rdata2.data, rdata1.length);
+}
+
+static void
+check_textvsunknown(const textvsunknown_t *textvsunknown,
+		    dns_rdataclass_t rdclass, dns_rdatatype_t type) {
+	size_t i;
+
+	/*
+	 * Check all entries in the supplied array.
+	 */
+	for (i = 0; textvsunknown[i].text1 != NULL; i++) {
+		check_textvsunknown_single(&textvsunknown[i], rdclass, type);
 	}
 }
 
@@ -1755,6 +1921,33 @@ eid(void **state) {
  */
 static void
 hip(void **state) {
+	text_ok_t text_ok[] = {
+		/* RFC 8005 examples. */
+		TEXT_VALID_LOOP(0, "2 200100107B1A74DF365639CC39F1D578 "
+				   "AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cI"
+				   "vM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbW"
+				   "Iy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+b"
+				   "SRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWx"
+				   "Z48AWkskmdHaVDP4BcelrTI3rMXdXF5D"),
+		TEXT_VALID_LOOP(1, "2 200100107B1A74DF365639CC39F1D578 "
+				   "AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cI"
+				   "vM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbW"
+				   "Iy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+b"
+				   "SRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWx"
+				   "Z48AWkskmdHaVDP4BcelrTI3rMXdXF5D "
+				   "rvs1.example.com."),
+		TEXT_VALID_LOOP(2, "2 200100107B1A74DF365639CC39F1D578 "
+				   "AwEAAbdxyhNuSutc5EMzxTs9LBPCIkOFH8cI"
+				   "vM4p9+LrV4e19WzK00+CI6zBCQTdtWsuxKbW"
+				   "Iy87UOoJTwkUs7lBu+Upr1gsNrut79ryra+b"
+				   "SRGQb1slImA8YVJyuIDsj7kwzG7jnERNqnWx"
+				   "Z48AWkskmdHaVDP4BcelrTI3rMXdXF5D "
+				   "rvs1.example.com. rvs2.example.com."),
+		/*
+		 * Sentinel.
+		 */
+		TEXT_SENTINEL()
+	};
 	unsigned char hipwire[DNS_RDATA_MAXLENGTH] = { 0x01, 0x00, 0x00, 0x01,
 						       0x00, 0x00, 0x04, 0x41,
 						       0x42, 0x43, 0x44, 0x00 };
@@ -1776,6 +1969,8 @@ hip(void **state) {
 	result = wire_to_rdata(hipwire, sizeof(hipwire), dns_rdataclass_in,
 			       dns_rdatatype_hip, buf, sizeof(buf), &rdata);
 	assert_int_equal(result, DNS_R_FORMERR);
+	check_text_ok(text_ok, dns_rdataclass_in, dns_rdatatype_hip,
+		      sizeof(dns_rdata_hip_t));
 }
 
 /*
@@ -1902,6 +2097,71 @@ key(void **state) {
 
 	check_rdata(NULL, wire_ok, NULL, false, dns_rdataclass_in,
 		    dns_rdatatype_key, sizeof(dns_rdata_key_t));
+}
+
+/*
+ * LOC tests.
+ */
+static void
+loc(void **state) {
+	text_ok_t text_ok[] = {
+		TEXT_VALID_CHANGED("0 N 0 E 0", "0 0 0.000 N 0 0 0.000 E 0.00m "
+						"1m 10000m 10m"),
+		TEXT_VALID_CHANGED("0 S 0 W 0", "0 0 0.000 N 0 0 0.000 E 0.00m "
+						"1m 10000m 10m"),
+		TEXT_VALID_CHANGED("0 0 N 0 0 E 0", "0 0 0.000 N 0 0 0.000 E "
+						    "0.00m 1m 10000m 10m"),
+		TEXT_VALID_CHANGED("0 0 0 N 0 0 0 E 0",
+				   "0 0 0.000 N 0 0 0.000 E 0.00m 1m 10000m "
+				   "10m"),
+		TEXT_VALID_CHANGED("0 0 0 N 0 0 0 E 0",
+				   "0 0 0.000 N 0 0 0.000 E 0.00m 1m 10000m "
+				   "10m"),
+		TEXT_VALID_CHANGED("0 0 0. N 0 0 0. E 0",
+				   "0 0 0.000 N 0 0 0.000 E 0.00m 1m 10000m "
+				   "10m"),
+		TEXT_VALID_CHANGED("0 0 .0 N 0 0 .0 E 0",
+				   "0 0 0.000 N 0 0 0.000 E 0.00m 1m 10000m "
+				   "10m"),
+		TEXT_INVALID("0 North 0 East 0"),
+		TEXT_INVALID("0 South 0 West 0"),
+		TEXT_INVALID("0 0 . N 0 0 0. E 0"),
+		TEXT_INVALID("0 0 0. N 0 0 . E 0"),
+		TEXT_INVALID("0 0 0. N 0 0 0. E m"),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 ."),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 m"),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 0 ."),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 0 m"),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 0 0 ."),
+		TEXT_INVALID("0 0 0. N 0 0 0. E 0 0 0 m"),
+		TEXT_VALID_CHANGED("90 N 180 E 0", "90 0 0.000 N 180 0 0.000 E "
+						   "0.00m 1m 10000m 10m"),
+		TEXT_INVALID("90 1 N 180 E 0"),
+		TEXT_INVALID("90 0 1 N 180 E 0"),
+		TEXT_INVALID("90 N 180 1 E 0"),
+		TEXT_INVALID("90 N 180 0 1 E 0"),
+		TEXT_VALID_CHANGED("90 S 180 W 0", "90 0 0.000 S 180 0 0.000 W "
+						   "0.00m 1m 10000m 10m"),
+		TEXT_INVALID("90 1 S 180 W 0"),
+		TEXT_INVALID("90 0 1 S 180 W 0"),
+		TEXT_INVALID("90 S 180 1 W 0"),
+		TEXT_INVALID("90 S 180 0 1 W 0"),
+		TEXT_INVALID("0 0 0.000 E 0 0 0.000 E -0.95m 1m 10000m 10m"),
+		TEXT_VALID("0 0 0.000 N 0 0 0.000 E -0.95m 1m 10000m 10m"),
+		TEXT_VALID("0 0 0.000 N 0 0 0.000 E -0.05m 1m 10000m 10m"),
+		TEXT_VALID("0 0 0.000 N 0 0 0.000 E -100000.00m 1m 10000m 10m"),
+		TEXT_VALID("0 0 0.000 N 0 0 0.000 E 42849672.95m 1m 10000m "
+			   "10m"),
+		/*
+		 * Sentinel.
+		 */
+		TEXT_SENTINEL()
+	};
+
+	UNUSED(state);
+
+	check_rdata(text_ok, 0, NULL, false, dns_rdataclass_in,
+		    dns_rdatatype_loc, sizeof(dns_rdata_loc_t));
 }
 
 /*
@@ -2277,10 +2537,276 @@ wks(void **state) {
 		    dns_rdatatype_wks, sizeof(dns_rdata_in_wks_t));
 }
 
+static void
+https_svcb(void **state) {
+	/*
+	 * Known keys: mandatory, apln, no-default-alpn, port,
+	 *             ipv4hint, port, ipv6hint, dohpath.
+	 */
+	text_ok_t text_ok[] = {
+		/* unknown key invalid */
+		TEXT_INVALID("1 . unknown="),
+		/* no domain */
+		TEXT_INVALID("0"),
+		/* minimal record */
+		TEXT_VALID_LOOP(0, "0 ."),
+		/* Alias form requires SvcFieldValue to be empty */
+		TEXT_INVALID("0 . alpn=\"h2\""),
+		/* no "key" prefix */
+		TEXT_INVALID("2 svc.example.net. 0=\"2222\""),
+		/* no key value */
+		TEXT_INVALID("2 svc.example.net. key"),
+		/* no key value */
+		TEXT_INVALID("2 svc.example.net. key=\"2222\""),
+		/* zero pad invalid */
+		TEXT_INVALID("2 svc.example.net. key07=\"2222\""),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. key8=\"2222\""),
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. key8=2222",
+				   "2 svc.example.net. key8=\"2222\""),
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. alpn=h2",
+				   "2 svc.example.net. alpn=\"h2\""),
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. alpn=h3",
+				   "2 svc.example.net. alpn=\"h3\""),
+		/* alpn has 2 sub field "h2" and "h3" */
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. alpn=h2,h3",
+				   "2 svc.example.net. alpn=\"h2,h3\""),
+		/* apln has 2 sub fields "h1,h2" and "h3" (comma escaped) */
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. alpn=h1\\\\,h2,h3",
+				   "2 svc.example.net. alpn=\"h1\\\\,h2,h3\""),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. port=50"),
+		/* no-default-alpn, alpn is required */
+		TEXT_INVALID("2 svc.example.net. no-default-alpn"),
+		/* no-default-alpn with alpn present */
+		TEXT_VALID_LOOPCHG(
+			2, "2 svc.example.net. no-default-alpn alpn=h2",
+			"2 svc.example.net. alpn=\"h2\" no-default-alpn"),
+		/* empty hint */
+		TEXT_INVALID("2 svc.example.net. ipv4hint="),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. "
+				   "ipv4hint=10.50.0.1,10.50.0.2"),
+		/* empty hint */
+		TEXT_INVALID("2 svc.example.net. ipv6hint="),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. ipv6hint=::1,2002::1"),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. ech=abcdefghijkl"),
+		/* bad base64 */
+		TEXT_INVALID("2 svc.example.net. ech=abcdefghijklm"),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. key8=\"2222\""),
+		/* Out of key order on input (alpn == key1). */
+		TEXT_VALID_LOOPCHG(2,
+				   "2 svc.example.net. key8=\"2222\" alpn=h2",
+				   "2 svc.example.net. alpn=\"h2\" "
+				   "key8=\"2222\""),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. key65535=\"2222\""),
+		TEXT_INVALID("2 svc.example.net. key65536=\"2222\""),
+		TEXT_VALID_LOOP(1, "2 svc.example.net. key10"),
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. key11=",
+				   "2 svc.example.net. key11"),
+		TEXT_VALID_LOOPCHG(1, "2 svc.example.net. key12=\"\"",
+				   "2 svc.example.net. key12"),
+		/* empty alpn-id sub fields */
+		TEXT_INVALID("2 svc.example.net. alpn"),
+		TEXT_INVALID("2 svc.example.net. alpn="),
+		TEXT_INVALID("2 svc.example.net. alpn=,h1"),
+		TEXT_INVALID("2 svc.example.net. alpn=h1,"),
+		TEXT_INVALID("2 svc.example.net. alpn=h1,,h2"),
+		/* mandatory */
+		TEXT_VALID_LOOP(2, "2 svc.example.net. mandatory=alpn "
+				   "alpn=\"h2\""),
+		TEXT_VALID_LOOP(3, "2 svc.example.net. mandatory=alpn,port "
+				   "alpn=\"h2\" port=443"),
+		TEXT_VALID_LOOPCHG(3,
+				   "2 svc.example.net. mandatory=port,alpn "
+				   "alpn=\"h2\" port=443",
+				   "2 svc.example.net. mandatory=alpn,port "
+				   "alpn=\"h2\" port=443"),
+		TEXT_INVALID("2 svc.example.net. mandatory=mandatory"),
+		TEXT_INVALID("2 svc.example.net. mandatory=port"),
+		TEXT_INVALID("2 svc.example.net. mandatory=,port port=433"),
+		TEXT_INVALID("2 svc.example.net. mandatory=port, port=433"),
+		TEXT_INVALID("2 svc.example.net. "
+			     "mandatory=alpn,,port alpn=h2 port=433"),
+		/* mandatory w/ unknown key values */
+		TEXT_VALID_LOOP(2, "2 svc.example.net. mandatory=key8 key8"),
+		TEXT_VALID_LOOP(3, "2 svc.example.net. mandatory=key8,key9 "
+				   "key8 key9"),
+		TEXT_VALID_LOOPCHG(
+			3, "2 svc.example.net. mandatory=key9,key8 key8 key9",
+			"2 svc.example.net. mandatory=key8,key9 key8 key9"),
+		TEXT_INVALID("2 svc.example.net. "
+			     "mandatory=key8,key8"),
+		TEXT_INVALID("2 svc.example.net. mandatory=,key8"),
+		TEXT_INVALID("2 svc.example.net. mandatory=key8,"),
+		TEXT_INVALID("2 svc.example.net. "
+			     "mandatory=key8,,key8"),
+		/* Invalid test vectors */
+		TEXT_INVALID("1 foo.example.com. ( key123=abc key123=def )"),
+		TEXT_INVALID("1 foo.example.com. mandatory"),
+		TEXT_INVALID("1 foo.example.com. alpn"),
+		TEXT_INVALID("1 foo.example.com. port"),
+		TEXT_INVALID("1 foo.example.com. ipv4hint"),
+		TEXT_INVALID("1 foo.example.com. ipv6hint"),
+		TEXT_INVALID("1 foo.example.com. no-default-alpn=abc"),
+		TEXT_INVALID("1 foo.example.com. mandatory=key123"),
+		TEXT_INVALID("1 foo.example.com. mandatory=mandatory"),
+		TEXT_INVALID("1 foo.example.com. ( mandatory=key123,key123 "
+			     "key123=abc)"),
+		/* dohpath tests */
+		TEXT_VALID_LOOPCHG(1, "1 example.net. dohpath=/{?dns}",
+				   "1 example.net. key7=\"/{?dns}\""),
+		TEXT_VALID_LOOPCHG(1, "1 example.net. dohpath=/some/path{?dns}",
+				   "1 example.net. key7=\"/some/path{?dns}\""),
+		TEXT_INVALID("1 example.com. dohpath=no-slash"),
+		TEXT_INVALID("1 example.com. dohpath=/{?notdns}"),
+		TEXT_INVALID("1 example.com. dohpath=/notvariable"),
+		TEXT_SENTINEL()
+
+	};
+	wire_ok_t wire_ok[] = {
+		/*
+		 * Too short
+		 */
+		WIRE_INVALID(0x00, 0x00),
+		/*
+		 * Minimal length record.
+		 */
+		WIRE_VALID(0x00, 0x00, 0x00),
+		/*
+		 * Alias with non-empty SvcFieldValue (key7="").
+		 */
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00),
+		/*
+		 * Bad key7= length (longer than rdata).
+		 */
+		WIRE_INVALID(0x00, 0x01, 0x00, 0x00, 0x07, 0x00, 0x01),
+		/*
+		 * Port (0x03) too small (zero and one octets).
+		 */
+		WIRE_INVALID(0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x00),
+		WIRE_INVALID(0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00),
+		/* Valid port */
+		WIRE_VALID_LOOP(1, 0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x02,
+				0x00, 0x00),
+		/*
+		 * Port (0x03) too big (three octets).
+		 */
+		WIRE_INVALID(0x00, 0x01, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00,
+			     0x00, 0x00),
+		/*
+		 * Duplicate keys.
+		 */
+		WIRE_INVALID(0x01, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00,
+			     0x80, 0x00, 0x00),
+		/*
+		 * Out of order keys.
+		 */
+		WIRE_INVALID(0x01, 0x01, 0x00, 0x00, 0x81, 0x00, 0x00, 0x00,
+			     0x80, 0x00, 0x00),
+		/*
+		 * Empty of mandatory key list.
+		 */
+		WIRE_INVALID(0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00),
+		/*
+		 * "mandatory=mandatory" is invalid
+		 */
+		WIRE_INVALID(0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+			     0x00),
+		/*
+		 * Out of order mandatory key list.
+		 */
+		WIRE_INVALID(0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+			     0x80, 0x00, 0x71, 0x00, 0x71, 0x00, 0x00, 0x00,
+			     0x80, 0x00, 0x00),
+		/*
+		 * Alpn(0x00 0x01) (length 0x00 0x09) "h1,h2" + "h3"
+		 */
+		WIRE_VALID_LOOP(0x01, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x09,
+				5, 'h', '1', ',', 'h', '2', 2, 'h', '3'),
+		/*
+		 * Alpn(0x00 0x01) (length 0x00 0x09) "h1\h2" + "h3"
+		 */
+		WIRE_VALID_LOOP(0x01, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x09,
+				5, 'h', '1', '\\', 'h', '2', 2, 'h', '3'),
+		/*
+		 * no-default-alpn (0x00 0x02) without alpn, alpn is required.
+		 */
+		WIRE_INVALID(0x00, 0x00, 0x01, 0x00, 0x00, 0x02, 0x00, 0x00),
+		/*
+		 * Alpn(0x00 0x01) with zero length elements is invalid
+		 */
+		WIRE_INVALID(0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x05,
+			     0x00, 0x00, 0x00, 0x00, 0x00),
+		WIRE_SENTINEL()
+	};
+	/* Test vectors from RFCXXXX */
+	textvsunknown_t textvsunknown[] = {
+		/* AliasForm */
+		{ "0 foo.example.com", "\\# 19 ( 00 00 03 66 6f 6f 07 65 78 61 "
+				       "6d 70 6c 65 03 63 6f 6d 00)" },
+		/* ServiceForm */
+		{ "1 .", "\\# 3 ( 00 01 00)" },
+		/* Port example */
+		{ "16 foo.example.com port=53",
+		  "\\# 25 ( 00 10 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 63 6f "
+		  "6d 00 00 03 00 02 00 35 )" },
+		/* Unregistered keys with unquoted value. */
+		{ "1 foo.example.com key667=hello",
+		  "\\# 28 ( 00 01 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 63 6f "
+		  "6d 00 02 9b 00 05 68 65 6c 6c 6f )" },
+		/*
+		 * Quoted decimal-escaped character.
+		 * 1 foo.example.com key667="hello\210qoo"
+		 */
+		{ "1 foo.example.com key667=\"hello\\210qoo\"",
+		  "\\# 32 ( 00 01 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 63 6f "
+		  "6d 00 02 9b 00 09 68 65 6c 6c 6f d2 71 6f 6f )" },
+		/*
+		 * IPv6 hints example, quoted.
+		 * 1 foo.example.com ipv6hint="2001:db8::1,2001:db8::53:1"
+		 */
+		{ "1 foo.example.com ipv6hint=\"2001:db8::1,2001:db8::53:1\"",
+		  "\\# 55 ( 00 01 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 63 6f "
+		  "6d 00 00 06 00 20 20 01 0d b8 00 00 00 00 00 00 00 00 00 00 "
+		  "00 01 20 01 0d b8 00 00 00 00 00 00 00 00 00 53 00 01 )" },
+		/* SvcParamValues and mandatory out of order. */
+		{ "16 foo.example.org alpn=h2,h3-19 mandatory=ipv4hint,alpn "
+		  "ipv4hint=192.0.2.1",
+		  "\\# 48 ( 00 10 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 6f 72 "
+		  "67 00 00 00 00 04 00 01 00 04 00 01 00 09 02 68 32 05 68 33 "
+		  "2d 31 39 00 04 00 04 c0 00 02 01 )" },
+		/*
+		 * Quoted ALPN with escaped comma and backslash.
+		 * 16 foo.example.org alpn="f\\\\oo\\,bar,h2"
+		 */
+		{ "16 foo.example.org alpn=\"f\\\\\\\\oo\\\\,bar,h2\"",
+		  "\\# 35 ( 00 10 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 6f 72 "
+		  "67 00 00 01 00 0c 08 66 5c 6f 6f 2c 62 61 72 02 68 32 )" },
+		/*
+		 * Unquoted ALPN with escaped comma and backslash.
+		 * 16 foo.example.org alpn=f\\\092oo\092,bar,h2
+		 */
+		{ "16 foo.example.org alpn=f\\\\\\092oo\\092,bar,h2",
+		  "\\# 35 ( 00 10 03 66 6f 6f 07 65 78 61 6d 70 6c 65 03 6f 72 "
+		  "67 00 00 01 00 0c 08 66 5c 6f 6f 2c 62 61 72 02 68 32 )" },
+		{ NULL, NULL }
+	};
+
+	UNUSED(state);
+
+	check_rdata(text_ok, wire_ok, NULL, false, dns_rdataclass_in,
+		    dns_rdatatype_svcb, sizeof(dns_rdata_in_svcb_t));
+	check_rdata(text_ok, wire_ok, NULL, false, dns_rdataclass_in,
+		    dns_rdatatype_https, sizeof(dns_rdata_in_https_t));
+
+	check_textvsunknown(textvsunknown, dns_rdataclass_in,
+			    dns_rdatatype_svcb);
+	check_textvsunknown(textvsunknown, dns_rdataclass_in,
+			    dns_rdatatype_https);
+}
+
 /*
  * ZONEMD tests.
  *
- * Excerpted from draft-wessels-dns-zone-digest:
+ * Excerpted from RFC 8976:
  *
  * The ZONEMD RDATA wire format is encoded as follows:
  *
@@ -2289,56 +2815,131 @@ wks(void **state) {
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *    |                             Serial                            |
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
- *    |  Digest Type  |   Reserved    |                               |
+ *    |    Scheme     |Hash Algorithm |                               |
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               |
  *    |                             Digest                            |
  *    /                                                               /
  *    /                                                               /
  *    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  *
- * 2.1.1.  The Serial Field
+ * 2.2.1.  The Serial Field
  *
- *    The Serial field is a 32-bit unsigned integer in network order.  It
- *    is equal to the serial number from the zone's SOA record
+ *    The Serial field is a 32-bit unsigned integer in network byte order.
+ *    It is the serial number from the zone's SOA record ([RFC1035],
+ *    Section 3.3.13) for which the zone digest was generated.
  *
- * 2.1.2.  The Digest Type Field
+ *    It is included here to clearly bind the ZONEMD RR to a particular
+ *    version of the zone's content.  Without the serial number, a stand-
+ *    alone ZONEMD digest has no obvious association to any particular
+ *    instance of a zone.
  *
- *    The Digest Type field is an 8-bit unsigned integer that identifies
- *    the algorithm used to construct the digest.
+ * 2.2.2.  The Scheme Field
  *
- *    At the time of this writing, SHA384, with value 1, is the only Digest
- *    Type defined for ZONEMD records.
+ *    The Scheme field is an 8-bit unsigned integer that identifies the
+ *    methods by which data is collated and presented as input to the
+ *    hashing function.
  *
- * 2.1.3.  The Reserved Field
+ *    Herein, SIMPLE, with Scheme value 1, is the only standardized Scheme
+ *    defined for ZONEMD records and it MUST be supported by
+ *    implementations.  The "ZONEMD Schemes" registry is further described
+ *    in Section 5.
  *
- *    The Reserved field is an 8-bit unsigned integer, which is always set
- *    to zero.
+ *    Scheme values 240-254 are allocated for Private Use.
  *
- * 2.1.4.  The Digest Field
+ * 2.2.3.  The Hash Algorithm Field
+ *
+ *    The Hash Algorithm field is an 8-bit unsigned integer that identifies
+ *    the cryptographic hash algorithm used to construct the digest.
+ *
+ *    Herein, SHA384 ([RFC6234]), with Hash Algorithm value 1, is the only
+ *    standardized Hash Algorithm defined for ZONEMD records that MUST be
+ *    supported by implementations.  When SHA384 is used, the size of the
+ *    Digest field is 48 octets.  The result of the SHA384 digest algorithm
+ *    MUST NOT be truncated, and the entire 48-octet digest is published in
+ *    the ZONEMD record.
+ *
+ *    SHA512 ([RFC6234]), with Hash Algorithm value 2, is also defined for
+ *    ZONEMD records and SHOULD be supported by implementations.  When
+ *    SHA512 is used, the size of the Digest field is 64 octets.  The
+ *    result of the SHA512 digest algorithm MUST NOT be truncated, and the
+ *    entire 64-octet digest is published in the ZONEMD record.
+ *
+ *    Hash Algorithm values 240-254 are allocated for Private Use.
+ *
+ *    The "ZONEMD Hash Algorithms" registry is further described in
+ *    Section 5.
+ *
+ * 2.2.4.  The Digest Field
  *
  *    The Digest field is a variable-length sequence of octets containing
- *    the message digest.
+ *    the output of the hash algorithm.  The length of the Digest field is
+ *    determined by deducting the fixed size of the Serial, Scheme, and
+ *    Hash Algorithm fields from the RDATA size in the ZONEMD RR header.
+ *
+ *    The Digest field MUST NOT be shorter than 12 octets.  Digests for the
+ *    SHA384 and SHA512 hash algorithms specified herein are never
+ *    truncated.  Digests for future hash algorithms MAY be truncated but
+ *    MUST NOT be truncated to a length that results in less than 96 bits
+ *    (12 octets) of equivalent strength.
+ *
+ *    Section 3 describes how to calculate the digest for a zone.
+ *    Section 4 describes how to use the digest to verify the contents of a
+ *    zone.
+ *
  */
 
 static void
 zonemd(void **state) {
-	text_ok_t text_ok[] = { TEXT_INVALID(""),
-				TEXT_INVALID("0"),
-				TEXT_INVALID("0 0"),
-				TEXT_INVALID("0 0 0"),
-				TEXT_INVALID("99999999 0 0"),
-				TEXT_INVALID("2019020700 0 0"),
-				TEXT_INVALID("2019020700 1 0 DEADBEEF"),
-				TEXT_VALID("2019020700 2 0 DEADBEEF"),
-				TEXT_VALID("2019020700 255 0 DEADBEEF"),
-				TEXT_INVALID("2019020700 256 0 DEADBEEF"),
-				TEXT_VALID("2019020700 2 255 DEADBEEF"),
-				TEXT_INVALID("2019020700 2 256 DEADBEEF"),
-				TEXT_VALID("2019020700 1 0 "
-					   "7162D2BB75C047A53DE98767C9192BEB"
-					   "14DB01E7E2267135DAF0230A 19BA4A31"
-					   "6AF6BF64AA5C7BAE24B2992850300509"),
-				TEXT_SENTINEL() };
+	text_ok_t text_ok[] = {
+		TEXT_INVALID(""),
+		/* No digest scheme or digest type*/
+		TEXT_INVALID("0"),
+		/* No digest type */
+		TEXT_INVALID("0 0"),
+		/* No digest */
+		TEXT_INVALID("0 0 0"),
+		/* No digest */
+		TEXT_INVALID("99999999 0 0"),
+		/* No digest */
+		TEXT_INVALID("2019020700 0 0"),
+		/* Digest too short */
+		TEXT_INVALID("2019020700 1 1 DEADBEEF"),
+		/* Digest too short */
+		TEXT_INVALID("2019020700 1 2 DEADBEEF"),
+		/* Digest too short */
+		TEXT_INVALID("2019020700 1 3 DEADBEEFDEADBEEFDEADBE"),
+		/* Digest type unknown */
+		TEXT_VALID("2019020700 1 3 DEADBEEFDEADBEEFDEADBEEF"),
+		/* Digest type max */
+		TEXT_VALID("2019020700 1 255 DEADBEEFDEADBEEFDEADBEEF"),
+		/* Digest type too big */
+		TEXT_INVALID("2019020700 0 256 DEADBEEFDEADBEEFDEADBEEF"),
+		/* Scheme max */
+		TEXT_VALID("2019020700 255 3 DEADBEEFDEADBEEFDEADBEEF"),
+		/* Scheme too big */
+		TEXT_INVALID("2019020700 256 3 DEADBEEFDEADBEEFDEADBEEF"),
+		/* SHA384 */
+		TEXT_VALID("2019020700 1 1 "
+			   "7162D2BB75C047A53DE98767C9192BEB"
+			   "14DB01E7E2267135DAF0230A 19BA4A31"
+			   "6AF6BF64AA5C7BAE24B2992850300509"),
+		/* SHA512 */
+		TEXT_VALID("2019020700 1 2 "
+			   "08CFA1115C7B948C4163A901270395EA"
+			   "226A930CD2CBCF2FA9A5E6EB 85F37C8A"
+			   "4E114D884E66F176EAB121CB02DB7D65"
+			   "2E0CC4827E7A3204 F166B47E5613FD27"),
+		/* SHA384 too short and with private scheme */
+		TEXT_INVALID("2021042801 0 1 "
+			     "7162D2BB75C047A53DE98767C9192BEB"
+			     "6AF6BF64AA5C7BAE24B2992850300509"),
+		/* SHA512 too short and with private scheme */
+		TEXT_INVALID("2021042802 5 2 "
+			     "A897B40072ECAE9E4CA3F1F227DE8F5E"
+			     "480CDEBB16DFC64C1C349A7B5F6C71AB"
+			     "E8A88B76EF0BA1604EC25752E946BF98"),
+		TEXT_SENTINEL()
+	};
 	wire_ok_t wire_ok[] = {
 		/*
 		 * Short.
@@ -2365,18 +2966,28 @@ zonemd(void **state) {
 		 */
 		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
 		/*
-		 * Minimal, one-octet hash for an undefined digest type.
+		 * Short 11-octet digest.
 		 */
-		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00),
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			     0x00),
+		/*
+		 * Minimal, 12-octet hash for an undefined digest type.
+		 */
+		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			   0x00),
 		/*
 		 * SHA-384 is defined, so we insist there be a digest of
 		 * the expected length.
 		 */
-		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00),
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
+			     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			     0x00, 0x00),
 		/*
 		 * 48-octet digest, valid for SHA-384.
 		 */
-		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0xde, 0xad, 0xbe,
+		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xde, 0xad, 0xbe,
 			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
 			   0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe,
 			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
@@ -2386,7 +2997,7 @@ zonemd(void **state) {
 		/*
 		 * 56-octet digest, too long for SHA-384.
 		 */
-		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0xde, 0xad,
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xde, 0xad,
 			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
 			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
 			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
@@ -2395,9 +3006,44 @@ zonemd(void **state) {
 			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
 			     0xbe, 0xef, 0xfa, 0xce),
 		/*
+		 * 56-octet digest, too short for SHA-512
+		 */
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad),
+		/*
+		 * 64-octet digest, just right for SHA-512
+		 */
+		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0xde, 0xad, 0xbe,
+			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			   0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe,
+			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			   0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe,
+			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			   0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe,
+			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef),
+		/*
+		 * 72-octet digest, too long for SHA-512
+		 */
+		WIRE_INVALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad,
+			     0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef,
+			     0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
+			     0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce),
+		/*
 		 * 56-octet digest, valid for an undefined digest type.
 		 */
-		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xde, 0xad, 0xbe,
+		WIRE_VALID(0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0xde, 0xad, 0xbe,
 			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
 			   0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe,
 			   0xef, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef, 0xfa, 0xce,
@@ -2500,40 +3146,74 @@ iszonecutauth(void **state) {
 int
 main(int argc, char **argv) {
 	const struct CMUnitTest tests[] = {
+		/* types */
 		cmocka_unit_test_setup_teardown(amtrelay, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(apl, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(atma, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(cdnskey, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(csync, _setup, _teardown),
-		cmocka_unit_test_setup_teardown(doa, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(dnskey, _setup, _teardown),
+		cmocka_unit_test_setup_teardown(doa, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(ds, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(eid, _setup, _teardown),
-		cmocka_unit_test_setup_teardown(edns_client_subnet, _setup,
-						_teardown),
 		cmocka_unit_test_setup_teardown(hip, _setup, _teardown),
+		cmocka_unit_test_setup_teardown(https_svcb, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(isdn, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(key, _setup, _teardown),
+		cmocka_unit_test_setup_teardown(loc, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(nimloc, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(nsec, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(nsec3, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(nxt, _setup, _teardown),
+		cmocka_unit_test_setup_teardown(rkey, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(sshfp, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(wks, _setup, _teardown),
-		cmocka_unit_test_setup_teardown(rkey, _setup, _teardown),
 		cmocka_unit_test_setup_teardown(zonemd, _setup, _teardown),
+		/* other tests */
+		cmocka_unit_test_setup_teardown(edns_client_subnet, _setup,
+						_teardown),
 		cmocka_unit_test_setup_teardown(atcname, NULL, NULL),
 		cmocka_unit_test_setup_teardown(atparent, NULL, NULL),
 		cmocka_unit_test_setup_teardown(iszonecutauth, NULL, NULL),
 	};
+	struct CMUnitTest selected[sizeof(tests) / sizeof(tests[0])];
+	size_t i;
+	int c;
 
-	UNUSED(argv);
+	memset(selected, 0, sizeof(selected));
 
-	if (argc > 1) {
-		debug = true;
+	while ((c = isc_commandline_parse(argc, argv, "dlt:")) != -1) {
+		switch (c) {
+		case 'd':
+			debug = true;
+			break;
+		case 'l':
+			for (i = 0; i < (sizeof(tests) / sizeof(tests[0])); i++)
+			{
+				if (tests[i].name != NULL) {
+					fprintf(stdout, "%s\n", tests[i].name);
+				}
+			}
+			return (0);
+		case 't':
+			if (!cmocka_add_test_byname(
+				    tests, isc_commandline_argument, selected))
+			{
+				fprintf(stderr, "unknown test '%s'\n",
+					isc_commandline_argument);
+				exit(1);
+			}
+			break;
+		default:
+			break;
+		}
 	}
 
-	return (cmocka_run_group_tests(tests, NULL, NULL));
+	if (selected[0].name != NULL) {
+		return (cmocka_run_group_tests(selected, NULL, NULL));
+	} else {
+		return (cmocka_run_group_tests(tests, NULL, NULL));
+	}
 }
 
 #else /* HAVE_CMOCKA */
@@ -2543,7 +3223,7 @@ main(int argc, char **argv) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

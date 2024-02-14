@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -20,6 +22,7 @@
 #include <isc/stats.h>
 #include <isc/util.h>
 
+#include <dns/log.h>
 #include <dns/opcode.h>
 #include <dns/rdatatype.h>
 #include <dns/stats.h>
@@ -70,14 +73,14 @@ typedef enum {
  *     S = 2 (0b10) means Ancient
  *
  * Since a counter cannot be stale and ancient at the same time, we
- * treat S = 0x11 as a special case to deal with NXDOMAIN counters.
+ * treat S = 0b11 as a special case to deal with NXDOMAIN counters.
  */
 #define RDTYPECOUNTER_STALE    (1 << 9)
 #define RDTYPECOUNTER_ANCIENT  (1 << 10)
 #define RDTYPECOUNTER_NXDOMAIN ((1 << 9) | (1 << 10))
 
 /*
- * S = 0x11 indicates an NXDOMAIN counter and in this case the RRtype
+ * S = 0b11 indicates an NXDOMAIN counter and in this case the RRtype
  * field signals the expiry of this cached item:
  *
  *     RRType = 0 (0b00) means Active
@@ -93,8 +96,19 @@ typedef enum {
  */
 #define RDTYPECOUNTER_MAXVAL 0x0602
 
-/* dnssec maximum key id */
-static int dnssec_keyid_max = 65535;
+/*
+ * DNSSEC sign statistics.
+ *
+ * Per key we maintain 3 counters. The first is actually no counter but
+ * a key id reference. The second is the number of signatures the key created.
+ * The third is the number of signatures refreshed by the key.
+ */
+
+/* Maximum number of keys to keep track of for DNSSEC signing statistics. */
+static int dnssecsign_num_keys = 4;
+static int dnssecsign_block_size = 3;
+/* Key id mask */
+#define DNSSECSIGNSTATS_KEY_ID_MASK 0x0000FFFF
 
 struct dns_stats {
 	unsigned int magic;
@@ -228,7 +242,12 @@ isc_result_t
 dns_dnssecsignstats_create(isc_mem_t *mctx, dns_stats_t **statsp) {
 	REQUIRE(statsp != NULL && *statsp == NULL);
 
-	return (create_stats(mctx, dns_statstype_dnssec, dnssec_keyid_max,
+	/*
+	 * Create two counters per key, one is the key id, the other two are
+	 * the actual counters for creating and refreshing signatures.
+	 */
+	return (create_stats(mctx, dns_statstype_dnssec,
+			     dnssecsign_num_keys * dnssecsign_block_size,
 			     statsp));
 }
 
@@ -242,7 +261,7 @@ dns_generalstats_increment(dns_stats_t *stats, isc_statscounter_t counter) {
 	isc_stats_increment(stats->counters, counter);
 }
 
-inline static isc_statscounter_t
+static isc_statscounter_t
 rdatatype2counter(dns_rdatatype_t type) {
 	if (type > (dns_rdatatype_t)RDTYPECOUNTER_MAXTYPE) {
 		return (0);
@@ -260,7 +279,7 @@ dns_rdatatypestats_increment(dns_stats_t *stats, dns_rdatatype_t type) {
 	isc_stats_increment(stats->counters, counter);
 }
 
-static inline void
+static void
 update_rdatasetstats(dns_stats_t *stats, dns_rdatastatstype_t rrsettype,
 		     bool increment) {
 	isc_statscounter_t counter;
@@ -275,7 +294,8 @@ update_rdatasetstats(dns_stats_t *stats, dns_rdatastatstype_t rrsettype,
 		 * (active, stale, or ancient) value in the RRtype part.
 		 */
 		if ((DNS_RDATASTATSTYPE_ATTR(rrsettype) &
-		     DNS_RDATASTATSTYPE_ATTR_ANCIENT) != 0) {
+		     DNS_RDATASTATSTYPE_ATTR_ANCIENT) != 0)
+		{
 			counter |= RDTYPECOUNTER_NXDOMAIN_ANCIENT;
 		} else if ((DNS_RDATASTATSTYPE_ATTR(rrsettype) &
 			    DNS_RDATASTATSTYPE_ATTR_STALE) != 0)
@@ -286,12 +306,14 @@ update_rdatasetstats(dns_stats_t *stats, dns_rdatastatstype_t rrsettype,
 		counter = rdatatype2counter(DNS_RDATASTATSTYPE_BASE(rrsettype));
 
 		if ((DNS_RDATASTATSTYPE_ATTR(rrsettype) &
-		     DNS_RDATASTATSTYPE_ATTR_NXRRSET) != 0) {
+		     DNS_RDATASTATSTYPE_ATTR_NXRRSET) != 0)
+		{
 			counter |= RDTYPECOUNTER_NXRRSET;
 		}
 
 		if ((DNS_RDATASTATSTYPE_ATTR(rrsettype) &
-		     DNS_RDATASTATSTYPE_ATTR_ANCIENT) != 0) {
+		     DNS_RDATASTATSTYPE_ATTR_ANCIENT) != 0)
+		{
 			counter |= RDTYPECOUNTER_ANCIENT;
 		} else if ((DNS_RDATASTATSTYPE_ATTR(rrsettype) &
 			    DNS_RDATASTATSTYPE_ATTR_STALE) != 0)
@@ -342,10 +364,78 @@ dns_rcodestats_increment(dns_stats_t *stats, dns_rcode_t code) {
 }
 
 void
-dns_dnssecsignstats_increment(dns_stats_t *stats, dns_keytag_t id) {
+dns_dnssecsignstats_increment(dns_stats_t *stats, dns_keytag_t id, uint8_t alg,
+			      dnssecsignstats_type_t operation) {
+	uint32_t kval;
+	int num_keys = isc_stats_ncounters(stats->counters) /
+		       dnssecsign_block_size;
+
 	REQUIRE(DNS_STATS_VALID(stats) && stats->type == dns_statstype_dnssec);
 
-	isc_stats_increment(stats->counters, (isc_statscounter_t)id);
+	/* Shift algorithm in front of key tag, which is 16 bits */
+	kval = (uint32_t)(alg << 16 | id);
+
+	/* Look up correct counter. */
+	for (int i = 0; i < num_keys; i++) {
+		int idx = i * dnssecsign_block_size;
+		uint32_t counter = isc_stats_get_counter(stats->counters, idx);
+		if (counter == kval) {
+			/* Match */
+			isc_stats_increment(stats->counters, (idx + operation));
+			return;
+		}
+	}
+
+	/* No match found. Store key in unused slot. */
+	for (int i = 0; i < num_keys; i++) {
+		int idx = i * dnssecsign_block_size;
+		uint32_t counter = isc_stats_get_counter(stats->counters, idx);
+		if (counter == 0) {
+			isc_stats_set(stats->counters, kval, idx);
+			isc_stats_increment(stats->counters, (idx + operation));
+			return;
+		}
+	}
+
+	/* No room, grow stats storage. */
+	isc_stats_resize(&stats->counters,
+			 (num_keys * dnssecsign_block_size * 2));
+
+	/* Reset counters for new key (new index, nidx). */
+	int nidx = num_keys * dnssecsign_block_size;
+	isc_stats_set(stats->counters, kval, nidx);
+	isc_stats_set(stats->counters, 0, (nidx + dns_dnssecsignstats_sign));
+	isc_stats_set(stats->counters, 0, (nidx + dns_dnssecsignstats_refresh));
+
+	/* And increment the counter for the given operation. */
+	isc_stats_increment(stats->counters, (nidx + operation));
+}
+
+void
+dns_dnssecsignstats_clear(dns_stats_t *stats, dns_keytag_t id, uint8_t alg) {
+	uint32_t kval;
+	int num_keys = isc_stats_ncounters(stats->counters) /
+		       dnssecsign_block_size;
+
+	REQUIRE(DNS_STATS_VALID(stats) && stats->type == dns_statstype_dnssec);
+
+	/* Shift algorithm in front of key tag, which is 16 bits */
+	kval = (uint32_t)(alg << 16 | id);
+
+	/* Look up correct counter. */
+	for (int i = 0; i < num_keys; i++) {
+		int idx = i * dnssecsign_block_size;
+		uint32_t counter = isc_stats_get_counter(stats->counters, idx);
+		if (counter == kval) {
+			/* Match */
+			isc_stats_set(stats->counters, 0, idx);
+			isc_stats_set(stats->counters, 0,
+				      (idx + dns_dnssecsignstats_sign));
+			isc_stats_set(stats->counters, 0,
+				      (idx + dns_dnssecsignstats_refresh));
+			return;
+		}
+	}
 }
 
 /*%
@@ -407,10 +497,12 @@ rdataset_dumpcb(isc_statscounter_t counter, uint64_t value, void *arg) {
 		 * expiry value (active, stale, or ancient).
 		 */
 		if ((counter & RDTYPECOUNTER_MAXTYPE) ==
-		    RDTYPECOUNTER_NXDOMAIN_STALE) {
+		    RDTYPECOUNTER_NXDOMAIN_STALE)
+		{
 			attributes |= DNS_RDATASTATSTYPE_ATTR_STALE;
 		} else if ((counter & RDTYPECOUNTER_MAXTYPE) ==
-			   RDTYPECOUNTER_NXDOMAIN_ANCIENT) {
+			   RDTYPECOUNTER_NXDOMAIN_ANCIENT)
+		{
 			attributes |= DNS_RDATASTATSTYPE_ATTR_ANCIENT;
 		}
 	} else {
@@ -452,8 +544,35 @@ dnssec_dumpcb(isc_statscounter_t counter, uint64_t value, void *arg) {
 	dnssecarg->fn((dns_keytag_t)counter, value, dnssecarg->arg);
 }
 
+static void
+dnssec_statsdump(isc_stats_t *stats, dnssecsignstats_type_t operation,
+		 isc_stats_dumper_t dump_fn, void *arg, unsigned int options) {
+	int i, num_keys;
+
+	num_keys = isc_stats_ncounters(stats) / dnssecsign_block_size;
+	for (i = 0; i < num_keys; i++) {
+		int idx = dnssecsign_block_size * i;
+		uint32_t kval, val;
+		dns_keytag_t id;
+
+		kval = isc_stats_get_counter(stats, idx);
+		if (kval == 0) {
+			continue;
+		}
+
+		val = isc_stats_get_counter(stats, (idx + operation));
+		if ((options & ISC_STATSDUMP_VERBOSE) == 0 && val == 0) {
+			continue;
+		}
+
+		id = (dns_keytag_t)kval & DNSSECSIGNSTATS_KEY_ID_MASK;
+
+		dump_fn((isc_statscounter_t)id, val, arg);
+	}
+}
+
 void
-dns_dnssecsignstats_dump(dns_stats_t *stats,
+dns_dnssecsignstats_dump(dns_stats_t *stats, dnssecsignstats_type_t operation,
 			 dns_dnssecsignstats_dumper_t dump_fn, void *arg0,
 			 unsigned int options) {
 	dnssecsigndumparg_t arg;
@@ -462,7 +581,9 @@ dns_dnssecsignstats_dump(dns_stats_t *stats,
 
 	arg.fn = dump_fn;
 	arg.arg = arg0;
-	isc_stats_dump(stats->counters, dnssec_dumpcb, &arg, options);
+
+	dnssec_statsdump(stats->counters, operation, dnssec_dumpcb, &arg,
+			 options);
 }
 
 static void

@@ -7,11 +7,11 @@ Subject: Add_--install-layout=deb_to_setup.py_call
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/bin/python/Makefile.in b/bin/python/Makefile.in
-index aa678d4..32d464c 100644
+index dc1af40..a87927a 100644
 --- a/bin/python/Makefile.in
 +++ b/bin/python/Makefile.in
-@@ -56,9 +56,9 @@ install:: ${TARGETS} installdirs
- 	${INSTALL_DATA} ${srcdir}/dnssec-keymgr.8 ${DESTDIR}${mandir}/man8
+@@ -45,9 +45,9 @@ install:: ${TARGETS} installdirs
+ 	${INSTALL_SCRIPT} dnssec-keymgr ${DESTDIR}${sbindir}
  	if test -n "${PYTHON}" ; then \
  		if test -n "${DESTDIR}" ; then \
 -			${PYTHON} ${srcdir}/setup.py install --root=${DESTDIR} --prefix=${prefix} @PYTHON_INSTALL_LIB@ ; \

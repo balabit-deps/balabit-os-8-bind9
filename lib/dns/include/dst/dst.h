@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -133,7 +135,8 @@ typedef enum dst_key_state {
 #define DST_TIME_ZRRSIG	     10
 #define DST_TIME_KRRSIG	     11
 #define DST_TIME_DS	     12
-#define DST_MAX_TIMES	     12
+#define DST_TIME_DSDELETE    13
+#define DST_MAX_TIMES	     13
 
 /* Numeric metadata definitions */
 #define DST_NUM_PREDECESSOR 0
@@ -141,7 +144,9 @@ typedef enum dst_key_state {
 #define DST_NUM_MAXTTL	    2
 #define DST_NUM_ROLLPERIOD  3
 #define DST_NUM_LIFETIME    4
-#define DST_MAX_NUMERIC	    4
+#define DST_NUM_DSPUBCOUNT  5
+#define DST_NUM_DSDELCOUNT  6
+#define DST_MAX_NUMERIC	    6
 
 /* Boolean metadata definitions */
 #define DST_BOOL_KSK	0
@@ -466,6 +471,10 @@ dst_key_tofile(const dst_key_t *key, int type, const char *directory);
  */
 
 isc_result_t
+dst_key_fromdns_ex(const dns_name_t *name, dns_rdataclass_t rdclass,
+		   isc_buffer_t *source, isc_mem_t *mctx, bool no_rdata,
+		   dst_key_t **keyp);
+isc_result_t
 dst_key_fromdns(const dns_name_t *name, dns_rdataclass_t rdclass,
 		isc_buffer_t *source, isc_mem_t *mctx, dst_key_t **keyp);
 /*%<
@@ -562,7 +571,7 @@ dst_key_privatefrombuffer(dst_key_t *key, isc_buffer_t *buffer);
  *\li	If successful, key will contain a valid private key.
  */
 
-gss_ctx_id_t
+dns_gss_ctx_id_t
 dst_key_getgssctx(const dst_key_t *key);
 /*%<
  * Returns the opaque key data.
@@ -576,8 +585,8 @@ dst_key_getgssctx(const dst_key_t *key);
  */
 
 isc_result_t
-dst_key_fromgssapi(const dns_name_t *name, gss_ctx_id_t gssctx, isc_mem_t *mctx,
-		   dst_key_t **keyp, isc_region_t *intoken);
+dst_key_fromgssapi(const dns_name_t *name, dns_gss_ctx_id_t gssctx,
+		   isc_mem_t *mctx, dst_key_t **keyp, isc_region_t *intoken);
 /*%<
  * Converts a GSSAPI opaque context id into a DST key.
  *
@@ -1102,6 +1111,35 @@ dst_key_isexternal(dst_key_t *key);
  *	'key' to be valid.
  */
 
+void
+dst_key_setmodified(dst_key_t *key, bool value);
+/*%<
+ * If 'value' is true, this marks the key to indicate that key file metadata
+ * has been modified. If 'value' is false, this resets the value, for example
+ * after you have written the key to file.
+ *
+ * Requires:
+ *	'key' to be valid.
+ */
+
+bool
+dst_key_ismodified(const dst_key_t *key);
+/*%<
+ * Check if the key file has been modified.
+ *
+ * Requires:
+ *	'key' to be valid.
+ */
+
+bool
+dst_key_haskasp(dst_key_t *key);
+/*%<
+ * Check if this key has state (and thus uses KASP).
+ *
+ * Requires:
+ *	'key' to be valid.
+ */
+
 bool
 dst_key_is_unused(dst_key_t *key);
 /*%<
@@ -1165,6 +1203,15 @@ dst_key_goal(dst_key_t *key);
  * Get the key goal. Should be OMNIPRESENT or HIDDEN.
  * This can be used to determine if the key is being introduced or
  * is on its way out.
+ *
+ * Requires:
+ *	'key' to be valid.
+ */
+
+isc_result_t
+dst_key_role(dst_key_t *key, bool *ksk, bool *zsk);
+/*%<
+ * Get the key role. A key can have the KSK or the ZSK role, or both.
  *
  * Requires:
  *	'key' to be valid.

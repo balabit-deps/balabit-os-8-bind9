@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -26,11 +28,11 @@ typedef struct dns_tcpmsg {
 	uint16_t	 size;
 	isc_buffer_t	 buffer;
 	unsigned int	 maxsize;
-	isc_mem_t *	 mctx;
-	isc_socket_t *	 sock;
-	isc_task_t *	 task;
+	isc_mem_t	*mctx;
+	isc_socket_t	*sock;
+	isc_task_t	*task;
 	isc_taskaction_t action;
-	void *		 arg;
+	void		*arg;
 	isc_event_t	 event;
 	/* public (read-only) */
 	isc_result_t   result;

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -77,7 +79,7 @@ static const char *description[ISC_R_NRESULTS] = {
 	"invalid use of multicast address", /*%< 43 */
 	"not a file",			    /*%< 44 */
 	"not a directory",		    /*%< 45 */
-	"queue is full",		    /*%< 46 */
+	"queue is empty",		    /*%< 46 */
 	"address family mismatch",	    /*%< 47 */
 	"address family not supported",	    /*%< 48 */
 	"bad hex encoding",		    /*%< 49 */
@@ -101,80 +103,82 @@ static const char *description[ISC_R_NRESULTS] = {
 	"disc full",			    /*%< 67 */
 	"default",			    /*%< 68 */
 	"IPv4 prefix",			    /*%< 69 */
+	"TLS error",			    /*%< 70 */
+	"ALPN for HTTP/2 failed"	    /*%< 71 */
 };
 
-static const char *identifier[ISC_R_NRESULTS] = {
-	"ISC_R_SUCCESS",
-	"ISC_R_NOMEMORY",
-	"ISC_R_TIMEDOUT",
-	"ISC_R_NOTHREADS",
-	"ISC_R_ADDRNOTAVAIL",
-	"ISC_R_ADDRINUSE",
-	"ISC_R_NOPERM",
-	"ISC_R_NOCONN",
-	"ISC_R_NETUNREACH",
-	"ISC_R_HOSTUNREACH",
-	"ISC_R_NETDOWN",
-	"ISC_R_HOSTDOWN",
-	"ISC_R_CONNREFUSED",
-	"ISC_R_NORESOURCES",
-	"ISC_R_EOF",
-	"ISC_R_BOUND",
-	"ISC_R_RELOAD",
-	"ISC_R_LOCKBUSY",
-	"ISC_R_EXISTS",
-	"ISC_R_NOSPACE",
-	"ISC_R_CANCELED",
-	"ISC_R_NOTBOUND",
-	"ISC_R_SHUTTINGDOWN",
-	"ISC_R_NOTFOUND",
-	"ISC_R_UNEXPECTEDEND",
-	"ISC_R_FAILURE",
-	"ISC_R_IOERROR",
-	"ISC_R_NOTIMPLEMENTED",
-	"ISC_R_UNBALANCED",
-	"ISC_R_NOMORE",
-	"ISC_R_INVALIDFILE",
-	"ISC_R_BADBASE64",
-	"ISC_R_UNEXPECTEDTOKEN",
-	"ISC_R_QUOTA",
-	"ISC_R_UNEXPECTED",
-	"ISC_R_ALREADYRUNNING",
-	"ISC_R_IGNORE",
-	"ISC_R_MASKNONCONTIG",
-	"ISC_R_FILENOTFOUND",
-	"ISC_R_FILEEXISTS",
-	"ISC_R_NOTCONNECTED",
-	"ISC_R_RANGE",
-	"ISC_R_NOENTROPY",
-	"ISC_R_MULTICAST",
-	"ISC_R_NOTFILE",
-	"ISC_R_NOTDIRECTORY",
-	"ISC_R_QUEUEFULL",
-	"ISC_R_FAMILYMISMATCH",
-	"ISC_R_FAMILYNOSUPPORT",
-	"ISC_R_BADHEX",
-	"ISC_R_TOOMANYOPENFILES",
-	"ISC_R_NOTBLOCKING",
-	"ISC_R_UNBALANCEDQUOTES",
-	"ISC_R_INPROGRESS",
-	"ISC_R_CONNECTIONRESET",
-	"ISC_R_SOFTQUOTA",
-	"ISC_R_BADNUMBER",
-	"ISC_R_DISABLED",
-	"ISC_R_MAXSIZE",
-	"ISC_R_BADADDRESSFORM",
-	"ISC_R_BADBASE32",
-	"ISC_R_UNSET",
-	"ISC_R_MULTIPLE",
-	"ISC_R_WOULDBLOCK",
-	"ISC_R_COMPLETE",
-	"ISC_R_CRYPTOFAILURE",
-	"ISC_R_DISCQUOTA",
-	"ISC_R_DISCFULL",
-	"ISC_R_DEFAULT",
-	"ISC_R_IPV4PREFIX",
-};
+static const char *identifier[ISC_R_NRESULTS] = { "ISC_R_SUCCESS",
+						  "ISC_R_NOMEMORY",
+						  "ISC_R_TIMEDOUT",
+						  "ISC_R_NOTHREADS",
+						  "ISC_R_ADDRNOTAVAIL",
+						  "ISC_R_ADDRINUSE",
+						  "ISC_R_NOPERM",
+						  "ISC_R_NOCONN",
+						  "ISC_R_NETUNREACH",
+						  "ISC_R_HOSTUNREACH",
+						  "ISC_R_NETDOWN",
+						  "ISC_R_HOSTDOWN",
+						  "ISC_R_CONNREFUSED",
+						  "ISC_R_NORESOURCES",
+						  "ISC_R_EOF",
+						  "ISC_R_BOUND",
+						  "ISC_R_RELOAD",
+						  "ISC_R_LOCKBUSY",
+						  "ISC_R_EXISTS",
+						  "ISC_R_NOSPACE",
+						  "ISC_R_CANCELED",
+						  "ISC_R_NOTBOUND",
+						  "ISC_R_SHUTTINGDOWN",
+						  "ISC_R_NOTFOUND",
+						  "ISC_R_UNEXPECTEDEND",
+						  "ISC_R_FAILURE",
+						  "ISC_R_IOERROR",
+						  "ISC_R_NOTIMPLEMENTED",
+						  "ISC_R_UNBALANCED",
+						  "ISC_R_NOMORE",
+						  "ISC_R_INVALIDFILE",
+						  "ISC_R_BADBASE64",
+						  "ISC_R_UNEXPECTEDTOKEN",
+						  "ISC_R_QUOTA",
+						  "ISC_R_UNEXPECTED",
+						  "ISC_R_ALREADYRUNNING",
+						  "ISC_R_IGNORE",
+						  "ISC_R_MASKNONCONTIG",
+						  "ISC_R_FILENOTFOUND",
+						  "ISC_R_FILEEXISTS",
+						  "ISC_R_NOTCONNECTED",
+						  "ISC_R_RANGE",
+						  "ISC_R_NOENTROPY",
+						  "ISC_R_MULTICAST",
+						  "ISC_R_NOTFILE",
+						  "ISC_R_NOTDIRECTORY",
+						  "ISC_R_EMPTY",
+						  "ISC_R_FAMILYMISMATCH",
+						  "ISC_R_FAMILYNOSUPPORT",
+						  "ISC_R_BADHEX",
+						  "ISC_R_TOOMANYOPENFILES",
+						  "ISC_R_NOTBLOCKING",
+						  "ISC_R_UNBALANCEDQUOTES",
+						  "ISC_R_INPROGRESS",
+						  "ISC_R_CONNECTIONRESET",
+						  "ISC_R_SOFTQUOTA",
+						  "ISC_R_BADNUMBER",
+						  "ISC_R_DISABLED",
+						  "ISC_R_MAXSIZE",
+						  "ISC_R_BADADDRESSFORM",
+						  "ISC_R_BADBASE32",
+						  "ISC_R_UNSET",
+						  "ISC_R_MULTIPLE",
+						  "ISC_R_WOULDBLOCK",
+						  "ISC_R_COMPLETE",
+						  "ISC_R_CRYPTOFAILURE",
+						  "ISC_R_DISCQUOTA",
+						  "ISC_R_DISCFULL",
+						  "ISC_R_DEFAULT",
+						  "ISC_R_IPV4PREFIX",
+						  "ISC_R_TLSERROR",
+						  "ISC_R_HTTP2ALPNERROR" };
 
 #define ISC_RESULT_RESULTSET	  2
 #define ISC_RESULT_UNAVAILABLESET 3

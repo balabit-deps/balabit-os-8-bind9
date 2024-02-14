@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -49,6 +51,13 @@ named_zone_reusable(dns_zone_t *zone, const cfg_obj_t *zconfig);
  * data in 'zconfig', return true.  If the configuration data is so
  * different from the current zone state that the zone needs to be destroyed
  * and recreated, return false.
+ */
+
+bool
+named_zone_inlinesigning(const cfg_obj_t *zconfig);
+/*%<
+ * Determine if zone uses inline-signing. This is true if inline-signing
+ * is set to yes.
  */
 
 isc_result_t

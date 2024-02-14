@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -76,7 +78,7 @@ typedef struct dns_validatorevent {
 	/*
 	 * Name and type of the response to be validated.
 	 */
-	dns_name_t *	name;
+	dns_name_t     *name;
 	dns_rdatatype_t type;
 	/*
 	 * Rdata and RRSIG (if any) for positive responses.
@@ -118,25 +120,25 @@ struct dns_validator {
 	/* Unlocked. */
 	unsigned int magic;
 	isc_mutex_t  lock;
-	dns_view_t * view;
+	dns_view_t  *view;
 	/* Locked by lock. */
 	unsigned int	      options;
 	unsigned int	      attributes;
 	dns_validatorevent_t *event;
-	dns_fetch_t *	      fetch;
-	dns_validator_t *     subvalidator;
-	dns_validator_t *     parent;
-	dns_keytable_t *      keytable;
-	dns_keynode_t *	      keynode;
-	dst_key_t *	      key;
-	dns_rdata_rrsig_t *   siginfo;
-	isc_task_t *	      task;
+	dns_fetch_t	     *fetch;
+	dns_validator_t	     *subvalidator;
+	dns_validator_t	     *parent;
+	dns_keytable_t	     *keytable;
+	dst_key_t	     *key;
+	dns_rdata_rrsig_t    *siginfo;
+	isc_task_t	     *task;
 	isc_taskaction_t      action;
-	void *		      arg;
+	void		     *arg;
 	unsigned int	      labels;
-	dns_rdataset_t *      currentset;
-	dns_rdataset_t *      keyset;
-	dns_rdataset_t *      dsset;
+	dns_rdataset_t	     *currentset;
+	dns_rdataset_t	     *keyset;
+	dns_rdataset_t	     *dsset;
+	dns_rdataset_t	      fdsset;
 	dns_rdataset_t	      frdataset;
 	dns_rdataset_t	      fsigrdataset;
 	dns_fixedname_t	      fname;
@@ -147,6 +149,7 @@ struct dns_validator {
 	unsigned int  depth;
 	unsigned int  authcount;
 	unsigned int  authfail;
+	bool	      failed;
 	isc_stdtime_t start;
 };
 

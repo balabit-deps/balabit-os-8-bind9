@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -186,6 +188,7 @@ dns_name_invalidate(dns_name_t *name) {
 	name->offsets = NULL;
 	name->buffer = NULL;
 	ISC_LINK_INIT(name, link);
+	INSIST(name->ht == NULL);
 }
 
 bool
@@ -464,7 +467,8 @@ dns_name_hash(const dns_name_t *name, bool case_sensitive) {
 		length = 16;
 	}
 
-	return (isc_hash_function(name->ndata, length, case_sensitive));
+	/* High bits are more random. */
+	return (isc_hash32(name->ndata, length, case_sensitive));
 }
 
 unsigned int
@@ -478,7 +482,8 @@ dns_name_fullhash(const dns_name_t *name, bool case_sensitive) {
 		return (0);
 	}
 
-	return (isc_hash_function(name->ndata, name->length, case_sensitive));
+	/* High bits are more random. */
+	return (isc_hash32(name->ndata, name->length, case_sensitive));
 }
 
 dns_namereln_t
@@ -829,7 +834,8 @@ dns_name_issubdomain(const dns_name_t *name1, const dns_name_t *name2) {
 
 	namereln = dns_name_fullcompare(name1, name2, &order, &nlabels);
 	if (namereln == dns_namereln_subdomain ||
-	    namereln == dns_namereln_equal) {
+	    namereln == dns_namereln_equal)
+	{
 		return (true);
 	}
 
@@ -849,12 +855,6 @@ dns_name_matcheswildcard(const dns_name_t *name, const dns_name_t *wname) {
 	REQUIRE(labels > 0);
 	REQUIRE(dns_name_iswildcard(wname));
 
-#if defined(__clang__) && \
-	(__clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2))
-	memset(&tname, 0, sizeof(tname));
-#endif /* if defined(__clang__) && (__clang_major__ < 3 || (__clang_major__ == \
-	* 3                                                                    \
-	* && __clang_minor__ < 2)) */
 	DNS_NAME_INIT(&tname, NULL);
 	dns_name_getlabelsequence(wname, 1, labels - 1, &tname);
 	if (dns_name_fullcompare(name, &tname, &order, &nlabels) ==
@@ -1141,7 +1141,7 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
 				break;
 			}
 
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case ft_start:
 			label = ndata;
 			ndata++;
@@ -1156,7 +1156,7 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
 			if (nrem == 0) {
 				return (ISC_R_NOSPACE);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case ft_ordinary:
 			if (c == '.') {
 				if (count == 0) {
@@ -1200,9 +1200,9 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
 			}
 			state = ft_escape;
 			POST(state);
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case ft_escape:
-			if (!isdigit(c & 0xff)) {
+			if (!isdigit((unsigned char)c)) {
 				if (count >= 63) {
 					return (DNS_R_LABELTOOLONG);
 				}
@@ -1220,9 +1220,9 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
 			digits = 0;
 			value = 0;
 			state = ft_escdecimal;
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case ft_escdecimal:
-			if (!isdigit(c & 0xff)) {
+			if (!isdigit((unsigned char)c)) {
 				return (DNS_R_BADESCAPE);
 			}
 			value *= 10;
@@ -1262,6 +1262,7 @@ dns_name_fromtext(dns_name_t *name, isc_buffer_t *source,
 		}
 		if (state == ft_ordinary) {
 			INSIST(count != 0);
+			INSIST(label != NULL);
 			*label = count;
 			labels++;
 			INSIST(labels <= 127);
@@ -1419,10 +1420,11 @@ dns_name_totext2(const dns_name_t *name, unsigned int options,
 				case 0x40: /* '@' */
 				case 0x24: /* '$' */
 					if ((options & DNS_NAME_MASTERFILE) ==
-					    0) {
+					    0)
+					{
 						goto no_escape;
 					}
-				/* FALLTHROUGH */
+					FALLTHROUGH;
 				case 0x22: /* '"' */
 				case 0x28: /* '(' */
 				case 0x29: /* ')' */
@@ -1470,7 +1472,7 @@ dns_name_totext2(const dns_name_t *name, unsigned int options,
 		} else {
 			FATAL_ERROR(__FILE__, __LINE__,
 				    "Unexpected label type %02x", count);
-			/* NOTREACHED */
+			UNREACHABLE();
 		}
 
 		/*
@@ -1594,7 +1596,7 @@ dns_name_tofilenametext(const dns_name_t *name, bool omit_final_dot,
 		} else {
 			FATAL_ERROR(__FILE__, __LINE__,
 				    "Unexpected label type %02x", count);
-			/* NOTREACHED */
+			UNREACHABLE();
 		}
 
 		/*
@@ -1854,7 +1856,8 @@ dns_name_fromwire(dns_name_t *name, isc_buffer_t *source,
 				 * Ordinary 14-bit pointer.
 				 */
 				if ((dctx->allowed & DNS_COMPRESS_GLOBAL14) ==
-				    0) {
+				    0)
+				{
 					return (DNS_R_DISALLOWED);
 				}
 				new_current = c & 0x3F;
@@ -1972,12 +1975,6 @@ dns_name_towire2(const dns_name_t *name, dns_compress_t *cctx,
 	 * has one.
 	 */
 	if (name->offsets == NULL) {
-#if defined(__clang__) && \
-	(__clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2))
-		memset(&clname, 0, sizeof(clname));
-#endif /* if defined(__clang__) && (__clang_major__ < 3 || (__clang_major__ == \
-	* 3                                                                    \
-	* && __clang_minor__ < 2)) */
 		DNS_NAME_INIT(&clname, clo);
 		dns_name_clone(name, &clname);
 		name = &clname;
@@ -2296,12 +2293,6 @@ dns_name_digest(const dns_name_t *name, dns_digestfunc_t digest, void *arg) {
 	REQUIRE(VALID_NAME(name));
 	REQUIRE(digest != NULL);
 
-#if defined(__clang__) && \
-	(__clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2))
-	memset(&downname, 0, sizeof(downname));
-#endif /* if defined(__clang__) && (__clang_major__ < 3 || (__clang_major__ == \
-	* 3                                                                    \
-	* && __clang_minor__ < 2)) */
 	DNS_NAME_INIT(&downname, NULL);
 
 	isc_buffer_init(&buffer, data, sizeof(data));
@@ -2461,7 +2452,7 @@ dns_name_fromstring2(dns_name_t *target, const char *src,
 
 static isc_result_t
 name_copy(const dns_name_t *source, dns_name_t *dest, isc_buffer_t *target) {
-	unsigned char *ndata;
+	unsigned char *ndata = NULL;
 
 	/*
 	 * Make dest a copy of source.
@@ -2493,7 +2484,7 @@ name_copy(const dns_name_t *source, dns_name_t *dest, isc_buffer_t *target) {
 	}
 
 	if (dest->labels > 0 && dest->offsets != NULL) {
-		if (source->offsets != NULL) {
+		if (source->offsets != NULL && source->labels != 0) {
 			memmove(dest->offsets, source->offsets, source->labels);
 		} else {
 			set_offsets(dest, dest->offsets, NULL);

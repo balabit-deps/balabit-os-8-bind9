@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -46,7 +48,7 @@ isc_lfsr_init(isc_lfsr_t *lfsr, uint32_t state, unsigned int bits, uint32_t tap,
 /*!
  * Return the next state of the lfsr.
  */
-static inline uint32_t
+static uint32_t
 lfsr_generate(isc_lfsr_t *lfsr) {
 	/*
 	 * If the previous state is zero, we must fill it with something
@@ -105,7 +107,7 @@ isc_lfsr_generate(isc_lfsr_t *lfsr, void *data, unsigned int count) {
 	}
 }
 
-static inline uint32_t
+static uint32_t
 lfsr_skipgenerate(isc_lfsr_t *lfsr, unsigned int skip) {
 	while (skip--) {
 		(void)lfsr_generate(lfsr);

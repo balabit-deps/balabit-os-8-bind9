@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -19,6 +21,7 @@
 
 #include <isc/buffer.h>
 #include <isc/hash.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/os.h>
 #include <isc/socket.h>
@@ -57,17 +60,15 @@ cleanup_managers(void) {
 		isc_task_shutdown(maintask);
 		isc_task_destroy(&maintask);
 	}
+
+	isc_managers_destroy(netmgr == NULL ? NULL : &netmgr,
+			     taskmgr == NULL ? NULL : &taskmgr);
+
 	if (socketmgr != NULL) {
 		isc_socketmgr_destroy(&socketmgr);
 	}
-	if (taskmgr != NULL) {
-		isc_taskmgr_destroy(&taskmgr);
-	}
 	if (timermgr != NULL) {
 		isc_timermgr_destroy(&timermgr);
-	}
-	if (netmgr != NULL) {
-		isc_nm_detach(&netmgr);
 	}
 }
 
@@ -85,9 +86,8 @@ create_managers(unsigned int workers) {
 		workers = atoi(p);
 	}
 
-	netmgr = isc_nm_start(test_mctx, workers);
-	CHECK(isc_taskmgr_create(test_mctx, workers, 0, netmgr, &taskmgr));
-	CHECK(isc_task_create(taskmgr, 0, &maintask));
+	CHECK(isc_managers_create(test_mctx, workers, 0, &netmgr, &taskmgr));
+	CHECK(isc_task_create_bound(taskmgr, 0, &maintask, 0));
 	isc_taskmgr_setexcltask(taskmgr, maintask);
 
 	CHECK(isc_timermgr_create(test_mctx, &timermgr));
@@ -116,8 +116,7 @@ isc_test_begin(FILE *logfile, bool start_managers, unsigned int workers) {
 		isc_logconfig_t *logconfig = NULL;
 
 		INSIST(test_lctx == NULL);
-		CHECK(isc_log_create(test_mctx, &test_lctx, &logconfig));
-
+		isc_log_create(test_mctx, &test_lctx, &logconfig);
 		isc_log_registercategories(test_lctx, categories);
 		isc_log_setcontext(test_lctx);
 
@@ -125,9 +124,8 @@ isc_test_begin(FILE *logfile, bool start_managers, unsigned int workers) {
 		destination.file.name = NULL;
 		destination.file.versions = ISC_LOG_ROLLNEVER;
 		destination.file.maximum_size = 0;
-		CHECK(isc_log_createchannel(logconfig, "stderr",
-					    ISC_LOG_TOFILEDESC, ISC_LOG_DYNAMIC,
-					    &destination, 0));
+		isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+				      ISC_LOG_DYNAMIC, &destination, 0);
 		CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL));
 	}
 
@@ -149,9 +147,6 @@ isc_test_end(void) {
 	if (maintask != NULL) {
 		isc_task_detach(&maintask);
 	}
-	if (taskmgr != NULL) {
-		isc_taskmgr_destroy(&taskmgr);
-	}
 
 	cleanup_managers();
 
@@ -170,19 +165,9 @@ isc_test_end(void) {
  */
 void
 isc_test_nap(uint32_t usec) {
-#ifdef HAVE_NANOSLEEP
 	struct timespec ts;
 
 	ts.tv_sec = usec / 1000000;
 	ts.tv_nsec = (usec % 1000000) * 1000;
 	nanosleep(&ts, NULL);
-#elif HAVE_USLEEP
-	usleep(usec);
-#else  /* ifdef HAVE_NANOSLEEP */
-	/*
-	 * No fractional-second sleep function is available, so we
-	 * round up to the nearest second and sleep instead
-	 */
-	sleep((usec / 1000000) + 1);
-#endif /* ifdef HAVE_NANOSLEEP */
 }

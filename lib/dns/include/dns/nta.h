@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -45,15 +47,16 @@ ISC_LANG_BEGINDECLS
 struct dns_ntatable {
 	/* Unlocked. */
 	unsigned int	magic;
-	dns_view_t *	view;
+	dns_view_t     *view;
 	isc_rwlock_t	rwlock;
-	isc_taskmgr_t * taskmgr;
+	isc_taskmgr_t  *taskmgr;
 	isc_timermgr_t *timermgr;
-	isc_task_t *	task;
+	isc_task_t     *task;
 	/* Protected by atomics */
 	isc_refcount_t references;
 	/* Locked by rwlock. */
 	dns_rbt_t *table;
+	bool	   shuttingdown;
 };
 
 #define NTATABLE_MAGIC	   ISC_MAGIC('N', 'T', 'A', 't')
@@ -203,6 +206,13 @@ dns_ntatable_save(dns_ntatable_t *ntatable, FILE *fp);
 /*%<
  * Save the NTA table to the file opened as 'fp', for later loading.
  */
+
+void
+dns_ntatable_shutdown(dns_ntatable_t *ntatable);
+/*%<
+ * Cancel future checks to see if NTAs can be removed.
+ */
+
 ISC_LANG_ENDDECLS
 
 #endif /* DNS_NTA_H */

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -68,11 +70,11 @@ typedef struct dns_rdatasetmethods {
 	void (*current)(dns_rdataset_t *rdataset, dns_rdata_t *rdata);
 	void (*clone)(dns_rdataset_t *source, dns_rdataset_t *target);
 	unsigned int (*count)(dns_rdataset_t *rdataset);
-	isc_result_t (*addnoqname)(dns_rdataset_t *  rdataset,
+	isc_result_t (*addnoqname)(dns_rdataset_t   *rdataset,
 				   const dns_name_t *name);
 	isc_result_t (*getnoqname)(dns_rdataset_t *rdataset, dns_name_t *name,
 				   dns_rdataset_t *neg, dns_rdataset_t *negsig);
-	isc_result_t (*addclosest)(dns_rdataset_t *  rdataset,
+	isc_result_t (*addclosest)(dns_rdataset_t   *rdataset,
 				   const dns_name_t *name);
 	isc_result_t (*getclosest)(dns_rdataset_t *rdataset, dns_name_t *name,
 				   dns_rdataset_t *neg, dns_rdataset_t *negsig);
@@ -81,7 +83,7 @@ typedef struct dns_rdatasetmethods {
 	void (*clearprefetch)(dns_rdataset_t *rdataset);
 	void (*setownercase)(dns_rdataset_t *rdataset, const dns_name_t *name);
 	void (*getownercase)(const dns_rdataset_t *rdataset, dns_name_t *name);
-	isc_result_t (*addglue)(dns_rdataset_t * rdataset,
+	isc_result_t (*addglue)(dns_rdataset_t	*rdataset,
 				dns_dbversion_t *version, dns_message_t *msg);
 } dns_rdatasetmethods_t;
 
@@ -95,7 +97,7 @@ typedef struct dns_rdatasetmethods {
  * rdataset implementations may change any of the fields.
  */
 struct dns_rdataset {
-	unsigned int	       magic; /* XXX ? */
+	unsigned int	       magic;
 	dns_rdatasetmethods_t *methods;
 	ISC_LINK(dns_rdataset_t) link;
 
@@ -107,11 +109,7 @@ struct dns_rdataset {
 	dns_rdataclass_t rdclass;
 	dns_rdatatype_t	 type;
 	dns_ttl_t	 ttl;
-	/*
-	 * Stale ttl is used to see how long this RRset can still be used
-	 * to serve to clients, after the TTL has expired.
-	 */
-	dns_ttl_t	stale_ttl;
+
 	dns_trust_t	trust;
 	dns_rdatatype_t covers;
 
@@ -139,13 +137,13 @@ struct dns_rdataset {
 	 * These are for use by the rdataset implementation, and MUST NOT
 	 * be changed by clients.
 	 */
-	void *	     private1;
-	void *	     private2;
-	void *	     private3;
+	void	    *private1;
+	void	    *private2;
+	void	    *private3;
 	unsigned int privateuint4;
-	void *	     private5;
-	const void * private6;
-	const void * private7;
+	void	    *private5;
+	const void  *private6;
+	const void  *private7;
 	/*@}*/
 };
 
@@ -159,6 +157,11 @@ struct dns_rdataset {
  *
  * \def DNS_RDATASETATTR_LOADORDER
  *	Output the RRset in load order.
+ *
+ * \def DNS_RDATASETATTR_STALE_ADDED
+ *	Set on rdatasets that were added during a stale-answer-client-timeout
+ *	lookup. In other words, the RRset was added during a lookup of stale
+ *	data and does not necessarily mean that the rdataset itself is stale.
  */
 
 #define DNS_RDATASETATTR_NONE	      0x00000000 /*%< No ordering. */
@@ -188,6 +191,9 @@ struct dns_rdataset {
 #define DNS_RDATASETATTR_PREFETCH     0x00400000
 #define DNS_RDATASETATTR_CYCLIC	      0x00800000 /*%< Cyclic ordering. */
 #define DNS_RDATASETATTR_STALE	      0x01000000
+#define DNS_RDATASETATTR_ANCIENT      0x02000000
+#define DNS_RDATASETATTR_STALE_WINDOW 0x04000000
+#define DNS_RDATASETATTR_STALE_ADDED  0x08000000
 
 /*%
  * _OMITDNSSEC:
@@ -399,7 +405,7 @@ dns_rdataset_towire(dns_rdataset_t *rdataset, const dns_name_t *owner_name,
  */
 
 isc_result_t
-dns_rdataset_towiresorted(dns_rdataset_t *  rdataset,
+dns_rdataset_towiresorted(dns_rdataset_t   *rdataset,
 			  const dns_name_t *owner_name, dns_compress_t *cctx,
 			  isc_buffer_t *target, dns_rdatasetorderfunc_t order,
 			  const void *order_arg, unsigned int options,
@@ -415,7 +421,7 @@ dns_rdataset_towiresorted(dns_rdataset_t *  rdataset,
  */
 
 isc_result_t
-dns_rdataset_towirepartial(dns_rdataset_t *  rdataset,
+dns_rdataset_towirepartial(dns_rdataset_t   *rdataset,
 			   const dns_name_t *owner_name, dns_compress_t *cctx,
 			   isc_buffer_t *target, dns_rdatasetorderfunc_t order,
 			   const void *order_arg, unsigned int options,
@@ -439,7 +445,7 @@ dns_rdataset_towirepartial(dns_rdataset_t *  rdataset,
  */
 
 isc_result_t
-dns_rdataset_additionaldata(dns_rdataset_t *	     rdataset,
+dns_rdataset_additionaldata(dns_rdataset_t	    *rdataset,
 			    dns_additionaldatafunc_t add, void *arg);
 /*%<
  * For each rdata in rdataset, call 'add' for each name and type in the

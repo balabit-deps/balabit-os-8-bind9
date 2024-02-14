@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -63,14 +65,14 @@ typedef struct dlopen_data {
 #define MAYBE_LOCK(cd)                                            \
 	do {                                                      \
 		if ((cd->flags & DNS_SDLZFLAG_THREADSAFE) == 0 && \
-		    cd->in_configure == false)                    \
+		    !cd->in_configure)                            \
 			LOCK(&cd->lock);                          \
 	} while (0)
 
 #define MAYBE_UNLOCK(cd)                                          \
 	do {                                                      \
 		if ((cd->flags & DNS_SDLZFLAG_THREADSAFE) == 0 && \
-		    cd->in_configure == false)                    \
+		    !cd->in_configure)                            \
 			UNLOCK(&cd->lock);                        \
 	} while (0)
 

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -60,8 +62,7 @@ iteration_test(const char *file, unsigned int expected) {
 	result = dns_test_loaddb(&db, dns_dbtype_zone, "test", file);
 	assert_int_equal(result, ISC_R_SUCCESS);
 
-	result = dns_nsec3_maxiterations(db, NULL, dt_mctx, &iterations);
-	assert_int_equal(result, ISC_R_SUCCESS);
+	iterations = dns_nsec3_maxiterations();
 
 	assert_int_equal(iterations, expected);
 
@@ -138,10 +139,10 @@ max_iterations(void **state) {
 	UNUSED(state);
 
 	iteration_test("testdata/nsec3/1024.db", 150);
-	iteration_test("testdata/nsec3/2048.db", 500);
-	iteration_test("testdata/nsec3/4096.db", 2500);
+	iteration_test("testdata/nsec3/2048.db", 150);
+	iteration_test("testdata/nsec3/4096.db", 150);
 	iteration_test("testdata/nsec3/min-1024.db", 150);
-	iteration_test("testdata/nsec3/min-2048.db", 500);
+	iteration_test("testdata/nsec3/min-2048.db", 150);
 }
 
 /* check dns_nsec3param_salttotext() */
@@ -189,7 +190,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

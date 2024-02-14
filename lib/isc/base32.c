@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -147,7 +149,7 @@ typedef struct {
 	bool pad;	  /*%< Expect padding */
 } base32_decode_ctx_t;
 
-static inline void
+static void
 base32_decode_init(base32_decode_ctx_t *ctx, int length, const char base[],
 		   bool pad, isc_buffer_t *target) {
 	ctx->digits = 0;
@@ -159,7 +161,7 @@ base32_decode_init(base32_decode_ctx_t *ctx, int length, const char base[],
 	ctx->pad = pad;
 }
 
-static inline isc_result_t
+static isc_result_t
 base32_decode_char(base32_decode_ctx_t *ctx, int c) {
 	const char *s;
 	unsigned int last;
@@ -215,7 +217,7 @@ base32_decode_char(base32_decode_ctx_t *ctx, int c) {
 			if ((ctx->val[3] & 0x0f) != 0) {
 				return (ISC_R_BADBASE32);
 			}
-			ctx->seen_32 = 3;
+			ctx->seen_32 = 2;
 			break;
 		case 5:
 			if ((ctx->val[4] & 0x01) != 0) {
@@ -267,7 +269,7 @@ base32_decode_char(base32_decode_ctx_t *ctx, int c) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 base32_decode_finish(base32_decode_ctx_t *ctx) {
 	if (ctx->length > 0) {
 		return (ISC_R_UNEXPECTEDEND);

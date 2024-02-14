@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -207,7 +209,8 @@ checkns(dns_zone_t *zone, const dns_name_t *name, const dns_name_t *owner,
 		 */
 		cur = ai;
 		while (cur != NULL && cur->ai_canonname == NULL &&
-		       cur->ai_next != NULL) {
+		       cur->ai_next != NULL)
+		{
 			cur = cur->ai_next;
 		}
 		if (cur != NULL && cur->ai_canonname != NULL &&
@@ -409,7 +412,8 @@ checkmx(dns_zone_t *zone, const dns_name_t *name, const dns_name_t *owner) {
 		 */
 		cur = ai;
 		while (cur != NULL && cur->ai_canonname == NULL &&
-		       cur->ai_next != NULL) {
+		       cur->ai_next != NULL)
+		{
 			cur = cur->ai_next;
 		}
 		if (cur != NULL && cur->ai_canonname != NULL &&
@@ -495,7 +499,8 @@ checksrv(dns_zone_t *zone, const dns_name_t *name, const dns_name_t *owner) {
 		 */
 		cur = ai;
 		while (cur != NULL && cur->ai_canonname == NULL &&
-		       cur->ai_next != NULL) {
+		       cur->ai_next != NULL)
+		{
 			cur = cur->ai_next;
 		}
 		if (cur != NULL && cur->ai_canonname != NULL &&
@@ -553,7 +558,7 @@ setup_logging(isc_mem_t *mctx, FILE *errout, isc_log_t **logp) {
 	isc_logconfig_t *logconfig = NULL;
 	isc_log_t *log = NULL;
 
-	RUNTIME_CHECK(isc_log_create(mctx, &log, &logconfig) == ISC_R_SUCCESS);
+	isc_log_create(mctx, &log, &logconfig);
 	isc_log_registercategories(log, categories);
 	isc_log_setcontext(log);
 	dns_log_init(log);
@@ -565,9 +570,9 @@ setup_logging(isc_mem_t *mctx, FILE *errout, isc_log_t **logp) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	RUNTIME_CHECK(isc_log_createchannel(logconfig, "stderr",
-					    ISC_LOG_TOFILEDESC, ISC_LOG_DYNAMIC,
-					    &destination, 0) == ISC_R_SUCCESS);
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination, 0);
+
 	RUNTIME_CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL) ==
 		      ISC_R_SUCCESS);
 
@@ -605,7 +610,7 @@ check_ttls(dns_zone_t *zone, dns_ttl_t maxttl) {
 		}
 		CHECK(result);
 
-		CHECK(dns_db_allrdatasets(db, node, version, 0, &rdsiter));
+		CHECK(dns_db_allrdatasets(db, node, version, 0, 0, &rdsiter));
 		for (result = dns_rdatasetiter_first(rdsiter);
 		     result == ISC_R_SUCCESS;
 		     result = dns_rdatasetiter_next(rdsiter))
@@ -687,7 +692,7 @@ load_zone(isc_mem_t *mctx, const char *zonename, const char *filename,
 
 	CHECK(dns_zone_create(&zone, mctx));
 
-	dns_zone_settype(zone, dns_zone_master);
+	dns_zone_settype(zone, dns_zone_primary);
 
 	isc_buffer_constinit(&buffer, zonename, strlen(zonename));
 	isc_buffer_add(&buffer, strlen(zonename));

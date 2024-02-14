@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -11,6 +13,7 @@
 
 #if HAVE_CMOCKA
 
+#include <inttypes.h>
 #include <sched.h> /* IWYU pragma: keep */
 #include <setjmp.h>
 #include <stdarg.h>
@@ -79,7 +82,7 @@ _teardown(void **state) {
 }
 
 static void
-shutdown(isc_task_t *task, isc_event_t *event) {
+test_shutdown(isc_task_t *task, isc_event_t *event) {
 	isc_result_t result;
 
 	UNUSED(task);
@@ -113,12 +116,14 @@ setup_test(isc_timertype_t timertype, isc_time_t *expires,
 
 	isc_condition_init(&cv);
 
+	atomic_store(&errcnt, ISC_R_SUCCESS);
+
 	LOCK(&mx);
 
 	result = isc_task_create(taskmgr, 0, &task);
 	assert_int_equal(result, ISC_R_SUCCESS);
 
-	result = isc_task_onshutdown(task, shutdown, NULL);
+	result = isc_task_onshutdown(task, test_shutdown, NULL);
 	assert_int_equal(result, ISC_R_SUCCESS);
 
 	isc_mutex_lock(&lasttime_mx);
@@ -144,6 +149,7 @@ setup_test(isc_timertype_t timertype, isc_time_t *expires,
 
 	isc_task_detach(&task);
 	isc_mutex_destroy(&mx);
+	isc_mutex_destroy(&lasttime_mx);
 	(void)isc_condition_destroy(&cv);
 }
 
@@ -154,25 +160,38 @@ set_global_error(isc_result_t result) {
 }
 
 static void
-subthread_assert_true(bool expected) {
+subthread_assert_true(bool expected, const char *file, unsigned int line) {
 	if (!expected) {
+		printf("# %s:%u subthread_assert_true\n", file, line);
 		set_global_error(ISC_R_UNEXPECTED);
 	}
 }
+#define subthread_assert_true(expected) \
+	subthread_assert_true(expected, __FILE__, __LINE__)
 
 static void
-subthread_assert_int_equal(int observed, int expected) {
+subthread_assert_int_equal(int observed, int expected, const char *file,
+			   unsigned int line) {
 	if (observed != expected) {
+		printf("# %s:%u subthread_assert_int_equal(%d != %d)\n", file,
+		       line, observed, expected);
 		set_global_error(ISC_R_UNEXPECTED);
 	}
 }
+#define subthread_assert_int_equal(observed, expected) \
+	subthread_assert_int_equal(observed, expected, __FILE__, __LINE__)
 
 static void
-subthread_assert_result_equal(isc_result_t result, isc_result_t expected) {
+subthread_assert_result_equal(isc_result_t result, isc_result_t expected,
+			      const char *file, unsigned int line) {
 	if (result != expected) {
+		printf("# %s:%u subthread_assert_result_equal(%u != %u)\n",
+		       file, line, result, expected);
 		set_global_error(result);
 	}
 }
+#define subthread_assert_result_equal(observed, expected) \
+	subthread_assert_result_equal(observed, expected, __FILE__, __LINE__)
 
 static void
 ticktock(isc_task_t *task, isc_event_t *event) {
@@ -191,7 +210,7 @@ ticktock(isc_task_t *task, isc_event_t *event) {
 	}
 
 	expected_event_type = ISC_TIMEREVENT_LIFE;
-	if ((isc_timertype_t)event->ev_arg == isc_timertype_ticker) {
+	if ((uintptr_t)event->ev_arg == isc_timertype_ticker) {
 		expected_event_type = ISC_TIMEREVENT_TICK;
 	}
 
@@ -225,14 +244,14 @@ ticktock(isc_task_t *task, isc_event_t *event) {
 	isc_mutex_unlock(&lasttime_mx);
 	subthread_assert_result_equal(result, ISC_R_SUCCESS);
 
+	isc_event_free(&event);
+
 	if (atomic_load(&eventcnt) == nevents) {
 		result = isc_time_now(&endtime);
 		subthread_assert_result_equal(result, ISC_R_SUCCESS);
-		isc_timer_detach(&timer);
+		isc_timer_destroy(&timer);
 		isc_task_shutdown(task);
 	}
-
-	isc_event_free(&event);
 }
 
 /*
@@ -320,9 +339,10 @@ test_idle(isc_task_t *task, isc_event_t *event) {
 
 	subthread_assert_int_equal(event->ev_type, ISC_TIMEREVENT_IDLE);
 
-	isc_timer_detach(&timer);
-	isc_task_shutdown(task);
 	isc_event_free(&event);
+
+	isc_timer_destroy(&timer);
+	isc_task_shutdown(task);
 }
 
 /* timer type once idles out */
@@ -407,14 +427,15 @@ test_reset(isc_task_t *task, isc_event_t *event) {
 						 &expires, &interval, false);
 			subthread_assert_result_equal(result, ISC_R_SUCCESS);
 		}
+
+		isc_event_free(&event);
 	} else {
 		subthread_assert_int_equal(event->ev_type, ISC_TIMEREVENT_LIFE);
 
-		isc_timer_detach(&timer);
+		isc_event_free(&event);
+		isc_timer_destroy(&timer);
 		isc_task_shutdown(task);
 	}
-
-	isc_event_free(&event);
 }
 
 static void
@@ -434,8 +455,8 @@ reset(void **state) {
 	setup_test(isc_timertype_ticker, &expires, &interval, test_reset);
 }
 
-static int startflag;
-static int shutdownflag;
+static atomic_bool startflag;
+static atomic_bool shutdownflag;
 static isc_timer_t *tickertimer = NULL;
 static isc_timer_t *oncetimer = NULL;
 static isc_task_t *task1 = NULL;
@@ -447,29 +468,20 @@ static isc_task_t *task2 = NULL;
  */
 
 static void
-start_event(isc_task_t *task, isc_event_t *event) {
-	UNUSED(task);
-
-	if (verbose) {
-		print_message("# start_event\n");
-	}
-
-	LOCK(&mx);
-	while (!startflag) {
-		(void)isc_condition_wait(&cv, &mx);
-	}
-	UNLOCK(&mx);
-
-	isc_event_free(&event);
-}
-
-static void
 tick_event(isc_task_t *task, isc_event_t *event) {
 	isc_result_t result;
 	isc_time_t expires;
 	isc_interval_t interval;
 
 	UNUSED(task);
+
+	if (!atomic_load(&startflag)) {
+		if (verbose) {
+			print_message("# tick_event %d\n", -1);
+		}
+		isc_event_free(&event);
+		return;
+	}
 
 	int tick = atomic_fetch_add(&eventcnt, 1);
 	if (verbose) {
@@ -495,8 +507,6 @@ tick_event(isc_task_t *task, isc_event_t *event) {
 
 static void
 once_event(isc_task_t *task, isc_event_t *event) {
-	isc_result_t result;
-
 	if (verbose) {
 		print_message("# once_event\n");
 	}
@@ -504,12 +514,7 @@ once_event(isc_task_t *task, isc_event_t *event) {
 	/*
 	 * Allow task1 to start processing events.
 	 */
-	LOCK(&mx);
-	startflag = 1;
-
-	result = isc_condition_broadcast(&cv);
-	subthread_assert_result_equal(result, ISC_R_SUCCESS);
-	UNLOCK(&mx);
+	atomic_store(&startflag, true);
 
 	isc_event_free(&event);
 	isc_task_shutdown(task);
@@ -517,8 +522,6 @@ once_event(isc_task_t *task, isc_event_t *event) {
 
 static void
 shutdown_purge(isc_task_t *task, isc_event_t *event) {
-	isc_result_t result;
-
 	UNUSED(task);
 	UNUSED(event);
 
@@ -529,12 +532,7 @@ shutdown_purge(isc_task_t *task, isc_event_t *event) {
 	/*
 	 * Signal shutdown processing complete.
 	 */
-	LOCK(&mx);
-	shutdownflag = 1;
-
-	result = isc_condition_signal(&cv);
-	subthread_assert_result_equal(result, ISC_R_SUCCESS);
-	UNLOCK(&mx);
+	atomic_store(&shutdownflag, 1);
 
 	isc_event_free(&event);
 }
@@ -543,21 +541,16 @@ shutdown_purge(isc_task_t *task, isc_event_t *event) {
 static void
 purge(void **state) {
 	isc_result_t result;
-	isc_event_t *event = NULL;
 	isc_time_t expires;
 	isc_interval_t interval;
 
 	UNUSED(state);
 
-	startflag = 0;
-	shutdownflag = 0;
+	atomic_init(&startflag, 0);
+	atomic_init(&shutdownflag, 0);
 	atomic_init(&eventcnt, 0);
 	seconds = 1;
 	nanoseconds = 0;
-
-	isc_mutex_init(&mx);
-
-	isc_condition_init(&cv);
 
 	result = isc_task_create(taskmgr, 0, &task1);
 	assert_int_equal(result, ISC_R_SUCCESS);
@@ -567,13 +560,6 @@ purge(void **state) {
 
 	result = isc_task_create(taskmgr, 0, &task2);
 	assert_int_equal(result, ISC_R_SUCCESS);
-
-	LOCK(&mx);
-
-	event = isc_event_allocate(test_mctx, (void *)1, (isc_eventtype_t)1,
-				   start_event, NULL, sizeof(*event));
-	assert_non_null(event);
-	isc_task_send(task1, &event);
 
 	isc_time_settoepoch(&expires);
 	isc_interval_set(&interval, seconds, 0);
@@ -599,22 +585,18 @@ purge(void **state) {
 	/*
 	 * Wait for shutdown processing to complete.
 	 */
-	while (!shutdownflag) {
-		result = isc_condition_wait(&cv, &mx);
-		assert_int_equal(result, ISC_R_SUCCESS);
+	while (!atomic_load(&shutdownflag)) {
+		isc_test_nap(1000);
 	}
-
-	UNLOCK(&mx);
 
 	assert_int_equal(atomic_load(&errcnt), ISC_R_SUCCESS);
 
 	assert_int_equal(atomic_load(&eventcnt), 1);
 
-	isc_timer_detach(&tickertimer);
-	isc_timer_detach(&oncetimer);
+	isc_timer_destroy(&tickertimer);
+	isc_timer_destroy(&oncetimer);
 	isc_task_destroy(&task1);
 	isc_task_destroy(&task2);
-	isc_mutex_destroy(&mx);
 }
 
 int
@@ -646,7 +628,7 @@ main(int argc, char **argv) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -16,6 +18,7 @@
 
 #include <isc/iterated_hash.h>
 #include <isc/lang.h>
+#include <isc/log.h>
 
 #include <dns/db.h>
 #include <dns/diff.h>
@@ -23,7 +26,8 @@
 #include <dns/rdatastruct.h>
 #include <dns/types.h>
 
-#define DNS_NSEC3_SALTSIZE 255
+#define DNS_NSEC3_SALTSIZE	255
+#define DNS_NSEC3_MAXITERATIONS 150U
 
 /*
  * hash = 1, flags =1, iterations = 2, salt length = 1, salt = 255 (max)
@@ -73,6 +77,12 @@ dns_nsec3_typepresent(dns_rdata_t *nsec, dns_rdatatype_t type);
  */
 
 isc_result_t
+dns_nsec3_generate_salt(unsigned char *salt, size_t saltlen);
+/*%<
+ * Generate a salt with the given salt length.
+ */
+
+isc_result_t
 dns_nsec3_hashname(dns_fixedname_t *result,
 		   unsigned char    rethash[NSEC3_MAX_HASH_LENGTH],
 		   size_t *hash_length, const dns_name_t *name,
@@ -99,7 +109,7 @@ dns_nsec3_supportedhash(dns_hash_t hash);
 
 isc_result_t
 dns_nsec3_addnsec3(dns_db_t *db, dns_dbversion_t *version,
-		   const dns_name_t *		 name,
+		   const dns_name_t		*name,
 		   const dns_rdata_nsec3param_t *nsec3param, dns_ttl_t nsecttl,
 		   bool unsecure, dns_diff_t *diff);
 
@@ -146,7 +156,7 @@ dns_nsec3_addnsec3sx(dns_db_t *db, dns_dbversion_t *version,
 
 isc_result_t
 dns_nsec3_delnsec3(dns_db_t *db, dns_dbversion_t *version,
-		   const dns_name_t *		 name,
+		   const dns_name_t		*name,
 		   const dns_rdata_nsec3param_t *nsec3param, dns_diff_t *diff);
 
 isc_result_t
@@ -156,7 +166,7 @@ dns_nsec3_delnsec3s(dns_db_t *db, dns_dbversion_t *version,
 isc_result_t
 dns_nsec3_delnsec3sx(dns_db_t *db, dns_dbversion_t *version,
 		     const dns_name_t *name, dns_rdatatype_t private,
-		     dns_diff_t *      diff);
+		     dns_diff_t	      *diff);
 /*%<
  * Remove NSEC3 records for 'name', recording the change in 'diff'.
  * Adjust previous NSEC3 records, if any, to reflect the removal.
@@ -201,18 +211,10 @@ dns_nsec3_activex(dns_db_t *db, dns_dbversion_t *version, bool complete,
  *	'answer' to be non NULL.
  */
 
-isc_result_t
-dns_nsec3_maxiterations(dns_db_t *db, dns_dbversion_t *version, isc_mem_t *mctx,
-			unsigned int *iterationsp);
+unsigned int
+dns_nsec3_maxiterations(void);
 /*%<
- * Find the maximum permissible number of iterations allowed based on
- * the key strength.
- *
- * Requires:
- *	'db' to be valid.
- *	'version' to be valid or NULL.
- *	'mctx' to be valid.
- *	'iterationsp' to be non NULL.
+ * Return the maximum permissible number of NSEC3 iterations.
  */
 
 bool

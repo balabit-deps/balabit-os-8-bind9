@@ -1,3 +1,30 @@
+bind9 (1:9.16.48-0ubuntu0.20.04.1) focal-security; urgency=medium
+
+  * Updated to 9.16.48 to fix multiple security issues.
+    - Please see the following for a list of changes, including possibly
+      incompatible ones:
+      https://downloads.isc.org/isc/bind9/9.16.48/doc/arm/html/notes.html
+    - CVE-2023-4408
+    - CVE-2023-5517
+    - CVE-2023-6516
+    - CVE-2023-50387
+    - CVE-2023-50868
+  * Packaging changes required for 9.16.48:
+    - Dropped patches no longer required with 9.16.48:
+      + CVE-*.patch
+      + fix-rebinding-protection.patch, 
+      + 0003-Print-diagnostics-on-dns_name_issubdomain-failure-in.patch
+      + lp-1909950-fix-race-between-deactivating-handle-async-callback.patch
+      + lp1997375-segfault-isc-nm-tcp-send.patch
+    - Synced other patches with Debian's 1:9.16.48-1 package
+    - debian/*.install, debian/*.links: updated with new files in 9.16.48.
+    - debian/rules, debian/not-installed: don't delete old -dev files, just
+      don't install them.
+    - debian/control, debian/rules: switch packages required to build
+      documentation.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 14 Feb 2024 07:49:14 -0500
+
 bind9 (1:9.16.1-0ubuntu2.16) focal-security; urgency=medium
 
   * SECURITY UPDATE: DoS via recusive packet parsing

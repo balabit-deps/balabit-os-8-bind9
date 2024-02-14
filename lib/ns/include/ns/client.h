@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -81,7 +83,7 @@
  *** Types
  ***/
 
-#define NS_CLIENT_TCP_BUFFER_SIZE  (65535 + 2)
+#define NS_CLIENT_TCP_BUFFER_SIZE  65535
 #define NS_CLIENT_SEND_BUFFER_SIZE 4096
 
 /*!
@@ -144,11 +146,11 @@ struct ns_clientmgr {
 	/* Unlocked. */
 	unsigned int magic;
 
-	isc_mem_t *	mctx;
-	ns_server_t *	sctx;
-	isc_taskmgr_t * taskmgr;
+	isc_mem_t      *mctx;
+	ns_server_t    *sctx;
+	isc_taskmgr_t  *taskmgr;
 	isc_timermgr_t *timermgr;
-	isc_task_t *	excl;
+	isc_task_t     *excl;
 	isc_refcount_t	references;
 	int		ncpus;
 
@@ -172,36 +174,41 @@ struct ns_clientmgr {
 /*% nameserver client structure */
 struct ns_client {
 	unsigned int	 magic;
-	isc_mem_t *	 mctx;
+	isc_mem_t	*mctx;
 	bool		 allocated; /* Do we need to free it? */
-	ns_server_t *	 sctx;
-	ns_clientmgr_t * manager;
+	ns_server_t	*sctx;
+	ns_clientmgr_t	*manager;
 	ns_clientstate_t state;
 	int		 nupdates;
+	bool		 nodetach;
 	bool		 shuttingdown;
 	unsigned int	 attributes;
-	isc_task_t *	 task;
-	dns_view_t *	 view;
-	dns_dispatch_t * dispatch;
-	isc_nmhandle_t * handle;
-	unsigned char *	 tcpbuf;
-	dns_message_t *	 message;
-	unsigned char *	 sendbuf;
-	dns_rdataset_t * opt;
-	uint16_t	 udpsize;
-	uint16_t	 extflags;
-	int16_t		 ednsversion; /* -1 noedns */
+	isc_task_t	*task;
+	dns_view_t	*view;
+	dns_dispatch_t	*dispatch;
+	isc_nmhandle_t	*handle;	/* Permanent pointer to handle */
+	isc_nmhandle_t	*sendhandle;	/* Waiting for send callback */
+	isc_nmhandle_t	*reqhandle;	/* Waiting for request callback
+					   (query, update, notify) */
+	isc_nmhandle_t *fetchhandle;	/* Waiting for recursive fetch */
+	isc_nmhandle_t *prefetchhandle; /* Waiting for prefetch / rpzfetch */
+	isc_nmhandle_t *updatehandle;	/* Waiting for update callback */
+	unsigned char  *tcpbuf;
+	dns_message_t  *message;
+	unsigned char  *sendbuf;
+	dns_rdataset_t *opt;
+	uint16_t	udpsize;
+	uint16_t	extflags;
+	int16_t		ednsversion; /* -1 noedns */
 	void (*cleanup)(ns_client_t *);
-	void (*shutdown)(void *arg, isc_result_t result);
-	void *	      shutdown_arg;
 	ns_query_t    query;
 	isc_time_t    requesttime;
 	isc_stdtime_t now;
 	isc_time_t    tnow;
 	dns_name_t    signername; /*%< [T]SIG key name */
-	dns_name_t *  signer;	  /*%< NULL if not valid sig */
+	dns_name_t   *signer;	  /*%< NULL if not valid sig */
 	bool	      mortal;	  /*%< Die after handling request */
-	isc_quota_t * recursionquota;
+	isc_quota_t  *recursionquota;
 
 	isc_sockaddr_t peeraddr;
 	bool	       peeraddr_valid;
@@ -347,10 +354,16 @@ ns_clientmgr_create(isc_mem_t *mctx, ns_server_t *sctx, isc_taskmgr_t *taskmgr,
  */
 
 void
+ns_clientmgr_shutdown(ns_clientmgr_t *manager);
+/*%<
+ * Shutdown a client manager and all ns_client_t objects
+ * managed by it.
+ */
+
+void
 ns_clientmgr_destroy(ns_clientmgr_t **managerp);
 /*%<
- * Destroy a client manager and all ns_client_t objects
- * managed by it.
+ * Destroy a client manager.
  */
 
 isc_sockaddr_t *
@@ -468,14 +481,15 @@ ns_client_addopt(ns_client_t *client, dns_message_t *message,
  */
 
 void
-ns__client_request(isc_nmhandle_t *handle, isc_region_t *region, void *arg);
+ns__client_request(isc_nmhandle_t *handle, isc_result_t eresult,
+		   isc_region_t *region, void *arg);
 
 /*%<
  * Handle client requests.
  * (Not intended for use outside this module and associated tests.)
  */
 
-void
+isc_result_t
 ns__client_tcpconn(isc_nmhandle_t *handle, isc_result_t result, void *arg);
 
 /*%<

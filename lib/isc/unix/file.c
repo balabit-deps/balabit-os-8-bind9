@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -195,7 +197,8 @@ isc_file_settime(const char *file, isc_time_t *when) {
 	 * Here is the real check for the high bit being set.
 	 */
 	if ((times[0].tv_sec &
-	     (1ULL << (sizeof(times[0].tv_sec) * CHAR_BIT - 1))) != 0) {
+	     (1ULL << (sizeof(times[0].tv_sec) * CHAR_BIT - 1))) != 0)
+	{
 		return (ISC_R_RANGE);
 	}
 

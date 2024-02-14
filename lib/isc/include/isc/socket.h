@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -133,7 +135,7 @@ struct isc_socketevent {
 typedef struct isc_socket_newconnev isc_socket_newconnev_t;
 struct isc_socket_newconnev {
 	ISC_EVENT_COMMON(isc_socket_newconnev_t);
-	isc_socket_t * newsocket;
+	isc_socket_t  *newsocket;
 	isc_result_t   result;	/*%< OK, EOF, whatever else */
 	isc_sockaddr_t address; /*%< source address */
 };
@@ -190,45 +192,6 @@ typedef enum {
 #define ISC_SOCKFLAG_IMMEDIATE 0x00000001 /*%< send event only if needed */
 #define ISC_SOCKFLAG_NORETRY   0x00000002 /*%< drop failed UDP sends */
 /*@}*/
-
-/*%
- * This structure is actually just the common prefix of a socket manager
- * object implementation's version of an isc_socketmgr_t.
- * \brief
- * Direct use of this structure by clients is forbidden.  socket implementations
- * may change the structure.  'magic' must be ISCAPI_SOCKETMGR_MAGIC for any
- * of the isc_socket_ routines to work.  socket implementations must maintain
- * all socket invariants.
- * In effect, this definition is used only for non-BIND9 version ("export")
- * of the library, and the export version does not work for win32.  So, to avoid
- * the definition conflict with win32/socket.c, we enable this definition only
- * for non-Win32 (i.e. Unix) platforms.
- */
-#ifndef WIN32
-struct isc_socketmgr {
-	unsigned int impmagic;
-	unsigned int magic;
-};
-#endif /* ifndef WIN32 */
-
-#define ISCAPI_SOCKETMGR_MAGIC ISC_MAGIC('A', 's', 'm', 'g')
-#define ISCAPI_SOCKETMGR_VALID(m) \
-	((m) != NULL && (m)->magic == ISCAPI_SOCKETMGR_MAGIC)
-
-/*%
- * This is the common prefix of a socket object.  The same note as
- * that for the socketmgr structure applies.
- */
-#ifndef WIN32
-struct isc_socket {
-	unsigned int impmagic;
-	unsigned int magic;
-};
-#endif /* ifndef WIN32 */
-
-#define ISCAPI_SOCKET_MAGIC ISC_MAGIC('A', 's', 'c', 't')
-#define ISCAPI_SOCKET_VALID(s) \
-	((s) != NULL && (s)->magic == ISCAPI_SOCKET_MAGIC)
 
 /***
  *** Socket and Socket Manager Functions
@@ -716,9 +679,6 @@ isc_socket_sendto2(isc_socket_t *sock, isc_region_t *region, isc_task_t *task,
 /*@}*/
 
 isc_result_t
-isc_socketmgr_createinctx(isc_mem_t *mctx, isc_socketmgr_t **managerp);
-
-isc_result_t
 isc_socketmgr_create(isc_mem_t *mctx, isc_socketmgr_t **managerp);
 
 isc_result_t
@@ -729,8 +689,6 @@ isc_socketmgr_create2(isc_mem_t *mctx, isc_socketmgr_t **managerp,
  * maximum number of sockets that the created manager should handle.
  * isc_socketmgr_create() is equivalent of isc_socketmgr_create2() with
  * "maxsocks" being zero.
- * isc_socketmgr_createinctx() also associates the new manager with the
- * specified application context.
  *
  * Notes:
  *
@@ -948,7 +906,7 @@ isc_socketmgr_renderjson(isc_socketmgr_t *mgr, void *stats0);
 /*%<
  * See isc_socketmgr_create() above.
  */
-typedef isc_result_t (*isc_socketmgrcreatefunc_t)(isc_mem_t *	    mctx,
+typedef isc_result_t (*isc_socketmgrcreatefunc_t)(isc_mem_t	   *mctx,
 						  isc_socketmgr_t **managerp);
 
 ISC_LANG_ENDDECLS

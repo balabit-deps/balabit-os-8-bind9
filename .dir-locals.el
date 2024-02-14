@@ -77,6 +77,9 @@
 	       (expand-file-name
 		(concat directory-of-current-dir-locals-file "bin/rndc/include"))
 
+	       (expand-file-name "/usr/include/libxml2")
+	       (expand-file-name "/usr/include/json-c")
+	       
 	       (expand-file-name "/usr/local/opt/openssl@1.1/include")
 	       (expand-file-name "/usr/local/opt/libxml2/include/libxml2")
 	       (expand-file-name "/usr/local/opt/json-c/include/json-c/")
@@ -106,6 +109,9 @@
 	 (list
 	  "--enable=all"
 	  "--suppress=missingIncludeSystem"
+	  "--suppress=nullPointerRedundantCheck"
+	  (concat "--suppressions-list=" (expand-file-name
+			       (concat directory-of-current-dir-locals-file "util/suppressions.txt")))
 	  (concat "-include=" (expand-file-name
 			       (concat directory-of-current-dir-locals-file "config.h")))
 	  )

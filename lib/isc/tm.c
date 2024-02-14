@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0 AND BSD-2-Clause
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -89,7 +91,7 @@ conv_num(const char **buf, int *dest, int llim, int ulim) {
 	/* The limit also determines the number of valid digits. */
 	int rulim = ulim;
 
-	if (**buf < '0' || **buf > '9') {
+	if (!isdigit((unsigned char)**buf)) {
 		return (0);
 	}
 
@@ -320,7 +322,7 @@ isc_tm_strptime(const char *buf, const char *fmt, struct tm *tm) {
 
 		case 'k': /* The hour (24-hour clock representation). */
 			LEGAL_ALT(0);
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'H':
 			LEGAL_ALT(ALT_O);
 			if (!(conv_num(&bp, &tm->tm_hour, 0, 23))) {
@@ -330,7 +332,7 @@ isc_tm_strptime(const char *buf, const char *fmt, struct tm *tm) {
 
 		case 'l': /* The hour (12-hour clock representation). */
 			LEGAL_ALT(0);
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'I':
 			LEGAL_ALT(ALT_O);
 			if (!(conv_num(&bp, &tm->tm_hour, 1, 12))) {

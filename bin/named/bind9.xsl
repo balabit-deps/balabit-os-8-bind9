@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
- - Copyright (C) Internet Systems Consortium, Inc. ("ISC")
- -
- - This Source Code Form is subject to the terms of the Mozilla Public
- - License, v. 2.0. If a copy of the MPL was not distributed with this
- - file, You can obtain one at http://mozilla.org/MPL/2.0/.
- -
- - See the COPYRIGHT file distributed with this work for additional
- - information regarding copyright ownership.
--->
 
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns="http://www.w3.org/1999/xhtml" version="1.0">
   <xsl:output method="html" indent="yes" version="4.0"/>
-  <xsl:template match="statistics[@version=&quot;3.11&quot;]">
+  <!-- the version number **below** must match version in bin/named/statschannel.c -->
+  <!-- don't forget to update "/xml/v<STATS_XML_VERSION_MAJOR>" in the HTTP endpoints listed below -->
+  <xsl:template match="statistics[@version=&quot;3.11.1&quot;]">
     <html>
       <head>
         <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
@@ -775,7 +767,7 @@
           <xsl:for-each select="views/view">
             <h3>Zones for View <xsl:value-of select="@name"/></h3>
             <table class="zones">
-              <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Serial</th></tr></thead>
+              <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Serial</th><th>Loaded</th><th>Expires</th><th>Refresh</th></tr></thead>
               <tbody>
                 <xsl:for-each select="zones/zone">
                   <xsl:variable name="css-class15">
@@ -788,7 +780,10 @@
                       <td><xsl:value-of select="@name"/></td>
                       <td><xsl:value-of select="@rdataclass"/></td>
                       <td><xsl:value-of select="type"/></td>
-                      <td><xsl:value-of select="serial"/></td></tr>
+                      <td><xsl:value-of select="serial"/></td>
+                      <td><xsl:value-of select="loaded"/></td>
+                      <td><xsl:value-of select="expires"/></td>
+                      <td><xsl:value-of select="refresh"/></td></tr>
                 </xsl:for-each>
               </tbody>
             </table>

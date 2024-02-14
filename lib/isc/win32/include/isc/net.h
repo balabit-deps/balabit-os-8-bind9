@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -121,10 +123,10 @@ typedef uint16_t in_port_t;
 #define ISC__IPADDR(x) ((uint32_t)htonl((uint32_t)(x)))
 
 #define ISC_IPADDR_ISMULTICAST(i) \
-	(((uint32_t)(i)&ISC__IPADDR(0xf0000000)) == ISC__IPADDR(0xe0000000))
+	(((uint32_t)(i) & ISC__IPADDR(0xf0000000)) == ISC__IPADDR(0xe0000000))
 
 #define ISC_IPADDR_ISEXPERIMENTAL(i) \
-	(((uint32_t)(i)&ISC__IPADDR(0xf0000000)) == ISC__IPADDR(0xf0000000))
+	(((uint32_t)(i) & ISC__IPADDR(0xf0000000)) == ISC__IPADDR(0xf0000000))
 
 /*
  * Fix the FD_SET and FD_CLR Macros to properly cast
@@ -137,7 +139,8 @@ typedef uint16_t in_port_t;
 			if (((fd_set FAR *)(set))->fd_array[__i] ==            \
 			    (SOCKET)fd) {                                      \
 				while (__i <                                   \
-				       ((fd_set FAR *)(set))->fd_count - 1) {  \
+				       ((fd_set FAR *)(set))->fd_count - 1)    \
+				{                                              \
 					((fd_set FAR *)(set))->fd_array[__i] = \
 						((fd_set FAR *)(set))          \
 							->fd_array[__i + 1];   \
@@ -155,7 +158,8 @@ typedef uint16_t in_port_t;
 		u_int __i;                                                    \
 		for (__i = 0; __i < ((fd_set FAR *)(set))->fd_count; __i++) { \
 			if (((fd_set FAR *)(set))->fd_array[__i] ==           \
-			    (SOCKET)(fd)) {                                   \
+			    (SOCKET)(fd))                                     \
+			{                                                     \
 				break;                                        \
 			}                                                     \
 		}                                                             \

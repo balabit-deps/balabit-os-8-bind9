@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -110,6 +112,9 @@ typedef struct dns_master_style dns_master_style_t;
 /*% Print ECS cache entries as comments (reserved for future use). */
 #define DNS_STYLEFLAG_ECSCACHE 0x100000000ULL
 
+/*% Print expired cache entries. */
+#define DNS_STYLEFLAG_EXPIRED 0x200000000ULL
+
 ISC_LANG_BEGINDECLS
 
 /***
@@ -144,6 +149,13 @@ LIBDNS_EXTERNAL_DATA extern const dns_master_style_t
  * values on each record line and never uses $ORIGIN or relative names.
  */
 LIBDNS_EXTERNAL_DATA extern const dns_master_style_t dns_master_style_cache;
+
+/*%
+ * A master style format designed for cache files.  The same as above but
+ * this also prints expired entries.
+ */
+LIBDNS_EXTERNAL_DATA extern const dns_master_style_t
+	dns_master_style_cache_with_expired;
 
 /*%
  * A master style that prints name, ttl, class, type, and value on
@@ -233,11 +245,11 @@ dns_dumpctx_db(dns_dumpctx_t *dctx);
 
 /*@{*/
 isc_result_t
-dns_master_dumptostreaminc(isc_mem_t *mctx, dns_db_t *db,
-			   dns_dbversion_t *	     version,
-			   const dns_master_style_t *style, FILE *f,
-			   isc_task_t *task, dns_dumpdonefunc_t done,
-			   void *done_arg, dns_dumpctx_t **dctxp);
+dns_master_dumptostreamasync(isc_mem_t *mctx, dns_db_t *db,
+			     dns_dbversion_t	      *version,
+			     const dns_master_style_t *style, FILE *f,
+			     isc_task_t *task, dns_dumpdonefunc_t done,
+			     void *done_arg, dns_dumpctx_t **dctxp);
 
 isc_result_t
 dns_master_dumptostream(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
@@ -248,11 +260,6 @@ dns_master_dumptostream(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
  * Dump the database 'db' to the steam 'f' in the specified format by
  * 'format'.  If the format is dns_masterformat_text (the RFC1035 format),
  * 'style' specifies the file style (e.g., &dns_master_style_default).
- *
- * dns_master_dumptostream() is an old form of dns_master_dumptostream3(),
- * which always specifies the dns_masterformat_text format.
- * dns_master_dumptostream2() is an old form which always specifies
- * a NULL header.
  *
  * If 'format' is dns_masterformat_raw, then 'header' can contain
  * information to be written to the file header.
@@ -266,7 +273,6 @@ dns_master_dumptostream(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
  *
  * Returns:
  *\li	ISC_R_SUCCESS
- *\li	ISC_R_CONTINUE	dns_master_dumptostreaminc() only.
  *\li	ISC_R_NOMEMORY
  *\li	Any database or rrset iterator error.
  *\li	Any dns_rdata_totext() error code.
@@ -276,11 +282,11 @@ dns_master_dumptostream(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
 /*@{*/
 
 isc_result_t
-dns_master_dumpinc(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
-		   const dns_master_style_t *style, const char *filename,
-		   isc_task_t *task, dns_dumpdonefunc_t done, void *done_arg,
-		   dns_dumpctx_t **dctxp, dns_masterformat_t format,
-		   dns_masterrawheader_t *header);
+dns_master_dumpasync(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
+		     const dns_master_style_t *style, const char *filename,
+		     isc_task_t *task, dns_dumpdonefunc_t done, void *done_arg,
+		     dns_dumpctx_t **dctxp, dns_masterformat_t format,
+		     dns_masterrawheader_t *header);
 
 isc_result_t
 dns_master_dump(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
@@ -292,11 +298,6 @@ dns_master_dump(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
  * 'format'.  If the format is dns_masterformat_text (the RFC1035 format),
  * 'style' specifies the file style (e.g., &dns_master_style_default).
  *
- * dns_master_dumpinc() and dns_master_dump() are old forms of _dumpinc3()
- * and _dump3(), respectively, which always specify the dns_masterformat_text
- * format.  dns_master_dumpinc2() and dns_master_dump2() are old forms which
- * always specify a NULL header.
- *
  * If 'format' is dns_masterformat_raw, then 'header' can contain
  * information to be written to the file header.
  *
@@ -304,7 +305,6 @@ dns_master_dump(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
  *
  * Returns:
  *\li	ISC_R_SUCCESS
- *\li	ISC_R_CONTINUE	dns_master_dumpinc() only.
  *\li	ISC_R_NOMEMORY
  *\li	Any database or rrset iterator error.
  *\li	Any dns_rdata_totext() error code.
@@ -312,8 +312,8 @@ dns_master_dump(isc_mem_t *mctx, dns_db_t *db, dns_dbversion_t *version,
 /*@}*/
 
 isc_result_t
-dns_master_rdatasettotext(const dns_name_t *	    owner_name,
-			  dns_rdataset_t *	    rdataset,
+dns_master_rdatasettotext(const dns_name_t	   *owner_name,
+			  dns_rdataset_t	   *rdataset,
 			  const dns_master_style_t *style, dns_indent_t *indent,
 			  isc_buffer_t *target);
 /*%<
@@ -329,15 +329,15 @@ dns_master_rdatasettotext(const dns_name_t *	    owner_name,
  */
 
 isc_result_t
-dns_master_questiontotext(const dns_name_t *	    owner_name,
-			  dns_rdataset_t *	    rdataset,
+dns_master_questiontotext(const dns_name_t	   *owner_name,
+			  dns_rdataset_t	   *rdataset,
 			  const dns_master_style_t *style,
-			  isc_buffer_t *	    target);
+			  isc_buffer_t		   *target);
 
 isc_result_t
 dns_master_dumpnodetostream(isc_mem_t *mctx, dns_db_t *db,
 			    dns_dbversion_t *version, dns_dbnode_t *node,
-			    const dns_name_t *	      name,
+			    const dns_name_t	     *name,
 			    const dns_master_style_t *style, FILE *f);
 
 isc_result_t
@@ -349,7 +349,7 @@ dns_masterstyle_flags_t
 dns_master_styleflags(const dns_master_style_t *style);
 
 isc_result_t
-dns_master_stylecreate(dns_master_style_t **   style,
+dns_master_stylecreate(dns_master_style_t    **style,
 		       dns_masterstyle_flags_t flags, unsigned int ttl_column,
 		       unsigned int class_column, unsigned int type_column,
 		       unsigned int rdata_column, unsigned int line_length,

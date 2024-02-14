@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -132,10 +134,10 @@ dispatchset_get(void **state) {
 	d4 = dns_dispatchset_get(dset);
 	d5 = dns_dispatchset_get(dset);
 
-	assert_int_equal(d1, d2);
-	assert_int_equal(d2, d3);
-	assert_int_equal(d3, d4);
-	assert_int_equal(d4, d5);
+	assert_ptr_equal(d1, d2);
+	assert_ptr_equal(d2, d3);
+	assert_ptr_equal(d3, d4);
+	assert_ptr_equal(d4, d5);
 
 	reset();
 
@@ -148,11 +150,11 @@ dispatchset_get(void **state) {
 	d4 = dns_dispatchset_get(dset);
 	d5 = dns_dispatchset_get(dset);
 
-	assert_int_equal(d1, d5);
-	assert_true(d1 != d2);
-	assert_true(d2 != d3);
-	assert_true(d3 != d4);
-	assert_true(d4 != d5);
+	assert_ptr_equal(d1, d5);
+	assert_ptr_not_equal(d1, d2);
+	assert_ptr_not_equal(d2, d3);
+	assert_ptr_not_equal(d3, d4);
+	assert_ptr_not_equal(d4, d5);
 
 	reset();
 }
@@ -215,7 +217,7 @@ nameserver(isc_task_t *task, isc_event_t *event) {
 
 static dns_dispatch_t *dispatch = NULL;
 static dns_dispentry_t *dispentry = NULL;
-static atomic_bool first = ATOMIC_VAR_INIT(true);
+static atomic_bool first = true;
 static isc_sockaddr_t local;
 static atomic_uint_fast32_t responses;
 
@@ -352,7 +354,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

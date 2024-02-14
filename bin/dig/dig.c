@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -56,7 +58,7 @@
 
 dig_lookup_t *default_lookup = NULL;
 
-static atomic_uintptr_t batchname = ATOMIC_VAR_INIT(0);
+static atomic_uintptr_t batchname = 0;
 static FILE *batchfp = NULL;
 static char *argv0;
 static int addresscount = 0;
@@ -179,7 +181,7 @@ help(void) {
 	      "responses)\n"
 	      "                 +[no]besteffort     (Try to parse even illegal "
 	      "messages)\n"
-	      "                 +bufsize=###        (Set EDNS0 Max UDP packet "
+	      "                 +bufsize[=###]      (Set EDNS0 Max UDP packet "
 	      "size)\n"
 	      "                 +[no]cdflag         (Set checking disabled "
 	      "flag in query)\n"
@@ -337,11 +339,7 @@ received(unsigned int bytes, isc_sockaddr_t *from, dig_query_t *query) {
 		}
 		printf(";; SERVER: %s(%s)\n", fromtext, query->servname);
 		time(&tnow);
-#if !defined(WIN32)
 		(void)localtime_r(&tnow, &tmnow);
-#else  /* if !defined(WIN32) */
-		tmnow = *localtime(&tnow);
-#endif /* if !defined(WIN32) */
 
 #ifdef WIN32
 		/*
@@ -516,7 +514,7 @@ short_answer(dns_message_t *msg, dns_messagetextflag_t flags, isc_buffer_t *buf,
 static bool
 isdotlocal(dns_message_t *msg) {
 	isc_result_t result;
-	static unsigned char local_ndata[] = { "\005local\0" };
+	static unsigned char local_ndata[] = { "\005local" };
 	static unsigned char local_offsets[] = { 0, 6 };
 	static dns_name_t local = DNS_NAME_INITABSOLUTE(local_ndata,
 							local_offsets);
@@ -624,7 +622,8 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 		flags |= DNS_MESSAGETEXTFLAG_NOCOMMENTS;
 	}
 	if (query->lookup->onesoa &&
-	    query->lookup->rdtype == dns_rdatatype_axfr) {
+	    query->lookup->rdtype == dns_rdatatype_axfr)
+	{
 		flags |= (query->msg_count == 0) ? DNS_MESSAGETEXTFLAG_ONESOA
 						 : DNS_MESSAGETEXTFLAG_OMITSOA;
 	}
@@ -670,15 +669,25 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 
 		if (!isc_time_isepoch(&query->time_sent)) {
 			char tbuf[100];
-			isc_time_formatISO8601ms(&query->time_sent, tbuf,
-						 sizeof(tbuf));
+			if (query->lookup->use_usec) {
+				isc_time_formatISO8601us(&query->time_sent,
+							 tbuf, sizeof(tbuf));
+			} else {
+				isc_time_formatISO8601ms(&query->time_sent,
+							 tbuf, sizeof(tbuf));
+			}
 			printf("    query_time: !!timestamp %s\n", tbuf);
 		}
 
 		if (!isquery && !isc_time_isepoch(&query->time_recv)) {
 			char tbuf[100];
-			isc_time_formatISO8601ms(&query->time_recv, tbuf,
-						 sizeof(tbuf));
+			if (query->lookup->use_usec) {
+				isc_time_formatISO8601us(&query->time_recv,
+							 tbuf, sizeof(tbuf));
+			} else {
+				isc_time_formatISO8601ms(&query->time_recv,
+							 tbuf, sizeof(tbuf));
+			}
 			printf("    response_time: !!timestamp %s\n", tbuf);
 		}
 
@@ -704,7 +713,7 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 				strlcat(sockstr, "0", sizeof(sockstr));
 			}
 
-			printf("    response_address: %s\n", sockstr);
+			printf("    response_address: \"%s\"\n", sockstr);
 			printf("    response_port: %u\n", sport);
 		}
 
@@ -722,7 +731,7 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 				strlcat(sockstr, "0", sizeof(sockstr));
 			}
 
-			printf("    query_address: %s\n", sockstr);
+			printf("    query_address: \"%s\"\n", sockstr);
 			printf("    query_port: %u\n", sport);
 		}
 
@@ -1041,11 +1050,12 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 			break;
 		case 'u': /* bufsize */
 			FULLCHECK("bufsize");
-			if (value == NULL) {
-				goto need_value;
-			}
 			if (!state) {
 				goto invalid_option;
+			}
+			if (value == NULL) {
+				lookup->udpsize = DEFAULT_EDNS_BUFSIZE;
+				break;
 			}
 			result = parse_uint(&num, value, COMMSIZE,
 					    "buffer size");
@@ -1054,6 +1064,9 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 				goto exit_or_usage;
 			}
 			lookup->udpsize = num;
+			if (lookup->udpsize == 0) {
+				lookup->edns = -1;
+			}
 			break;
 		default:
 			goto invalid_option;
@@ -1093,7 +1106,7 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 			case 'o': /* cookie */
 				FULLCHECK("cookie");
 				if (state && lookup->edns == -1) {
-					lookup->edns = 0;
+					lookup->edns = DEFAULT_EDNS_VERSION;
 				}
 				lookup->sendcookie = state;
 				if (value != NULL) {
@@ -1132,7 +1145,7 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 			FULLCHECK("dnssec");
 		dnssec:
 			if (state && lookup->edns == -1) {
-				lookup->edns = 0;
+				lookup->edns = DEFAULT_EDNS_VERSION;
 			}
 			lookup->dnssec = state;
 			break;
@@ -1184,7 +1197,8 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 							break;
 						}
 						if (value == NULL) {
-							lookup->edns = 0;
+							lookup->edns =
+								DEFAULT_EDNS_VERSION;
 							break;
 						}
 						result = parse_uint(&num, value,
@@ -1399,7 +1413,7 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 			case 'i': /* nsid */
 				FULLCHECK("nsid");
 				if (state && lookup->edns == -1) {
-					lookup->edns = 0;
+					lookup->edns = DEFAULT_EDNS_VERSION;
 				}
 				lookup->nsid = state;
 				break;
@@ -1446,7 +1460,8 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 			}
 			for (num = 0;
 			     num < sizeof(opcodetext) / sizeof(opcodetext[0]);
-			     num++) {
+			     num++)
+			{
 				if (strcasecmp(opcodetext[num], value) == 0) {
 					break;
 				}
@@ -1469,7 +1484,7 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 	case 'p':
 		FULLCHECK("padding");
 		if (state && lookup->edns == -1) {
-			lookup->edns = 0;
+			lookup->edns = DEFAULT_EDNS_VERSION;
 		}
 		if (value == NULL) {
 			goto need_value;
@@ -1637,7 +1652,7 @@ plus_option(char *option, bool is_batchfile, dig_lookup_t *lookup) {
 				break;
 			}
 			if (lookup->edns == -1) {
-				lookup->edns = 0;
+				lookup->edns = DEFAULT_EDNS_VERSION;
 			}
 			if (lookup->ecs_addr != NULL) {
 				isc_mem_free(mctx, lookup->ecs_addr);
@@ -1861,7 +1876,7 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
 				have_ipv6 = false;
 			} else {
 				fatal("can't find IPv4 networking");
-				/* NOTREACHED */
+				UNREACHABLE();
 				return (false);
 			}
 			break;
@@ -1871,7 +1886,7 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
 				have_ipv4 = false;
 			} else {
 				fatal("can't find IPv6 networking");
-				/* NOTREACHED */
+				UNREACHABLE();
 				return (false);
 			}
 			break;
@@ -2021,7 +2036,8 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
 			result = dns_rdatatype_fromtext(
 				&rdtype, (isc_textregion_t *)&tr);
 			if (result == ISC_R_SUCCESS &&
-			    rdtype == dns_rdatatype_ixfr) {
+			    rdtype == dns_rdatatype_ixfr)
+			{
 				result = DNS_R_UNKNOWN;
 			}
 		}
@@ -2094,7 +2110,8 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
 		}
 		*need_clone = true;
 		if (get_reverse(textname, sizeof(textname), value, false) ==
-		    ISC_R_SUCCESS) {
+		    ISC_R_SUCCESS)
+		{
 			strlcpy((*lookup)->textname, textname,
 				sizeof((*lookup)->textname));
 			debug("looking up %s", (*lookup)->textname);
@@ -2122,7 +2139,7 @@ dash_option(char *option, char *next, dig_lookup_t **lookup,
 		fprintf(stderr, "Invalid option: -%s\n", option);
 		usage();
 	}
-	/* NOTREACHED */
+	UNREACHABLE();
 	return (false);
 }
 
@@ -2186,16 +2203,20 @@ preparse_args(int argc, char **argv) {
 			continue;
 		}
 		/* Look for dash value option. */
-		if (strpbrk(option, dash_opts) != &option[0] ||
-		    strlen(option) > 1U) {
-			/* Error or value in option. */
+		if (strpbrk(option, dash_opts) != &option[0]) {
+			goto invalid_option;
+		}
+		if (strlen(option) > 1U) {
+			/* value in option. */
 			continue;
 		}
 		/* Dash value is next argument so we need to skip it. */
 		rc--, rv++;
 		/* Handle missing argument */
 		if (rc == 0) {
-			break;
+		invalid_option:
+			fprintf(stderr, "Invalid option: -%s\n", option);
+			usage();
 		}
 	}
 }
@@ -2252,7 +2273,7 @@ parse_args(bool is_batchfile, bool config_only, int argc, char **argv) {
 		debug("making new lookup");
 		default_lookup = make_empty_lookup();
 		default_lookup->adflag = true;
-		default_lookup->edns = 0;
+		default_lookup->edns = DEFAULT_EDNS_VERSION;
 		default_lookup->sendcookie = true;
 
 #ifndef NOPOSIX
@@ -2272,7 +2293,8 @@ parse_args(bool is_batchfile, bool config_only, int argc, char **argv) {
 		}
 		if (batchfp != NULL) {
 			while (fgets(batchline, sizeof(batchline), batchfp) !=
-			       0) {
+			       0)
+			{
 				debug("config line %s", batchline);
 				bargc = split_batchline(batchline, bargv, 62,
 							".digrc argv");
@@ -2363,7 +2385,8 @@ parse_args(bool is_batchfile, bool config_only, int argc, char **argv) {
 						&rdtype,
 						(isc_textregion_t *)&tr);
 					if (result == ISC_R_SUCCESS &&
-					    rdtype == dns_rdatatype_ixfr) {
+					    rdtype == dns_rdatatype_ixfr)
+					{
 						fprintf(stderr, ";; Warning, "
 								"ixfr requires "
 								"a "
@@ -2403,7 +2426,8 @@ parse_args(bool is_batchfile, bool config_only, int argc, char **argv) {
 						lookup->rdtype = rdtype;
 						lookup->rdtypeset = true;
 						if (rdtype ==
-						    dns_rdatatype_axfr) {
+						    dns_rdatatype_axfr)
+						{
 							lookup->section_question =
 								plusquest;
 							lookup->comments =
@@ -2411,7 +2435,8 @@ parse_args(bool is_batchfile, bool config_only, int argc, char **argv) {
 						}
 						if (rdtype ==
 							    dns_rdatatype_any &&
-						    !lookup->tcp_mode_set) {
+						    !lookup->tcp_mode_set)
+						{
 							lookup->tcp_mode = true;
 						}
 						lookup->ixfr_serial = false;

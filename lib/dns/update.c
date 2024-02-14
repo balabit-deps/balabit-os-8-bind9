@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -210,7 +212,7 @@ update_log(dns_update_log_t *callback, dns_zone_t *zone, int level,
 		return;
 	}
 
-	if (isc_log_wouldlog(dns_lctx, level) == false) {
+	if (!isc_log_wouldlog(dns_lctx, level)) {
 		return;
 	}
 
@@ -364,7 +366,7 @@ foreach_rrset(dns_db_t *db, dns_dbversion_t *ver, dns_name_t *name,
 	}
 
 	iter = NULL;
-	result = dns_db_allrdatasets(db, node, ver, (isc_stdtime_t)0, &iter);
+	result = dns_db_allrdatasets(db, node, ver, 0, (isc_stdtime_t)0, &iter);
 	if (result != ISC_R_SUCCESS) {
 		goto cleanup_node;
 	}
@@ -1064,11 +1066,16 @@ find_zone_keys(dns_zone_t *zone, dns_db_t *db, dns_dbversion_t *ver,
 	isc_stdtime_t now;
 	dns_dbnode_t *node = NULL;
 	const char *directory = dns_zone_getkeydirectory(zone);
+
 	CHECK(dns_db_findnode(db, dns_db_origin(db), false, &node));
 	isc_stdtime_get(&now);
-	CHECK(dns_dnssec_findzonekeys(db, ver, node, dns_db_origin(db),
-				      directory, now, mctx, maxkeys, keys,
-				      nkeys));
+
+	dns_zone_lock_keyfiles(zone);
+	result = dns_dnssec_findzonekeys(db, ver, node, dns_db_origin(db),
+					 directory, now, mctx, maxkeys, keys,
+					 nkeys);
+	dns_zone_unlock_keyfiles(zone);
+
 failure:
 	if (node != NULL) {
 		dns_db_detachnode(db, &node);
@@ -1083,8 +1090,8 @@ static isc_result_t
 add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 	 dns_dbversion_t *ver, dns_name_t *name, dns_rdatatype_t type,
 	 dns_diff_t *diff, dst_key_t **keys, unsigned int nkeys,
-	 isc_stdtime_t inception, isc_stdtime_t expire, bool check_ksk,
-	 bool keyset_kskonly) {
+	 isc_stdtime_t now, isc_stdtime_t inception, isc_stdtime_t expire,
+	 bool check_ksk, bool keyset_kskonly) {
 	isc_result_t result;
 	dns_dbnode_t *node = NULL;
 	dns_kasp_t *kasp = dns_zone_getkasp(zone);
@@ -1095,11 +1102,13 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 	unsigned char data[1024]; /* XXX */
 	unsigned int i, j;
 	bool added_sig = false;
+	bool use_kasp = false;
 	isc_mem_t *mctx = diff->mctx;
 
 	if (kasp != NULL) {
 		check_ksk = false;
 		keyset_kskonly = true;
+		use_kasp = true;
 	}
 
 	dns_rdataset_init(&rdataset);
@@ -1117,6 +1126,7 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 
 #define REVOKE(x) ((dst_key_flags(x) & DNS_KEYFLAG_REVOKE) != 0)
 #define KSK(x)	  ((dst_key_flags(x) & DNS_KEYFLAG_KSK) != 0)
+#define ID(x)	  dst_key_id(x)
 #define ALG(x)	  dst_key_alg(x)
 
 	/*
@@ -1150,8 +1160,8 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 				}
 
 				/* Don't consider inactive keys, however
-				 * the key may be temporary offline, so do
-				 * consider keys which private key files are
+				 * the KSK may be temporary offline, so do
+				 * consider KSKs which private key files are
 				 * unavailable.
 				 */
 				if (dst_key_inactive(keys[j])) {
@@ -1163,7 +1173,7 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 				}
 				if (KSK(keys[j])) {
 					have_ksk = true;
-				} else {
+				} else if (dst_key_isprivate(keys[j])) {
 					have_nonksk = true;
 				}
 				both = have_ksk && have_nonksk;
@@ -1173,7 +1183,7 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 			}
 		}
 
-		if (kasp != NULL) {
+		if (use_kasp) {
 			/*
 			 * A dnssec-policy is found. Check what RRsets this
 			 * key should sign.
@@ -1214,7 +1224,8 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 				continue;
 			} else if (zsk &&
 				   !dst_key_is_signing(keys[i], DST_BOOL_ZSK,
-						       inception, &when)) {
+						       now, &when))
+			{
 				/*
 				 * This key is not active for zone-signing.
 				 */
@@ -1260,7 +1271,9 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 		/* Update DNSSEC sign statistics. */
 		if (dnssecsignstats != NULL) {
 			dns_dnssecsignstats_increment(dnssecsignstats,
-						      dst_key_id(keys[i]));
+						      ID(keys[i]),
+						      (uint8_t)ALG(keys[i]),
+						      dns_dnssecsignstats_sign);
 		}
 	}
 	if (!added_sig) {
@@ -1327,7 +1340,8 @@ del_keysigs(dns_db_t *db, dns_dbversion_t *ver, dns_name_t *name,
 			if (rrsig.keyid == dst_key_id(keys[i])) {
 				found = true;
 				if (!dst_key_isprivate(keys[i]) &&
-				    !dst_key_inactive(keys[i])) {
+				    !dst_key_inactive(keys[i]))
+				{
 					/*
 					 * The re-signing code in zone.c
 					 * will mark this as offline.
@@ -1368,8 +1382,9 @@ static isc_result_t
 add_exposed_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 		 dns_dbversion_t *ver, dns_name_t *name, bool cut,
 		 dns_diff_t *diff, dst_key_t **keys, unsigned int nkeys,
-		 isc_stdtime_t inception, isc_stdtime_t expire, bool check_ksk,
-		 bool keyset_kskonly, unsigned int *sigs) {
+		 isc_stdtime_t now, isc_stdtime_t inception,
+		 isc_stdtime_t expire, bool check_ksk, bool keyset_kskonly,
+		 unsigned int *sigs) {
 	isc_result_t result;
 	dns_dbnode_t *node;
 	dns_rdatasetiter_t *iter;
@@ -1384,7 +1399,7 @@ add_exposed_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 	}
 
 	iter = NULL;
-	result = dns_db_allrdatasets(db, node, ver, (isc_stdtime_t)0, &iter);
+	result = dns_db_allrdatasets(db, node, ver, 0, (isc_stdtime_t)0, &iter);
 	if (result != ISC_R_SUCCESS) {
 		goto cleanup_node;
 	}
@@ -1406,7 +1421,8 @@ add_exposed_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 		 * as they are handled elsewhere.
 		 */
 		if ((type == dns_rdatatype_rrsig) ||
-		    (cut && type != dns_rdatatype_ds)) {
+		    (cut && type != dns_rdatatype_ds))
+		{
 			continue;
 		}
 		result = rrset_exists(db, ver, name, dns_rdatatype_rrsig, type,
@@ -1418,7 +1434,7 @@ add_exposed_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 			continue;
 		}
 		result = add_sigs(log, zone, db, ver, name, type, diff, keys,
-				  nkeys, inception, expire, check_ksk,
+				  nkeys, now, inception, expire, check_ksk,
 				  keyset_kskonly);
 		if (result != ISC_R_SUCCESS) {
 			goto cleanup_iterator;
@@ -1467,17 +1483,19 @@ struct dns_update_state {
 	dns_diff_t work;
 	dst_key_t *zone_keys[DNS_MAXZONEKEYS];
 	unsigned int nkeys;
-	isc_stdtime_t inception, expire, soaexpire, keyexpire;
+	isc_stdtime_t now, inception, expire, soaexpire, keyexpire;
 	dns_ttl_t nsecttl;
 	bool check_ksk, keyset_kskonly, build_nsec3;
-	enum { sign_updates,
-	       remove_orphaned,
-	       build_chain,
-	       process_nsec,
-	       sign_nsec,
-	       update_nsec3,
-	       process_nsec3,
-	       sign_nsec3 } state;
+	enum {
+		sign_updates,
+		remove_orphaned,
+		build_chain,
+		process_nsec,
+		sign_nsec,
+		update_nsec3,
+		process_nsec3,
+		sign_nsec3
+	} state;
 };
 
 static uint32_t
@@ -1511,7 +1529,6 @@ dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 	dns_difftuple_t *t, *next;
 	bool flag, build_nsec;
 	unsigned int i;
-	isc_stdtime_t now;
 	dns_rdata_soa_t soa;
 	dns_rdata_t rdata = DNS_RDATA_INIT;
 	dns_rdataset_t rdataset;
@@ -1548,16 +1565,17 @@ dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 			goto failure;
 		}
 
-		isc_stdtime_get(&now);
-		state->inception = now - 3600; /* Allow for some clock skew. */
-		state->expire = now +
+		isc_stdtime_get(&state->now);
+		state->inception = state->now - 3600; /* Allow for some clock
+							 skew. */
+		state->expire = state->now +
 				dns__jitter_expire(zone, sigvalidityinterval);
-		state->soaexpire = now + sigvalidityinterval;
+		state->soaexpire = state->now + sigvalidityinterval;
 		state->keyexpire = dns_zone_getkeyvalidityinterval(zone);
 		if (state->keyexpire == 0) {
 			state->keyexpire = state->expire;
 		} else {
-			state->keyexpire += now;
+			state->keyexpire += state->now;
 		}
 
 		/*
@@ -1572,7 +1590,8 @@ dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 					  DNS_ZONEOPT_DNSKEYKSKONLY) != 0);
 
 		/*
-		 * Get the NSEC/NSEC3 TTL from the SOA MINIMUM field.
+		 * Calculate the NSEC/NSEC3 TTL as a minimum of the SOA TTL and
+		 * MINIMUM field.
 		 */
 		CHECK(dns_db_findnode(db, dns_db_origin(db), false, &node));
 		dns_rdataset_init(&rdataset);
@@ -1582,7 +1601,7 @@ dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 		CHECK(dns_rdataset_first(&rdataset));
 		dns_rdataset_current(&rdataset, &rdata);
 		CHECK(dns_rdata_tostruct(&rdata, &soa, NULL));
-		state->nsecttl = soa.minimum;
+		state->nsecttl = ISC_MIN(rdataset.ttl, soa.minimum);
 		dns_rdataset_disassociate(&rdataset);
 		dns_db_detachnode(db, &node);
 
@@ -1672,8 +1691,8 @@ next_state:
 						log, zone, db, newver, name,
 						type, &state->sig_diff,
 						state->zone_keys, state->nkeys,
-						state->inception, exp,
-						state->check_ksk,
+						state->now, state->inception,
+						exp, state->check_ksk,
 						state->keyset_kskonly));
 					sigs++;
 				}
@@ -1681,7 +1700,8 @@ next_state:
 				/* Skip any other updates to the same RRset. */
 				while (t != NULL &&
 				       dns_name_equal(&t->name, name) &&
-				       t->rdata.type == type) {
+				       t->rdata.type == type)
+				{
 					next = ISC_LIST_NEXT(t, link);
 					ISC_LIST_UNLINK(diff->tuples, t, link);
 					ISC_LIST_APPEND(state->work.tuples, t,
@@ -1697,7 +1717,7 @@ next_state:
 
 		update_log(log, zone, ISC_LOG_DEBUG(3),
 			   "updated data signatures");
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case remove_orphaned:
 		state->state = remove_orphaned;
 
@@ -1729,7 +1749,7 @@ next_state:
 		update_log(log, zone, ISC_LOG_DEBUG(3),
 			   "rebuilding NSEC chain");
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case build_chain:
 		state->state = build_chain;
 		/*
@@ -1803,7 +1823,8 @@ next_state:
 					   dns_rdatatype_dname, 0,
 					   &dname_exists));
 			if ((ns_exists || dname_exists) ==
-			    (ns_existed || dname_existed)) {
+			    (ns_existed || dname_existed))
+			{
 				continue;
 			}
 			/*
@@ -1819,7 +1840,7 @@ next_state:
 
 		CHECK(uniqify_name_list(&state->affected));
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case process_nsec:
 		state->state = process_nsec;
 
@@ -1873,9 +1894,10 @@ next_state:
 				CHECK(add_exposed_sigs(
 					log, zone, db, newver, name, cut,
 					&state->sig_diff, state->zone_keys,
-					state->nkeys, state->inception,
-					state->expire, state->check_ksk,
-					state->keyset_kskonly, &sigs));
+					state->nkeys, state->now,
+					state->inception, state->expire,
+					state->check_ksk, state->keyset_kskonly,
+					&sigs));
 			}
 		unlink:
 			ISC_LIST_UNLINK(state->affected.tuples, t, link);
@@ -1935,7 +1957,7 @@ next_state:
 		update_log(log, zone, ISC_LOG_DEBUG(3),
 			   "signing rebuilt NSEC chain");
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case sign_nsec:
 		state->state = sign_nsec;
 		/* Update RRSIG NSECs. */
@@ -1951,13 +1973,12 @@ next_state:
 					       dns_rdatatype_nsec,
 					       &state->sig_diff,
 					       state->zone_keys, state->nkeys,
-					       state->inception, state->expire,
-					       state->check_ksk,
+					       state->now, state->inception,
+					       state->expire, state->check_ksk,
 					       state->keyset_kskonly));
 				sigs++;
 			} else {
-				INSIST(0);
-				ISC_UNREACHABLE();
+				UNREACHABLE();
 			}
 			ISC_LIST_UNLINK(state->nsec_mindiff.tuples, t, link);
 			ISC_LIST_APPEND(state->work.tuples, t, link);
@@ -1967,7 +1988,7 @@ next_state:
 		}
 		ISC_LIST_APPENDLIST(state->nsec_mindiff.tuples,
 				    state->work.tuples, link);
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case update_nsec3:
 		state->state = update_nsec3;
 
@@ -2014,7 +2035,8 @@ next_state:
 			bool exists, existed;
 
 			if (t->rdata.type == dns_rdatatype_nsec ||
-			    t->rdata.type == dns_rdatatype_rrsig) {
+			    t->rdata.type == dns_rdatatype_rrsig)
+			{
 				t = ISC_LIST_NEXT(t, link);
 				continue;
 			}
@@ -2059,7 +2081,7 @@ next_state:
 			}
 		}
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case process_nsec3:
 		state->state = process_nsec3;
 		while ((t = ISC_LIST_HEAD(state->affected.tuples)) != NULL) {
@@ -2080,9 +2102,10 @@ next_state:
 				CHECK(add_exposed_sigs(
 					log, zone, db, newver, name, cut,
 					&state->sig_diff, state->zone_keys,
-					state->nkeys, state->inception,
-					state->expire, state->check_ksk,
-					state->keyset_kskonly, &sigs));
+					state->nkeys, state->now,
+					state->inception, state->expire,
+					state->check_ksk, state->keyset_kskonly,
+					&sigs));
 				CHECK(dns_nsec3_addnsec3sx(
 					db, newver, name, state->nsecttl,
 					unsecure, privatetype,
@@ -2110,7 +2133,7 @@ next_state:
 		update_log(log, zone, ISC_LOG_DEBUG(3),
 			   "signing rebuilt NSEC3 chain");
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case sign_nsec3:
 		state->state = sign_nsec3;
 		/* Update RRSIG NSEC3s. */
@@ -2126,13 +2149,12 @@ next_state:
 					       dns_rdatatype_nsec3,
 					       &state->sig_diff,
 					       state->zone_keys, state->nkeys,
-					       state->inception, state->expire,
-					       state->check_ksk,
+					       state->now, state->inception,
+					       state->expire, state->check_ksk,
 					       state->keyset_kskonly));
 				sigs++;
 			} else {
-				INSIST(0);
-				ISC_UNREACHABLE();
+				UNREACHABLE();
 			}
 			ISC_LIST_UNLINK(state->nsec_mindiff.tuples, t, link);
 			ISC_LIST_APPEND(state->work.tuples, t, link);
@@ -2159,8 +2181,7 @@ next_state:
 		INSIST(ISC_LIST_EMPTY(state->nsec_mindiff.tuples));
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 failure:
@@ -2180,7 +2201,7 @@ failure:
 		dst_key_free(&state->zone_keys[i]);
 	}
 
-	if (state != &mystate && state != NULL) {
+	if (state != &mystate) {
 		*statep = NULL;
 		state->magic = 0;
 		isc_mem_put(diff->mctx, state, sizeof(*state));
@@ -2191,47 +2212,72 @@ failure:
 
 static isc_stdtime_t
 epoch_to_yyyymmdd(time_t when) {
-	struct tm *tm;
-
-#if !defined(WIN32)
-	struct tm tm0;
-	tm = localtime_r(&when, &tm0);
-#else  /* if !defined(WIN32) */
-	tm = localtime(&when);
-#endif /* if !defined(WIN32) */
+	struct tm t, *tm = localtime_r(&when, &t);
+	if (tm == NULL) {
+		return (0);
+	}
 	return (((tm->tm_year + 1900) * 10000) + ((tm->tm_mon + 1) * 100) +
 		tm->tm_mday);
 }
 
-uint32_t
-dns_update_soaserial(uint32_t serial, dns_updatemethod_t method) {
+static uint32_t
+dns__update_soaserial(uint32_t serial, dns_updatemethod_t method) {
 	isc_stdtime_t now;
-	uint32_t new_serial;
 
 	switch (method) {
 	case dns_updatemethod_none:
 		return (serial);
 	case dns_updatemethod_unixtime:
 		isc_stdtime_get(&now);
-		if (now != 0 && isc_serial_gt(now, serial)) {
-			return (now);
-		}
-		break;
+		return (now);
 	case dns_updatemethod_date:
 		isc_stdtime_get(&now);
-		new_serial = epoch_to_yyyymmdd((time_t)now) * 100;
-		if (new_serial != 0 && isc_serial_gt(new_serial, serial)) {
-			return (new_serial);
+		return (epoch_to_yyyymmdd((time_t)now) * 100);
+	case dns_updatemethod_increment:
+		/* RFC1982 */
+		serial = (serial + 1) & 0xFFFFFFFF;
+		if (serial == 0) {
+			return (1);
 		}
+		return (serial);
+	default:
+		UNREACHABLE();
+	}
+}
+
+uint32_t
+dns_update_soaserial(uint32_t serial, dns_updatemethod_t method,
+		     dns_updatemethod_t *used) {
+	uint32_t new_serial = dns__update_soaserial(serial, method);
+	switch (method) {
+	case dns_updatemethod_none:
 	case dns_updatemethod_increment:
 		break;
+	case dns_updatemethod_unixtime:
+	case dns_updatemethod_date:
+		if (!(new_serial != 0 && isc_serial_gt(new_serial, serial))) {
+			/*
+			 * If the new date serial following YYYYMMDD00 is equal
+			 * to or smaller than the current serial, but YYYYMMDD99
+			 * would be larger, pretend we have used the
+			 * "dns_updatemethod_date" method.
+			 */
+			if (method == dns_updatemethod_unixtime ||
+			    !isc_serial_gt(new_serial + 99, serial))
+			{
+				method = dns_updatemethod_increment;
+			}
+			new_serial = dns__update_soaserial(
+				serial, dns_updatemethod_increment);
+		}
+		break;
+	default:
+		UNREACHABLE();
 	}
 
-	/* RFC1982 */
-	serial = (serial + 1) & 0xFFFFFFFF;
-	if (serial == 0) {
-		serial = 1;
+	if (used != NULL) {
+		*used = method;
 	}
 
-	return (serial);
+	return (new_serial);
 }

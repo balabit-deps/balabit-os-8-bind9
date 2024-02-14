@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -286,10 +288,6 @@ resconf_parsenameserver(irs_resconf_t *conf, FILE *fp) {
 	int cp;
 	isc_result_t result;
 
-	if (conf->numns == RESCONFMAXNAMESERVERS) {
-		return (ISC_R_SUCCESS);
-	}
-
 	cp = getword(fp, word, sizeof(word));
 	if (strlen(word) == 0U) {
 		return (ISC_R_UNEXPECTEDEND); /* Nothing on line. */
@@ -299,6 +297,10 @@ resconf_parsenameserver(irs_resconf_t *conf, FILE *fp) {
 
 	if (cp != EOF && cp != '\n') {
 		return (ISC_R_UNEXPECTEDTOKEN); /* Extra junk on line. */
+	}
+
+	if (conf->numns == RESCONFMAXNAMESERVERS) {
+		return (ISC_R_SUCCESS);
 	}
 
 	result = add_server(conf->mctx, word, &conf->nameservers);

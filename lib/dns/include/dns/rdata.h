@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -108,7 +110,7 @@ ISC_LANG_BEGINDECLS
  * purpose the client desires.
  */
 struct dns_rdata {
-	unsigned char *	 data;
+	unsigned char	*data;
 	unsigned int	 length;
 	dns_rdataclass_t rdclass;
 	dns_rdatatype_t	 type;
@@ -516,7 +518,7 @@ dns_rdata_tostruct(const dns_rdata_t *rdata, void *target, isc_mem_t *mctx);
  *
  * Requires:
  *
- *\li	'rdata' is a valid, non-empty rdata.
+ *\li	'rdata' is a valid, non-empty, non-pseudo rdata.
  *
  *\li	'target' to point to a valid pointer for the type and class.
  *
@@ -695,6 +697,21 @@ dns_rdatatype_atcname(dns_rdatatype_t type);
  *
  */
 
+bool
+dns_rdatatype_followadditional(dns_rdatatype_t type);
+/*%<
+ * Return true if adding a record of type 'type' to the ADDITIONAL section
+ * of a message can itself trigger the addition of still more data to the
+ * additional section.
+ *
+ * (For example: adding SRV to the ADDITIONAL section may trigger
+ * the addition of address records associated with that SRV.)
+ *
+ * Requires:
+ * \li	'type' is a valid rdata type.
+ *
+ */
+
 unsigned int
 dns_rdatatype_attributes(dns_rdatatype_t rdtype);
 /*%<
@@ -729,6 +746,8 @@ dns_rdatatype_attributes(dns_rdatatype_t rdtype);
 #define DNS_RDATATYPEATTR_ATPARENT 0x00000200U
 /*% Can exist along side a CNAME */
 #define DNS_RDATATYPEATTR_ATCNAME 0x00000400U
+/*% Follow additional */
+#define DNS_RDATATYPEATTR_FOLLOWADDITIONAL 0x00000800U
 
 dns_rdatatype_t
 dns_rdata_covers(dns_rdata_t *rdata);

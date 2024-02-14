@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,7 +20,7 @@
 
 #define RRTYPE_LP_ATTRIBUTES (0)
 
-static inline isc_result_t
+static isc_result_t
 fromtext_lp(ARGS_FROMTEXT) {
 	isc_token_t token;
 	dns_name_t name;
@@ -48,7 +50,7 @@ fromtext_lp(ARGS_FROMTEXT) {
 	return (dns_name_fromtext(&name, &buffer, origin, options, target));
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_lp(ARGS_TOTEXT) {
 	isc_region_t region;
 	dns_name_t name;
@@ -76,7 +78,7 @@ totext_lp(ARGS_TOTEXT) {
 	return (dns_name_totext(&prefix, sub, target));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_lp(ARGS_FROMWIRE) {
 	dns_name_t name;
 	isc_region_t sregion;
@@ -99,7 +101,7 @@ fromwire_lp(ARGS_FROMWIRE) {
 	return (dns_name_fromwire(&name, source, dctx, options, target));
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_lp(ARGS_TOWIRE) {
 	REQUIRE(rdata->type == dns_rdatatype_lp);
 	REQUIRE(rdata->length != 0);
@@ -109,7 +111,7 @@ towire_lp(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, rdata->data, rdata->length));
 }
 
-static inline int
+static int
 compare_lp(ARGS_COMPARE) {
 	isc_region_t region1;
 	isc_region_t region2;
@@ -126,7 +128,7 @@ compare_lp(ARGS_COMPARE) {
 	return (isc_region_compare(&region1, &region2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_lp(ARGS_FROMSTRUCT) {
 	dns_rdata_lp_t *lp = source;
 	isc_region_t region;
@@ -144,7 +146,7 @@ fromstruct_lp(ARGS_FROMSTRUCT) {
 	return (isc_buffer_copyregion(target, &region));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_lp(ARGS_TOSTRUCT) {
 	isc_region_t region;
 	dns_rdata_lp_t *lp = target;
@@ -169,7 +171,7 @@ tostruct_lp(ARGS_TOSTRUCT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline void
+static void
 freestruct_lp(ARGS_FREESTRUCT) {
 	dns_rdata_lp_t *lp = source;
 
@@ -184,7 +186,7 @@ freestruct_lp(ARGS_FREESTRUCT) {
 	lp->mctx = NULL;
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_lp(ARGS_ADDLDATA) {
 	dns_name_t name;
 	dns_offsets_t offsets;
@@ -205,7 +207,7 @@ additionaldata_lp(ARGS_ADDLDATA) {
 	return ((add)(arg, &name, dns_rdatatype_l64));
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_lp(ARGS_DIGEST) {
 	isc_region_t region;
 
@@ -215,7 +217,7 @@ digest_lp(ARGS_DIGEST) {
 	return ((digest)(arg, &region));
 }
 
-static inline bool
+static bool
 checkowner_lp(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_lp);
 
@@ -227,7 +229,7 @@ checkowner_lp(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_lp(ARGS_CHECKNAMES) {
 	REQUIRE(rdata->type == dns_rdatatype_lp);
 
@@ -237,7 +239,7 @@ checknames_lp(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_lp(ARGS_COMPARE) {
 	dns_name_t name1;
 	dns_name_t name2;

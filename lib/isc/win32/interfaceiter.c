@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -90,8 +92,7 @@ get_addr(unsigned int family, isc_netaddr_t *dst, struct sockaddr *src) {
 		dst->zone = ((struct sockaddr_in6 *)src)->sin6_scope_id;
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 }
 
@@ -176,7 +177,8 @@ isc_interfaceiter_create(isc_mem_t *mctx, isc_interfaceiter_t **iterp) {
 			 * case and retry.
 			 */
 			if (bytesReturned > 0 &&
-			    (bytesReturned < iter->buf4size)) {
+			    (bytesReturned < iter->buf4size))
+			{
 				break;
 			}
 		}
@@ -385,8 +387,9 @@ internal_current6(isc_interfaceiter_t *iter) {
 		snprintf(iter->current.name, sizeof(iter->current.name),
 			 "TCP/IPv6 Interface %u", iter->pos6 + 1);
 
-		for (i = 0; i < 16; i++)
+		for (i = 0; i < 16; i++) {
 			iter->current.netmask.type.in6.s6_addr[i] = 0xff;
+		}
 		iter->current.netmask.family = AF_INET6;
 		if (IN6_IS_ADDR_LOOPBACK(&iter->current.address.type.in6)) {
 			iter->v6loop = true;

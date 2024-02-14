@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -173,13 +175,14 @@ typedef isc_event_t intev_t;
 /*
  * Socket State
  */
-enum { SOCK_INITIALIZED, /* Socket Initialized */
-       SOCK_OPEN,	 /* Socket opened but nothing yet to do */
-       SOCK_DATA,	 /* Socket sending or receiving data */
-       SOCK_LISTEN,	 /* TCP Socket listening for connects */
-       SOCK_ACCEPT,	 /* TCP socket is waiting to accept */
-       SOCK_CONNECT,	 /* TCP Socket connecting */
-       SOCK_CLOSED,	 /* Socket has been closed */
+enum {
+	SOCK_INITIALIZED, /* Socket Initialized */
+	SOCK_OPEN,	  /* Socket opened but nothing yet to do */
+	SOCK_DATA,	  /* Socket sending or receiving data */
+	SOCK_LISTEN,	  /* TCP Socket listening for connects */
+	SOCK_ACCEPT,	  /* TCP socket is waiting to accept */
+	SOCK_CONNECT,	  /* TCP Socket connecting */
+	SOCK_CLOSED,	  /* Socket has been closed */
 };
 
 #define SOCKET_MAGIC	ISC_MAGIC('I', 'O', 'i', 'o')
@@ -272,7 +275,7 @@ struct isc_socket {
 	unsigned int listener : 1,		    /* listener socket */
 		connected : 1, pending_connect : 1, /* connect
 						     * pending */
-		bound : 1,			    /* bound to local addr */
+		bound  : 1,			    /* bound to local addr */
 		dupped : 1;	     /* created by isc_socket_dup() */
 	unsigned int pending_iocp;   /* Should equal the counters below.
 				      * Debug. */
@@ -336,7 +339,6 @@ struct isc_socketmgr {
 	HANDLE hIoCompletionPort;
 	int maxIOCPThreads;
 	HANDLE hIOCPThreads[MAX_IOCPTHREADS];
-	DWORD dwIOCPThreadIds[MAX_IOCPTHREADS];
 	size_t maxudp;
 
 	/*
@@ -474,7 +476,8 @@ signal_iocompletionport_exit(isc_socketmgr_t *manager) {
 	REQUIRE(VALID_MANAGER(manager));
 	for (i = 0; i < manager->maxIOCPThreads; i++) {
 		if (!PostQueuedCompletionStatus(manager->hIoCompletionPort, 0,
-						0, 0)) {
+						0, 0))
+		{
 			errval = GetLastError();
 			strerror_r(errval, strbuf, sizeof(strbuf));
 			FATAL_ERROR(__FILE__, __LINE__,
@@ -499,15 +502,8 @@ iocompletionport_createthreads(int total_threads, isc_socketmgr_t *manager) {
 	 * We need at least one
 	 */
 	for (i = 0; i < total_threads; i++) {
-		manager->hIOCPThreads[i] =
-			CreateThread(NULL, 0, SocketIoThread, manager, 0,
-				     &manager->dwIOCPThreadIds[i]);
-		if (manager->hIOCPThreads[i] == NULL) {
-			errval = GetLastError();
-			strerror_r(errval, strbuf, sizeof(strbuf));
-			FATAL_ERROR(__FILE__, __LINE__,
-				    "Can't create IOCP thread: %s", strbuf);
-		}
+		isc_thread_create(SocketIoThread, manager,
+				  &manager->hIOCPThreads[i]);
 	}
 }
 
@@ -796,7 +792,7 @@ retry:
 				need_retry = true;
 				break;
 			}
-			/* FALLTHROUGH */
+			FALLTHROUGH;
 
 		default:
 			isc_result = isc__errno2result(Error);
@@ -1033,9 +1029,10 @@ dump_msg(struct msghdr *msg, isc_socket_t *sock) {
 	printf("MSGHDR %p, Socket #: %Iu\n", msg, sock->fd);
 	printf("\tname %p, namelen %d\n", msg->msg_name, msg->msg_namelen);
 	printf("\tiov %p, iovlen %d\n", msg->msg_iov, msg->msg_iovlen);
-	for (i = 0; i < (unsigned int)msg->msg_iovlen; i++)
+	for (i = 0; i < (unsigned int)msg->msg_iovlen; i++) {
 		printf("\t\t%u\tbase %p, len %u\n", i, msg->msg_iov[i].buf,
 		       msg->msg_iov[i].len);
+	}
 }
 #endif /* if defined(ISC_SOCKET_DEBUG) */
 
@@ -1463,7 +1460,7 @@ consistent(isc_socket_t *sock) {
 		socket_log(__LINE__, sock, NULL, CREATION,
 			   "SOCKET INCONSISTENT: %s", crash_reason);
 		sock_dump(sock);
-		INSIST(crash == false);
+		INSIST(!crash);
 	}
 }
 
@@ -2057,7 +2054,8 @@ internal_connect(isc_socket_t *sock, IoCompletionInfo *lpo, int connect_errno) {
 		 * fd and pretend nothing strange happened.
 		 */
 		if (SOFT_ERROR(connect_errno) ||
-		    connect_errno == WSAEINPROGRESS) {
+		    connect_errno == WSAEINPROGRESS)
+		{
 			sock->pending_connect = 1;
 			CONSISTENT(sock);
 			UNLOCK(&sock->lock);
@@ -2375,7 +2373,8 @@ SocketIoThread(LPVOID ThreadContext) {
 	 * higher than the timer sync thread.
 	 */
 	if (!SetThreadPriority(GetCurrentThread(),
-			       THREAD_PRIORITY_ABOVE_NORMAL)) {
+			       THREAD_PRIORITY_ABOVE_NORMAL))
+	{
 		errval = GetLastError();
 		strerror_r(errval, strbuf, sizeof(strbuf));
 		FATAL_ERROR(__FILE__, __LINE__, "Can't set thread priority: %s",
@@ -2464,7 +2463,8 @@ SocketIoThread(LPVOID ThreadContext) {
 
 				if (acceptdone_is_active(sock, lpo->adev)) {
 					if (restart_accept(sock, lpo) ==
-					    ISC_R_SUCCESS) {
+					    ISC_R_SUCCESS)
+					{
 						UNLOCK(&sock->lock);
 						goto wait_again;
 					} else {
@@ -2488,7 +2488,7 @@ SocketIoThread(LPVOID ThreadContext) {
 					closesocket(lpo->adev->newsocket->fd);
 					lpo->adev->newsocket->fd =
 						INVALID_SOCKET;
-					isc_refcount_decrement(
+					isc_refcount_decrementz(
 						&lpo->adev->newsocket
 							 ->references);
 					free_socket(&lpo->adev->newsocket,
@@ -2848,7 +2848,8 @@ socket_send(isc_socket_t *sock, isc_socketevent_t *dev, isc_task_t *task,
 		 * queue it unless ISC_SOCKFLAG_NORETRY is set.
 		 */
 		if ((flags & ISC_SOCKFLAG_NORETRY) == 0 ||
-		    io_state == DOIO_PENDING) {
+		    io_state == DOIO_PENDING)
+		{
 			isc_task_attach(task, &ntask);
 			dev->attributes |= ISC_SOCKEVENTATTR_ATTACHED;
 
@@ -3083,7 +3084,8 @@ isc_socket_listen(isc_socket_t *sock, unsigned int backlog) {
 
 #if defined(ENABLE_TCP_FASTOPEN) && defined(TCP_FASTOPEN)
 	if (setsockopt(sock->fd, IPPROTO_TCP, TCP_FASTOPEN, &on, sizeof(on)) <
-	    0) {
+	    0)
+	{
 		strerror_r(errno, strbuf, sizeof(strbuf));
 		UNEXPECTED_ERROR(__FILE__, __LINE__,
 				 "setsockopt(%d, TCP_FASTOPEN) failed with %s",
@@ -3490,7 +3492,8 @@ isc_socket_cancel(isc_socket_t *sock, isc_task_t *task, unsigned int how) {
 	how &= ~ISC_SOCKCANCEL_SEND;
 
 	if (((how & ISC_SOCKCANCEL_ACCEPT) != 0) &&
-	    !ISC_LIST_EMPTY(sock->accept_list)) {
+	    !ISC_LIST_EMPTY(sock->accept_list))
+	{
 		isc_socket_newconnev_t *dev;
 		isc_socket_newconnev_t *next;
 		isc_task_t *current_task;
@@ -3501,7 +3504,7 @@ isc_socket_cancel(isc_socket_t *sock, isc_task_t *task, unsigned int how) {
 			next = ISC_LIST_NEXT(dev, ev_link);
 
 			if ((task == NULL) || (task == current_task)) {
-				isc_refcount_decrement(
+				isc_refcount_decrementz(
 					&dev->newsocket->references);
 				closesocket(dev->newsocket->fd);
 				dev->newsocket->fd = INVALID_SOCKET;
@@ -3953,15 +3956,6 @@ error:
 	return (result);
 }
 #endif /* HAVE_JSON_C */
-
-isc_result_t
-isc_socketmgr_createinctx(isc_mem_t *mctx, isc_socketmgr_t **managerp) {
-	isc_result_t result;
-
-	result = isc_socketmgr_create(mctx, managerp);
-
-	return (result);
-}
 
 void
 isc_socketmgr_maxudp(isc_socketmgr_t *manager, unsigned int maxudp) {

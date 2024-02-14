@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -129,14 +131,14 @@ main(int argc, char **argv) {
 	} else if (PROGCMP("ddns-confgen")) {
 		progmode = progmode_confgen;
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	isc_commandline_errprint = false;
 
 	while ((ch = isc_commandline_parse(argc, argv, "a:hk:Mmr:qs:y:z:")) !=
-	       -1) {
+	       -1)
+	{
 		switch (ch) {
 		case 'a':
 			algname = isc_commandline_argument;

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -359,7 +361,7 @@ isc_net_probe_ipv6pktinfo(void) {
 
 #if ISC_CMSG_IP_TOS || defined(IPV6_TCLASS)
 
-static inline socklen_t
+static socklen_t
 cmsg_len(socklen_t len) {
 #ifdef CMSG_LEN
 	return (CMSG_LEN(len));
@@ -375,7 +377,7 @@ cmsg_len(socklen_t len) {
 #endif /* ifdef CMSG_LEN */
 }
 
-static inline socklen_t
+static socklen_t
 cmsg_space(socklen_t len) {
 #ifdef CMSG_SPACE
 	return (CMSG_SPACE(len));
@@ -506,8 +508,7 @@ cmsgsend(int s, int level, int type, struct addrinfo *res) {
 		break;
 #endif /* ifdef IPV6_TCLASS */
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	if (sendmsg(s, &msg, 0) < 0) {

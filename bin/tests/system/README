@@ -1,6 +1,13 @@
 Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 
-See COPYRIGHT in the source root or http://isc.org/copyright.html for terms.
+SPDX-License-Identifier: MPL-2.0
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0.  If a copy of the MPL was not distributed with this
+file, you can obtain one at https://mozilla.org/MPL/2.0/.
+
+See the COPYRIGHT file distributed with this work for additional
+information regarding copyright ownership.
 
 Introduction
 ===
@@ -214,9 +221,6 @@ This indicates the type of message.  This is one of:
             FAIL        The test failed
             SKIPPED     The test was not run, usually because some
                         prerequisites required to run the test are missing.
-            UNTESTED    The test was not run for some other reason, e.g. a
-                        prerequisite is available but is not compatible with
-                        the platform on which the test is run.
 
 <test-name>
 This is the name of the test from which the message emanated, which is also the
@@ -270,9 +274,9 @@ As noted above, each test is in a separate directory.  To interact with the
 test framework, the directories contain the following standard files:
 
 prereq.sh   Run at the beginning to determine whether the test can be run at
-            all; if not, we see a result of R:SKIPPED or R:UNTESTED.  This file
-            is optional: if not present, the test is assumed to have all its
-            prerequisites met.
+            all; if not, we see a R:SKIPPED result.  This file is optional:
+            if not present, the test is assumed to have all its prerequisites
+            met.
 
 setup.sh    Run after prereq.sh, this sets up the preconditions for the tests.
             Although optional, virtually all tests will require such a file to
@@ -658,14 +662,12 @@ or SEQUENTIAL variables.
 need to edit multiple files to add a test.)
 
 
-Valgrind
+rr
 ---
-When running system tests, named can be run under Valgrind.  The output from
-Valgrind are sent to per-process files that can be reviewed after the test has
-completed.  To enable this, set the USE_VALGRIND environment variable to
-"helgrind" to run the Helgrind tool, or any other value to run the Memcheck
-tool.  To use "helgrind" effectively, build BIND with --disable-atomic.
-
+When running system tests, named can be run under the rr tool. rr records a
+trace to the $system_test/nsX/named-Y/ directory, which can be later used to
+replay named. To enable this, execute start.pl with the USE_RR environment
+variable set.
 
 Maintenance Notes
 ===

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -17,6 +19,7 @@
 #include <stdbool.h>
 
 #include <isc/lang.h>
+#include <isc/rwlock.h>
 
 #include <dns/types.h>
 
@@ -160,7 +163,7 @@ dns_zt_asyncload(dns_zt_t *zt, bool newonly, dns_zt_allloaded_t alldone,
  */
 
 isc_result_t
-dns_zt_freezezones(dns_zt_t *zt, bool freeze);
+dns_zt_freezezones(dns_zt_t *zt, dns_view_t *view, bool freeze);
 /*%<
  * Freeze/thaw updates to master zones.
  * Any pending updates will be flushed.
@@ -168,7 +171,7 @@ dns_zt_freezezones(dns_zt_t *zt, bool freeze);
  */
 
 isc_result_t
-dns_zt_apply(dns_zt_t *zt, bool stop, isc_result_t *sub,
+dns_zt_apply(dns_zt_t *zt, isc_rwlocktype_t lock, bool stop, isc_result_t *sub,
 	     isc_result_t (*action)(dns_zone_t *, void *), void *uap);
 /*%<
  * Apply a given 'action' to all zone zones in the table.

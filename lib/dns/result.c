@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -164,6 +166,17 @@ static const char *text[DNS_R_NRESULTS] = {
 	"SIG(0) in wrong location", /*%< 116 DNS_R_BADSIG0 */
 	"too many records",	    /*%< 117 DNS_R_TOOMANYRECORDS */
 	"verify failure",	    /*%< 118 DNS_R_VERIFYFAILURE */
+	"at top of zone",	    /*%< 119 DNS_R_ATZONETOP */
+
+	"no matching key found",	 /*%< 120 DNS_R_NOKEYMATCH */
+	"too many keys matching",	 /*%< 121 DNS_R_TOOMANYKEYS */
+	"key is not actively signing",	 /*%< 122 DNS_R_KEYNOTACTIVE */
+	"NSEC3 iterations out of range", /*%< 123 DNS_R_NSEC3ITERRANGE */
+	"NSEC3 salt length too high",	 /*%< 124 DNS_R_NSEC3SALTRANGE */
+
+	"cannot use NSEC3 with key algorithm", /*%< 125 DNS_R_NSEC3BADALG */
+	"NSEC3 resalt",			       /*%< 126 DNS_R_NSEC3RESALT */
+	"inconsistent resource record",	       /*%< 127 DNS_R_INCONSISTENTRR */
 };
 
 static const char *ids[DNS_R_NRESULTS] = {
@@ -290,6 +303,15 @@ static const char *ids[DNS_R_NRESULTS] = {
 	"DNS_R_BADSIG0",
 	"DNS_R_TOOMANYRECORDS",
 	"DNS_R_VERIFYFAILURE",
+	"DNS_R_ATZONETOP",
+	"DNS_R_NOKEYMATCH",
+	"DNS_R_TOOMANYKEYS",
+	"DNS_R_KEYNOTACTIVE",
+	"DNS_R_NSEC3ITERRANGE",
+	"DNS_R_NSEC3SALTRANGE",
+	"DNS_R_NSEC3BADALG",
+	"DNS_R_NSEC3RESALT",
+	"DNS_R_INCONSISTENTRR",
 };
 
 static const char *rcode_text[DNS_R_NRCODERESULTS] = {
@@ -383,7 +405,7 @@ dns_result_torcode(isc_result_t result) {
 		 * Rcodes can't be bigger than 12 bits, which is why we
 		 * AND with 0xFFF instead of 0xFFFF.
 		 */
-		return ((dns_rcode_t)((result)&0xFFF));
+		return ((dns_rcode_t)((result) & 0xFFF));
 	}
 
 	/*

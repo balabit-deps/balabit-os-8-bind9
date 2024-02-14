@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -40,7 +42,7 @@ zone "." {
 };
 
 zone "example" {
-	type master;
+	type primary;
 	file "example.db";
 	allow-query { any; };
 	allow-transfer { any; };
@@ -49,7 +51,7 @@ zone "example" {
 };
 
 zone "bar" {
-	type master;
+	type primary;
 	file "bar.db";
 	allow-query { any; };
 	allow-transfer { any; };
@@ -59,7 +61,7 @@ zone "bar" {
 };
 
 zone "private.secure.example" {
-	type master;
+	type primary;
 	file "private.secure.example.db";
 	allow-query { any; };
 	allow-transfer { any; };
@@ -68,7 +70,7 @@ zone "private.secure.example" {
 };
 
 zone "insecure.secure.example" {
-	type master;
+	type primary;
 	file "insecure.secure.example.db";
 	allow-query { any; };
 	allow-transfer { any; };
@@ -77,7 +79,7 @@ zone "insecure.secure.example" {
 };
 
 zone "child.nsec3.example" {
-	type master;
+	type primary;
 	file "child.nsec3.example.db";
 	allow-query { any; };
 	allow-transfer { any; };
@@ -86,8 +88,17 @@ zone "child.nsec3.example" {
 };
 
 zone "child.optout.example" {
-	type master;
+	type primary;
 	file "child.optout.example.db";
+	allow-query { any; };
+	allow-transfer { any; };
+	allow-update { any; };
+	auto-dnssec maintain;
+};
+
+zone "optout-with-ent" {
+	type primary;
+	file "optout-with-ent.db";
 	allow-query { any; };
 	allow-transfer { any; };
 	allow-update { any; };

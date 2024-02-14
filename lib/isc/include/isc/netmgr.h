@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -11,32 +13,83 @@
 
 #pragma once
 
+#include <unistd.h>
+
 #include <isc/mem.h>
+#include <isc/region.h>
 #include <isc/result.h>
 #include <isc/types.h>
 
-typedef enum {
-	NMEV_READ,
-	NMEV_WRITE,
-	NMEV_ACCEPT,
-	NMEV_CONNECTED,
-	NMEV_CANCELLED,
-	NMEV_SHUTDOWN
-} isc_nm_eventtype;
+#ifndef _WIN32
+#include <sys/socket.h>
+#include <sys/types.h>
+#endif
 
-isc_nm_t *
-isc_nm_start(isc_mem_t *mctx, uint32_t workers);
+#if defined(SO_REUSEPORT_LB) || (defined(SO_REUSEPORT) && defined(__linux__))
+#define HAVE_SO_REUSEPORT_LB 1
+#endif
+
+/*
+ * Replacement for isc_sockettype_t provided by socket.h.
+ */
+typedef enum {
+	isc_socktype_tcp = 1,
+	isc_socktype_udp = 2,
+	isc_socktype_unix = 3,
+	isc_socktype_raw = 4
+} isc_socktype_t;
+
+typedef void (*isc_nm_recv_cb_t)(isc_nmhandle_t *handle, isc_result_t eresult,
+				 isc_region_t *region, void *cbarg);
 /*%<
- * Creates a new network manager with 'workers' worker threads,
- * and starts it running.
+ * Callback function to be used when receiving a packet.
+ *
+ * 'handle' the handle that can be used to send back the answer.
+ * 'eresult' the result of the event.
+ * 'region' contains the received data, if any. It will be freed
+ *          after return by caller.
+ * 'cbarg'  the callback argument passed to isc_nm_listenudp(),
+ *          isc_nm_listentcpdns(), or isc_nm_read().
+ */
+typedef isc_result_t (*isc_nm_accept_cb_t)(isc_nmhandle_t *handle,
+					   isc_result_t result, void *cbarg);
+/*%<
+ * Callback function to be used when accepting a connection. (This differs
+ * from isc_nm_cb_t below in that it returns a result code.)
+ *
+ * 'handle' the handle that can be used to send back the answer.
+ * 'eresult' the result of the event.
+ * 'cbarg'  the callback argument passed to isc_nm_listentcp() or
+ * isc_nm_listentcpdns().
+ */
+
+typedef void (*isc_nm_cb_t)(isc_nmhandle_t *handle, isc_result_t result,
+			    void *cbarg);
+/*%<
+ * Callback function for other network completion events (send, connect).
+ *
+ * 'handle' the handle on which the event took place.
+ * 'eresult' the result of the event.
+ * 'cbarg'  the callback argument passed to isc_nm_send(),
+ *          isc_nm_tcp_connect(), or isc_nm_listentcp()
+ */
+
+typedef void (*isc_nm_opaquecb_t)(void *arg);
+/*%<
+ * Opaque callback function, used for isc_nmhandle 'reset' and 'free'
+ * callbacks.
+ */
+
+typedef void (*isc_nm_workcb_t)(void *arg);
+typedef void (*isc_nm_after_workcb_t)(void *arg, isc_result_t result);
+/*%<
+ * Callback functions for libuv threadpool work (see uv_work_t)
  */
 
 void
 isc_nm_attach(isc_nm_t *mgr, isc_nm_t **dst);
 void
 isc_nm_detach(isc_nm_t **mgr0);
-void
-isc_nm_destroy(isc_nm_t **mgr0);
 /*%<
  * Attach/detach a network manager. When all references have been
  * released, the network manager is shut down, freeing all resources.
@@ -44,45 +97,35 @@ isc_nm_destroy(isc_nm_t **mgr0);
  * for all other references to be gone.
  */
 
-void
-isc_nm_closedown(isc_nm_t *mgr);
-/*%<
- * Close down all active connections, freeing associated resources;
- * prevent new connections from being established. This can optionally
- * be called prior to shutting down the netmgr, to stop all processing
- * before shutting down the task manager.
- */
-
 /* Return thread ID of current thread, or ISC_NETMGR_TID_UNKNOWN */
 int
 isc_nm_tid(void);
 
-/*
- * isc_nm_freehandle frees a handle, releasing resources
- */
 void
-isc_nm_freehandle(isc_nmhandle_t *handle);
-
-void
-isc_nmsocket_attach(isc_nmsocket_t *sock, isc_nmsocket_t **target);
+isc_nmsocket_close(isc_nmsocket_t **sockp);
 /*%<
- * isc_nmsocket_attach attaches to a socket, increasing refcount
+ * isc_nmsocket_close() detaches a listening socket that was
+ * created by isc_nm_listenudp(), isc_nm_listentcp(), or
+ * isc_nm_listentcpdns(). Once there are no remaining child
+ * sockets with active handles, the socket will be closed.
  */
 
-void
-isc_nmsocket_close(isc_nmsocket_t *sock);
+#ifdef NETMGR_TRACE
+#define isc_nmhandle_attach(handle, dest) \
+	isc__nmhandle_attach(handle, dest, __FILE__, __LINE__, __func__)
+#define isc_nmhandle_detach(handlep) \
+	isc__nmhandle_detach(handlep, __FILE__, __LINE__, __func__)
+#define FLARG , const char *file, unsigned int line, const char *func
+#else
+#define isc_nmhandle_attach(handle, dest) isc__nmhandle_attach(handle, dest)
+#define isc_nmhandle_detach(handlep)	  isc__nmhandle_detach(handlep)
+#define FLARG
+#endif
 
 void
-isc_nmsocket_detach(isc_nmsocket_t **socketp);
-/*%<
- * isc_nmsocket_detach detaches from socket, decreasing refcount
- * and possibly destroying the socket if it's no longer referenced.
- */
-
+isc__nmhandle_attach(isc_nmhandle_t *handle, isc_nmhandle_t **dest FLARG);
 void
-isc_nmhandle_ref(isc_nmhandle_t *handle);
-void
-isc_nmhandle_unref(isc_nmhandle_t *handle);
+isc__nmhandle_detach(isc_nmhandle_t **handlep FLARG);
 /*%<
  * Increment/decrement the reference counter in a netmgr handle,
  * but (unlike the attach/detach functions) do not change the pointer
@@ -95,6 +138,7 @@ isc_nmhandle_unref(isc_nmhandle_t *handle);
  * otherwise know that the handle was in use and might free it, along
  * with the client.)
  */
+#undef FLARG
 
 void *
 isc_nmhandle_getdata(isc_nmhandle_t *handle);
@@ -102,21 +146,44 @@ isc_nmhandle_getdata(isc_nmhandle_t *handle);
 void *
 isc_nmhandle_getextra(isc_nmhandle_t *handle);
 
-typedef void (*isc_nm_opaquecb_t)(void *arg);
-
 bool
 isc_nmhandle_is_stream(isc_nmhandle_t *handle);
 
-/*
- * isc_nmhandle_t has a void * opaque field (usually - ns_client_t).
+void
+isc_nmhandle_setdata(isc_nmhandle_t *handle, void *arg,
+		     isc_nm_opaquecb_t doreset, isc_nm_opaquecb_t dofree);
+/*%<
+ * isc_nmhandle_t has a void* opaque field (for example, ns_client_t).
  * We reuse handle and `opaque` can also be reused between calls.
  * This function sets this field and two callbacks:
  * - doreset resets the `opaque` to initial state
  * - dofree frees everything associated with `opaque`
  */
+
 void
-isc_nmhandle_setdata(isc_nmhandle_t *handle, void *arg,
-		     isc_nm_opaquecb_t doreset, isc_nm_opaquecb_t dofree);
+isc_nmhandle_settimeout(isc_nmhandle_t *handle, uint32_t timeout);
+void
+isc_nmhandle_cleartimeout(isc_nmhandle_t *handle);
+/*%<
+ * Set/clear the read/recv timeout for the socket connected to 'handle'
+ * to 'timeout' (in milliseconds), and reset the timer.
+ *
+ * When this is called on a 'wrapper' socket handle (for example,
+ * a TCPDNS socket wrapping a TCP connection), the timer is set for
+ * both socket layers.
+ */
+
+void
+isc_nmhandle_keepalive(isc_nmhandle_t *handle, bool value);
+/*%<
+ * Enable/disable keepalive on this connection by setting it to 'value'.
+ *
+ * When keepalive is active, we switch to using the keepalive timeout
+ * to determine when to close a connection, rather than the idle timeout.
+ *
+ * This applies only to TCP-based DNS connections (i.e., TCPDNS).
+ * On other types of connection it has no effect.
+ */
 
 isc_sockaddr_t
 isc_nmhandle_peeraddr(isc_nmhandle_t *handle);
@@ -135,32 +202,8 @@ isc_nmhandle_netmgr(isc_nmhandle_t *handle);
  * Return a pointer to the netmgr object for the given handle.
  */
 
-typedef void (*isc_nm_recv_cb_t)(isc_nmhandle_t *handle, isc_region_t *region,
-				 void *cbarg);
-/*%<
- * Callback function to be used when receiving a packet.
- *
- * 'handle' the handle that can be used to send back the answer.
- * 'region' contains the received data. It will be freed after
- *          return by caller.
- * 'cbarg'  the callback argument passed to isc_nm_listenudp(),
- *          isc_nm_listentcpdns(), or isc_nm_read().
- */
-
-typedef void (*isc_nm_cb_t)(isc_nmhandle_t *handle, isc_result_t result,
-			    void *cbarg);
-/*%<
- * Callback function for other network completion events (send, connect,
- * accept).
- *
- * 'handle' the handle on which the event took place.
- * 'result' the result of the event.
- * 'cbarg'  the callback argument passed to isc_nm_send(),
- *          isc_nm_tcp_connect(), or isc_nm_listentcp()
- */
-
 isc_result_t
-isc_nm_listenudp(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_recv_cb_t cb,
+isc_nm_listenudp(isc_nm_t *mgr, isc_sockaddr_t *iface, isc_nm_recv_cb_t cb,
 		 void *cbarg, size_t extrasize, isc_nmsocket_t **sockp);
 /*%<
  * Start listening for UDP packets on interface 'iface' using net manager
@@ -172,14 +215,33 @@ isc_nm_listenudp(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_recv_cb_t cb,
  * as its argument.
  *
  * When handles are allocated for the socket, 'extrasize' additional bytes
- * will be allocated along with the handle for an associated object
- * (typically ns_client).
+ * can be allocated along with the handle for an associated object, which
+ * can then be freed automatically when the handle is destroyed.
  */
 
 void
-isc_nm_udp_stoplistening(isc_nmsocket_t *sock);
+isc_nm_udpconnect(isc_nm_t *mgr, isc_sockaddr_t *local, isc_sockaddr_t *peer,
+		  isc_nm_cb_t cb, void *cbarg, unsigned int timeout,
+		  size_t extrahandlesize);
 /*%<
- * Stop listening for UDP packets on socket 'sock'.
+ * Open a UDP socket, bind to 'local' and connect to 'peer', and
+ * immediately call 'cb' with a handle so that the caller can begin
+ * sending packets over UDP.
+ *
+ * When handles are allocated for the socket, 'extrasize' additional bytes
+ * can be allocated along with the handle for an associated object, which
+ * can then be freed automatically when the handle is destroyed.
+ *
+ * 'timeout' specifies the timeout interval in milliseconds.
+ *
+ * The connected socket can only be accessed via the handle passed to
+ * 'cb'.
+ */
+
+void
+isc_nm_stoplistening(isc_nmsocket_t *sock);
+/*%<
+ * Stop listening on socket 'sock'.
  */
 
 void
@@ -192,30 +254,49 @@ isc_nm_pause(isc_nm_t *mgr);
 void
 isc_nm_resume(isc_nm_t *mgr);
 /*%<
- * Resume paused processing. It will return immediately
- * after signalling workers to resume.
+ * Resume paused processing. It will return immediately after signalling
+ * workers to resume.
  */
 
-isc_result_t
+void
 isc_nm_read(isc_nmhandle_t *handle, isc_nm_recv_cb_t cb, void *cbarg);
-
-isc_result_t
-isc_nm_pauseread(isc_nmsocket_t *sock);
-/*%<
- * Pause reading on this socket, while still remembering the callback.
+/*
+ * Begin (or continue) reading on the socket associated with 'handle', and
+ * update its recv callback to 'cb', which will be called as soon as there
+ * is data to process.
  */
 
-isc_result_t
-isc_nm_resumeread(isc_nmsocket_t *sock);
+void
+isc_nm_pauseread(isc_nmhandle_t *handle);
 /*%<
- * Resume reading from socket.
+ * Pause reading on this handle's socket, but remember the callback.
+ *
+ * Requires:
+ * \li	'handle' is a valid netmgr handle.
+ */
+
+void
+isc_nm_cancelread(isc_nmhandle_t *handle);
+/*%<
+ * Cancel reading on a connected socket. Calls the read/recv callback on
+ * active handles with a result code of ISC_R_CANCELED.
  *
  * Requires:
  * \li	'sock' is a valid netmgr socket
  * \li	...for which a read/recv callback has been defined.
  */
 
-isc_result_t
+void
+isc_nm_resumeread(isc_nmhandle_t *handle);
+/*%<
+ * Resume reading on the handle's socket.
+ *
+ * Requires:
+ * \li	'handle' is a valid netmgr handle.
+ * \li	...for a socket with a defined read/recv callback.
+ */
+
+void
 isc_nm_send(isc_nmhandle_t *handle, isc_region_t *region, isc_nm_cb_t cb,
 	    void *cbarg);
 /*%<
@@ -227,9 +308,10 @@ isc_nm_send(isc_nmhandle_t *handle, isc_region_t *region, isc_nm_cb_t cb,
  */
 
 isc_result_t
-isc_nm_listentcp(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_cb_t cb,
-		 void *cbarg, size_t extrahandlesize, int backlog,
-		 isc_quota_t *quota, isc_nmsocket_t **sockp);
+isc_nm_listentcp(isc_nm_t *mgr, isc_sockaddr_t *iface,
+		 isc_nm_accept_cb_t accept_cb, void *accept_cbarg,
+		 size_t extrahandlesize, int backlog, isc_quota_t *quota,
+		 isc_nmsocket_t **sockp);
 /*%<
  * Start listening for raw messages over the TCP interface 'iface', using
  * net manager 'mgr'.
@@ -237,8 +319,8 @@ isc_nm_listentcp(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_cb_t cb,
  * On success, 'sockp' will be updated to contain a new listening TCP
  * socket.
  *
- * When a message is received on the socket, 'cb' will be called with 'cbarg'
- * as its argument.
+ * When connection is accepted on the socket, 'accept_cb' will be called with
+ * 'accept_cbarg' as its argument. The callback is expected to start a read.
  *
  * When handles are allocated for the socket, 'extrasize' additional bytes
  * will be allocated along with the handle for an associated object.
@@ -246,20 +328,30 @@ isc_nm_listentcp(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_cb_t cb,
  * If 'quota' is not NULL, then the socket is attached to the specified
  * quota. This allows us to enforce TCP client quota limits.
  *
- * NOTE: This is currently only called inside isc_nm_listentcpdns(), which
- * creates a 'wrapper' socket that sends and receives DNS messages
- * prepended with a two-byte length field, and handles buffering.
  */
 
 void
-isc_nm_tcp_stoplistening(isc_nmsocket_t *sock);
+isc_nm_tcpconnect(isc_nm_t *mgr, isc_sockaddr_t *local, isc_sockaddr_t *peer,
+		  isc_nm_cb_t cb, void *cbarg, unsigned int timeout,
+		  size_t extrahandlesize);
 /*%<
- * Stop listening on TCP socket 'sock'.
+ * Create a socket using netmgr 'mgr', bind it to the address 'local',
+ * and connect it to the address 'peer'.
+ *
+ * When the connection is complete or has timed out, call 'cb' with
+ * argument 'cbarg'. Allocate 'extrahandlesize' additional bytes along
+ * with the handle to use for an associated object.
+ *
+ * 'timeout' specifies the timeout interval in milliseconds.
+ *
+ * The connected socket can only be accessed via the handle passed to
+ * 'cb'.
  */
 
 isc_result_t
-isc_nm_listentcpdns(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_recv_cb_t cb,
-		    void *cbarg, isc_nm_cb_t accept_cb, void *accept_cbarg,
+isc_nm_listentcpdns(isc_nm_t *mgr, isc_sockaddr_t *iface,
+		    isc_nm_recv_cb_t recv_cb, void *recv_cbarg,
+		    isc_nm_accept_cb_t accept_cb, void *accept_cbarg,
 		    size_t extrahandlesize, int backlog, isc_quota_t *quota,
 		    isc_nmsocket_t **sockp);
 /*%<
@@ -275,7 +367,7 @@ isc_nm_listentcpdns(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_recv_cb_t cb,
  * When a complete DNS message is received on the socket, 'cb' will be
  * called with 'cbarg' as its argument.
  *
- * When a new TCP connection is accepted, 'accept_cb' will be called
+ * When a new TCPDNS connection is accepted, 'accept_cb' will be called
  * with 'accept_cbarg' as its argument.
  *
  * When handles are allocated for the socket, 'extrasize' additional bytes
@@ -283,12 +375,6 @@ isc_nm_listentcpdns(isc_nm_t *mgr, isc_nmiface_t *iface, isc_nm_recv_cb_t cb,
  * (typically ns_client).
  *
  * 'quota' is passed to isc_nm_listentcp() when opening the raw TCP socket.
- */
-
-void
-isc_nm_tcpdns_stoplistening(isc_nmsocket_t *sock);
-/*%<
- * Stop listening on TCPDNS socket 'sock'.
  */
 
 void
@@ -310,33 +396,44 @@ isc_nm_tcpdns_sequential(isc_nmhandle_t *handle);
  */
 
 void
-isc_nm_tcpdns_keepalive(isc_nmhandle_t *handle);
+isc_nm_tcpdns_keepalive(isc_nmhandle_t *handle, bool value);
 /*%<
- * Enable keepalive on this connection.
+ * Enable/disable keepalive on this connection by setting it to 'value'.
  *
  * When keepalive is active, we switch to using the keepalive timeout
  * to determine when to close a connection, rather than the idle timeout.
  */
 
 void
-isc_nm_tcp_settimeouts(isc_nm_t *mgr, uint32_t init, uint32_t idle,
-		       uint32_t keepalive, uint32_t advertised);
+isc_nm_settimeouts(isc_nm_t *mgr, uint32_t init, uint32_t idle,
+		   uint32_t keepalive, uint32_t advertised);
 /*%<
- * Sets the initial, idle, and keepalive timeout values to use for
- * TCP connections, and the timeout value to advertise in responses using
+ * Sets the initial, idle, and keepalive timeout values (in milliseconds) to use
+ * for TCP connections, and the timeout value to advertise in responses using
  * the EDNS TCP Keepalive option (which should ordinarily be the same
- * as 'keepalive'), in tenths of seconds.
+ * as 'keepalive'), in milliseconds.
+ *
+ * Requires:
+ * \li	'mgr' is a valid netmgr.
+ */
+
+bool
+isc_nm_getloadbalancesockets(isc_nm_t *mgr);
+void
+isc_nm_setloadbalancesockets(isc_nm_t *mgr, bool enabled);
+/*%<
+ * Get and set value of load balancing of the sockets.
  *
  * Requires:
  * \li	'mgr' is a valid netmgr.
  */
 
 void
-isc_nm_tcp_gettimeouts(isc_nm_t *mgr, uint32_t *initial, uint32_t *idle,
-		       uint32_t *keepalive, uint32_t *advertised);
+isc_nm_gettimeouts(isc_nm_t *mgr, uint32_t *initial, uint32_t *idle,
+		   uint32_t *keepalive, uint32_t *advertised);
 /*%<
  * Gets the initial, idle, keepalive, or advertised timeout values,
- * in tenths of seconds.
+ * in milliseconds.
  *
  * Any integer pointer parameter not set to NULL will be updated to
  * contain the corresponding timeout value.
@@ -363,3 +460,84 @@ isc_nm_setstats(isc_nm_t *mgr, isc_stats_t *stats);
  *\li	stats is a valid set of statistics counters supporting the
  *	full range of socket-related stats counter numbers.
  */
+
+void
+isc_nm_tcpdnsconnect(isc_nm_t *mgr, isc_sockaddr_t *local, isc_sockaddr_t *peer,
+		     isc_nm_cb_t cb, void *cbarg, unsigned int timeout,
+		     size_t extrahandlesize);
+/*%<
+ * Establish a DNS client connection via a TCP connection, bound to
+ * the address 'local' and connected to the address 'peer'.
+ *
+ * When the connection is complete or has timed out, call 'cb' with
+ * argument 'cbarg'. Allocate 'extrahandlesize' additional bytes along
+ * with the handle to use for an associated object.
+ *
+ * 'timeout' specifies the timeout interval in milliseconds.
+ *
+ * The connected socket can only be accessed via the handle passed to
+ * 'cb'.
+ */
+
+#define ISC_NM_TASK_SLOW_OFFSET -2
+#define ISC_NM_TASK_SLOW(i)	(ISC_NM_TASK_SLOW_OFFSET - 1 - i)
+
+void
+isc_nm_task_enqueue(isc_nm_t *mgr, isc_task_t *task, int threadid);
+/*%<
+ * Enqueue the 'task' onto the netmgr ievents queue.
+ *
+ * Requires:
+ * \li 'mgr' is a valid netmgr object
+ * \li 'task' is a valid task
+ * \li 'threadid' is either the preferred netmgr tid or -1, in which case
+ *     tid will be picked randomly. The threadid is capped (by modulo) to
+ *     maximum number of 'workers' as specifed in isc_nm_start()
+ */
+
+void
+isc_nm_work_offload(isc_nm_t *mgr, isc_nm_workcb_t work_cb,
+		    isc_nm_after_workcb_t after_work_cb, void *data);
+/*%<
+ * Schedules a job to be handled by the libuv thread pool (see uv_work_t).
+ * The function specified in `work_cb` will be run by a thread in the
+ * thread pool; when complete, the `after_work_cb` function will run.
+ *
+ * Requires:
+ * \li 'mgr' is a valid netmgr object.
+ * \li We are currently running in a network manager thread.
+ */
+
+void
+isc__nm_force_tid(int tid);
+/*%<
+ * Force the thread ID to 'tid'. This is STRICTLY for use in unit
+ * tests and should not be used in any production code.
+ */
+
+void
+isc_nmhandle_setwritetimeout(isc_nmhandle_t *handle, uint64_t write_timeout);
+
+/*
+ * Timer related functions
+ */
+
+typedef struct isc_nm_timer isc_nm_timer_t;
+
+typedef void (*isc_nm_timer_cb)(void *, isc_result_t);
+
+void
+isc_nm_timer_create(isc_nmhandle_t *, isc_nm_timer_cb, void *,
+		    isc_nm_timer_t **);
+
+void
+isc_nm_timer_attach(isc_nm_timer_t *, isc_nm_timer_t **);
+
+void
+isc_nm_timer_detach(isc_nm_timer_t **);
+
+void
+isc_nm_timer_start(isc_nm_timer_t *, uint64_t);
+
+void
+isc_nm_timer_stop(isc_nm_timer_t *);

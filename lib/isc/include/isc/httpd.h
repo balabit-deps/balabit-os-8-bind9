@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -31,9 +33,9 @@
  * the data cleanup function.
  */
 struct isc_httpdurl {
-	char *		   url;
+	char		  *url;
 	isc_httpdaction_t *action;
-	void *		   action_arg;
+	void		  *action_arg;
 	bool		   isstatic;
 	isc_time_t	   loadtime;
 	ISC_LINK(isc_httpdurl_t) link;
@@ -50,7 +52,7 @@ struct isc_httpdurl {
  */
 isc_result_t
 isc_httpdmgr_create(isc_mem_t *mctx, isc_socket_t *sock, isc_task_t *task,
-		    isc_httpdclientok_t * client_ok,
+		    isc_httpdclientok_t	 *client_ok,
 		    isc_httpdondestroy_t *ondestory, void *cb_arg,
 		    isc_timermgr_t *tmgr, isc_httpdmgr_t **httpdp);
 

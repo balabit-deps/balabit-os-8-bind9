@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -489,7 +491,8 @@ builtin_create(const char *zone, int argc, char **argv, void *driverdata,
 	} else if (strcmp(argv[0], "id") == 0) {
 		*dbdata = &id_builtin;
 	} else if (strcmp(argv[0], "empty") == 0 ||
-		   strcmp(argv[0], "dns64") == 0) {
+		   strcmp(argv[0], "dns64") == 0)
+	{
 		builtin_t *empty;
 		char *server;
 		char *contact;

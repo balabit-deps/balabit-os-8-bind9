@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -44,11 +46,11 @@ struct pk11_object {
 	CK_BBOOL	 ontoken;
 	CK_BBOOL	 reqlogon;
 	CK_BYTE		 attrcnt;
-	CK_ATTRIBUTE *	 repr;
+	CK_ATTRIBUTE	*repr;
 };
 
 struct pk11_context {
-	void *		  handle;
+	void		 *handle;
 	CK_SESSION_HANDLE session;
 	CK_BBOOL	  ontoken;
 	CK_OBJECT_HANDLE  object;

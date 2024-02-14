@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -84,7 +86,7 @@ isc_hmac_free_test(void **state) {
 
 static void
 isc_hmac_test(isc_hmac_t *hmac, const void *key, size_t keylen,
-	      isc_md_type_t type, const char *buf, size_t buflen,
+	      const isc_md_type_t *type, const char *buf, size_t buflen,
 	      const char *result, const int repeats) {
 	assert_non_null(hmac);
 	assert_int_equal(isc_hmac_init(hmac, key, keylen, type), ISC_R_SUCCESS);
@@ -941,7 +943,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -47,11 +49,10 @@
 #error DNSTAP not configured.
 #endif /* HAVE_DNSTAP */
 
+#include <fstrm.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-#include <protobuf-c/protobuf-c.h>
 
 #include <isc/buffer.h>
 #include <isc/file.h>
@@ -337,7 +338,7 @@ dns_dt_reopen(dns_dtenv_t *env, int roll) {
 		fstrm_iothr_destroy(&env->iothr);
 	}
 
-	if (roll != 0) {
+	if (roll == 0) {
 		roll = env->rolls;
 	}
 
@@ -349,7 +350,7 @@ dns_dt_reopen(dns_dtenv_t *env, int roll) {
 		char *filename = isc_mem_strdup(env->mctx, env->path);
 		file.name = filename;
 		file.stream = NULL;
-		file.versions = roll != 0 ? roll : env->rolls;
+		file.versions = roll;
 		file.maximum_size = 0;
 		file.maximum_reached = false;
 		file.suffix = env->suffix;
@@ -634,8 +635,7 @@ dnstap_type(dns_dtmsgtype_t msgtype) {
 	case DNS_DTTYPE_UR:
 		return (DNSTAP__MESSAGE__TYPE__UPDATE_RESPONSE);
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 }
 
@@ -808,14 +808,15 @@ dns_dt_send(dns_view_t *view, dns_dtmsgtype_t msgtype, isc_sockaddr_t *qaddr,
 		dm.m.response_time_nsec = isc_time_nanoseconds(t);
 		dm.m.has_response_time_nsec = 1;
 
-		cpbuf(buf, &dm.m.response_message, &dm.m.has_response_message);
-
-		/* Types RR and FR get both query and response times */
-		if (msgtype == DNS_DTTYPE_CR || msgtype == DNS_DTTYPE_AR) {
+		/*
+		 * Types RR and FR can fall through and get the query
+		 * time set as well. Any other response type, break.
+		 */
+		if (msgtype != DNS_DTTYPE_RR && msgtype != DNS_DTTYPE_FR) {
 			break;
 		}
 
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case DNS_DTTYPE_AQ:
 	case DNS_DTTYPE_CQ:
 	case DNS_DTTYPE_FQ:
@@ -831,14 +832,19 @@ dns_dt_send(dns_view_t *view, dns_dtmsgtype_t msgtype, isc_sockaddr_t *qaddr,
 		dm.m.has_query_time_sec = 1;
 		dm.m.query_time_nsec = isc_time_nanoseconds(t);
 		dm.m.has_query_time_nsec = 1;
-
-		cpbuf(buf, &dm.m.query_message, &dm.m.has_query_message);
 		break;
 	default:
 		isc_log_write(dns_lctx, DNS_LOGCATEGORY_DNSTAP,
 			      DNS_LOGMODULE_DNSTAP, ISC_LOG_ERROR,
 			      "invalid dnstap message type %d", msgtype);
 		return;
+	}
+
+	/* Query and response messages */
+	if ((msgtype & DNS_DTTYPE_QUERY) != 0) {
+		cpbuf(buf, &dm.m.query_message, &dm.m.has_query_message);
+	} else if ((msgtype & DNS_DTTYPE_RESPONSE) != 0) {
+		cpbuf(buf, &dm.m.response_message, &dm.m.has_response_message);
 	}
 
 	/* Zone/bailiwick */
@@ -981,10 +987,10 @@ dns_dt_open(const char *filename, dns_dtmode_t mode, isc_mem_t *mctx,
 		}
 		break;
 	case dns_dtmode_unix:
-		return (ISC_R_NOTIMPLEMENTED);
+		result = ISC_R_NOTIMPLEMENTED;
+		goto cleanup;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	isc_mem_attach(mctx, &handle->mctx);
@@ -1143,11 +1149,11 @@ dns_dt_parse(isc_mem_t *mctx, isc_region_t *src, dns_dtdata_t **destp) {
 
 	isc_buffer_init(&b, d->msgdata.base, d->msgdata.length);
 	isc_buffer_add(&b, d->msgdata.length);
-	CHECK(dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &d->msg));
+	dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &d->msg);
 	result = dns_message_parse(d->msg, &b, 0);
 	if (result != ISC_R_SUCCESS) {
 		if (result != DNS_R_RECOVERABLE) {
-			dns_message_destroy(&d->msg);
+			dns_message_detach(&d->msg);
 		}
 		result = ISC_R_SUCCESS;
 	}
@@ -1370,7 +1376,7 @@ dns_dtdata_free(dns_dtdata_t **dp) {
 	*dp = NULL;
 
 	if (d->msg != NULL) {
-		dns_message_destroy(&d->msg);
+		dns_message_detach(&d->msg);
 	}
 	if (d->frame != NULL) {
 		dnstap__dnstap__free_unpacked(d->frame, NULL);

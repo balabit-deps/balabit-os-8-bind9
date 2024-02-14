@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -39,59 +41,59 @@ zone "." {
 
 zone "." {
 	type mirror;
-	masters { 10.53.0.1; };
+	primaries { 10.53.0.1; };
 	file "root.db.mirror";
 };
 
 zone "initially-unavailable" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "initially-unavailable.db.mirror";
 	use-alt-transfer-source no;
 };
 
 zone "verify-axfr" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-axfr.db.mirror";
 };
 
 zone "verify-csk" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-csk.db.mirror";
 };
 
 zone "verify-ixfr" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-ixfr.db.mirror";
 	masterfile-format text;
 };
 
 zone "verify-load" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-load.db.mirror";
 	masterfile-format text;
 };
 
 zone "verify-reconfig" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-reconfig.db.mirror";
 	masterfile-format text;
 };
 
 zone "verify-unsigned" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-unsigned.db.mirror";
 };
 
 zone "verify-untrusted" {
 	type mirror;
-	masters { 10.53.0.2; };
+	primaries { 10.53.0.2; };
 	file "verify-untrusted.db.mirror";
 };
 

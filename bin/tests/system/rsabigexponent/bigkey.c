@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -44,7 +46,7 @@
 dst_key_t *key;
 dns_fixedname_t fname;
 dns_name_t *name;
-unsigned int bits = 1024U;
+unsigned int bits = 2048U;
 isc_mem_t *mctx;
 isc_log_t *log_;
 isc_logconfig_t *logconfig;
@@ -107,19 +109,20 @@ main(int argc, char **argv) {
 
 	isc_mem_create(&mctx);
 	CHECK(dst_lib_init(mctx, NULL), "dst_lib_init()");
-	CHECK(isc_log_create(mctx, &log_, &logconfig), "isc_log_create()");
+	isc_log_create(mctx, &log_, &logconfig);
 	isc_log_setcontext(log_);
 	dns_log_init(log_);
 	dns_log_setcontext(log_);
-	CHECK(isc_log_settag(logconfig, "bigkey"), "isc_log_settag()");
+	isc_log_settag(logconfig, "bigkey");
+
 	destination.file.stream = stderr;
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	CHECK(isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
-				    level, &destination,
-				    ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL),
-	      "isc_log_createchannel()");
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC, level,
+			      &destination,
+			      ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL);
+
 	CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL), "isc_log_"
 								   "usechannel("
 								   ")");
@@ -131,7 +134,7 @@ main(int argc, char **argv) {
 								    "\"example."
 								    "\")");
 
-	CHECK(dst_key_buildinternal(name, DNS_KEYALG_RSASHA1, bits,
+	CHECK(dst_key_buildinternal(name, DNS_KEYALG_RSASHA256, bits,
 				    DNS_KEYOWNER_ZONE, DNS_KEYPROTO_DNSSEC,
 				    dns_rdataclass_in, pkey, mctx, &key),
 	      "dst_key_buildinternal(...)");

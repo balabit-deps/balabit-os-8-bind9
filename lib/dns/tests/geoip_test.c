@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -120,8 +122,7 @@ entry_exists(dns_geoip_subtype_t subtype, const char *addr) {
 	} else if (inet_pton(AF_INET, addr, &in4) == 1) {
 		isc_netaddr_fromin(&na, &in4);
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	db = geoip2_database(&geoip, fix_subtype(&geoip, subtype));
@@ -184,8 +185,10 @@ do_lookup_string(const char *addr, dns_geoip_subtype_t subtype,
 	dns_geoip_elem_t elt;
 	struct in_addr in4;
 	isc_netaddr_t na;
+	int n;
 
-	inet_pton(AF_INET, addr, &in4);
+	n = inet_pton(AF_INET, addr, &in4);
+	assert_int_equal(n, 1);
 	isc_netaddr_fromin(&na, &in4);
 
 	elt.subtype = subtype;
@@ -200,8 +203,10 @@ do_lookup_string_v6(const char *addr, dns_geoip_subtype_t subtype,
 	dns_geoip_elem_t elt;
 	struct in6_addr in6;
 	isc_netaddr_t na;
+	int n;
 
-	inet_pton(AF_INET6, addr, &in6);
+	n = inet_pton(AF_INET6, addr, &in6);
+	assert_int_equal(n, 1);
 	isc_netaddr_fromin6(&na, &in6);
 
 	elt.subtype = subtype;
@@ -422,7 +427,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* HAVE_CMOCKA */

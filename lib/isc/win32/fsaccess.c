@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -59,7 +61,8 @@ is_ntfs(const char *file) {
 	REQUIRE(filename != NULL);
 
 	if (isc_file_absolutepath(file, filename, sizeof(filename)) !=
-	    ISC_R_SUCCESS) {
+	    ISC_R_SUCCESS)
+	{
 		return (FALSE);
 	}
 
@@ -67,7 +70,7 @@ is_ntfs(const char *file) {
 	 * Look for c:\path\... style, c:/path/... or \\computer\shar\path...
 	 * the UNC style file specs
 	 */
-	if (isalpha(filename[0]) && filename[1] == ':' &&
+	if (isalpha((unsigned char)filename[0]) && filename[1] == ':' &&
 	    (filename[2] == '\\' || filename[2] == '/'))
 	{
 		/* Copy 'c:\' or 'c:/' and NUL terminate. */
@@ -204,7 +207,7 @@ NTFS_Access_Control(const char *filename, const char *user, int access,
 	}
 
 	/* For directories check the directory-specific bits */
-	if (isdir == true) {
+	if (isdir) {
 		if ((caccess & ISC_FSACCESS_CREATECHILD) != 0) {
 			NTFSbits |= FILE_ADD_SUBDIRECTORY | FILE_ADD_FILE;
 		}
@@ -220,7 +223,8 @@ NTFS_Access_Control(const char *filename, const char *user, int access,
 	}
 
 	if (NTFSbits ==
-	    (FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE)) {
+	    (FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_GENERIC_EXECUTE))
+	{
 		NTFSbits |= FILE_ALL_ACCESS;
 	}
 	/*

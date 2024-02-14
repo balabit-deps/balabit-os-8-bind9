@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -1184,6 +1186,47 @@ rbt_nodechain(void **state) {
 	test_context_teardown(ctx);
 }
 
+/* Test addname return values */
+static void
+rbtnode_namelen(void **state) {
+	isc_result_t result;
+	test_context_t *ctx = NULL;
+	dns_rbtnode_t *node;
+	unsigned int len;
+
+	UNUSED(state);
+
+	isc_mem_debugging = ISC_MEM_DEBUGRECORD;
+
+	ctx = test_context_setup();
+
+	node = NULL;
+	result = insert_helper(ctx->rbt, ".", &node);
+	len = dns__rbtnode_namelen(node);
+	assert_int_equal(result, ISC_R_EXISTS);
+	assert_int_equal(len, 1);
+	node = NULL;
+
+	result = insert_helper(ctx->rbt, "a.b.c.d.e.f.g.h.i.j.k.l.m", &node);
+	len = dns__rbtnode_namelen(node);
+	assert_int_equal(result, ISC_R_SUCCESS);
+	assert_int_equal(len, 27);
+
+	node = NULL;
+	result = insert_helper(ctx->rbt, "isc.org", &node);
+	len = dns__rbtnode_namelen(node);
+	assert_int_equal(result, ISC_R_SUCCESS);
+	assert_int_equal(len, 9);
+
+	node = NULL;
+	result = insert_helper(ctx->rbt, "example.com", &node);
+	len = dns__rbtnode_namelen(node);
+	assert_int_equal(result, ISC_R_SUCCESS);
+	assert_int_equal(len, 13);
+
+	test_context_teardown(ctx);
+}
+
 #if defined(DNS_BENCHMARK_TESTS) && !defined(__SANITIZE_THREAD__)
 
 /*
@@ -1324,6 +1367,8 @@ main(void) {
 						_teardown),
 		cmocka_unit_test_setup_teardown(rbt_nodechain, _setup,
 						_teardown),
+		cmocka_unit_test_setup_teardown(rbtnode_namelen, _setup,
+						_teardown),
 #if defined(DNS_BENCHMARK_TESTS) && !defined(__SANITIZE_THREAD__)
 		cmocka_unit_test_setup_teardown(benchmark, _setup, _teardown),
 #endif /* defined(DNS_BENCHMARK_TESTS) && !defined(__SANITIZE_THREAD__) */
@@ -1339,7 +1384,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

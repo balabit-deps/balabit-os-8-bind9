@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -45,7 +47,7 @@
 static int quiet = 0;
 static isc_mem_t *mctx = NULL;
 dns_zone_t *zone = NULL;
-dns_zonetype_t zonetype = dns_zone_master;
+dns_zonetype_t zonetype = dns_zone_primary;
 static int dumpzone = 0;
 static const char *output_filename;
 static const char *prog_name = NULL;
@@ -70,9 +72,9 @@ usage(void) {
 	fprintf(stderr,
 		"usage: %s [-djqvD] [-c class] "
 		"[-f inputformat] [-F outputformat] [-J filename] "
-		"[-t directory] [-w directory] [-k (ignore|warn|fail)] "
-		"[-n (ignore|warn|fail)] [-m (ignore|warn|fail)] "
-		"[-r (ignore|warn|fail)] "
+		"[-s (full|relative)] [-t directory] [-w directory] "
+		"[-k (ignore|warn|fail)] [-m (ignore|warn|fail)] "
+		"[-n (ignore|warn|fail)] [-r (ignore|warn|fail)] "
 		"[-i (full|full-sibling|local|local-sibling|none)] "
 		"[-M (ignore|warn|fail)] [-S (ignore|warn|fail)] "
 		"[-W (ignore|warn)] "
@@ -144,8 +146,7 @@ main(int argc, char **argv) {
 	} else if (PROGCMP("named-compilezone")) {
 		progmode = progmode_compile;
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	/* Compilation specific defaults */
@@ -423,7 +424,7 @@ main(int argc, char **argv) {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					prog_name, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			usage();
 
@@ -472,7 +473,8 @@ main(int argc, char **argv) {
 			outputformat = dns_masterformat_raw;
 			rawversion = strtol(outputformatstr + 4, &end, 10);
 			if (end == outputformatstr + 4 || *end != '\0' ||
-			    rawversion > 1U) {
+			    rawversion > 1U)
+			{
 				fprintf(stderr, "unknown raw format version\n");
 				exit(1);
 			}

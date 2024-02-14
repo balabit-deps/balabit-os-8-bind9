@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -137,14 +139,17 @@ isc_sockaddr_totext(const isc_sockaddr_t *sockaddr, isc_buffer_t *target) {
 		snprintf(pbuf, sizeof(pbuf), "%u",
 			 ntohs(sockaddr->type.sin6.sin6_port));
 		break;
-#ifdef ISC_PLAFORM_HAVESYSUNH
+#ifdef ISC_PLATFORM_HAVESYSUNH
 	case AF_UNIX:
 		plen = strlen(sockaddr->type.sunix.sun_path);
 		if (plen >= isc_buffer_availablelength(target)) {
 			return (ISC_R_NOSPACE);
 		}
 
-		isc_buffer_putmem(target, sockaddr->type.sunix.sun_path, plen);
+		isc_buffer_putmem(
+			target,
+			(const unsigned char *)sockaddr->type.sunix.sun_path,
+			plen);
 
 		/*
 		 * Null terminate after used region.
@@ -154,7 +159,7 @@ isc_sockaddr_totext(const isc_sockaddr_t *sockaddr, isc_buffer_t *target) {
 		avail.base[0] = '\0';
 
 		return (ISC_R_SUCCESS);
-#endif /* ifdef ISC_PLAFORM_HAVESYSUNH */
+#endif /* ifdef ISC_PLATFORM_HAVESYSUNH */
 	default:
 		return (ISC_R_FAILURE);
 	}
@@ -295,8 +300,7 @@ isc_sockaddr_anyofpf(isc_sockaddr_t *sockaddr, int pf) {
 		isc_sockaddr_any6(sockaddr);
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 }
 
@@ -366,8 +370,7 @@ isc_sockaddr_fromnetaddr(isc_sockaddr_t *sockaddr, const isc_netaddr_t *na,
 		sockaddr->type.sin6.sin6_port = htons(port);
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	ISC_LINK_INIT(sockaddr, link);
 }
@@ -501,12 +504,9 @@ isc_sockaddr_fromsockaddr(isc_sockaddr_t *isa, const struct sockaddr *sa) {
 	default:
 		return (ISC_R_NOTIMPLEMENTED);
 	}
-	if (length == 0) {
-		return (ISC_R_NOTIMPLEMENTED);
-	}
 
 	memset(isa, 0, sizeof(isc_sockaddr_t));
-	memcpy(isa, sa, length);
+	memmove(isa, sa, length);
 	isa->length = length;
 
 	return (ISC_R_SUCCESS);

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -52,14 +54,14 @@ typedef struct dns_sdblookup dns_sdblookup_t;
 typedef struct dns_sdballnodes dns_sdballnodes_t;
 
 typedef isc_result_t (*dns_sdblookupfunc_t)(const char *zone, const char *name,
-					    void *		     dbdata,
-					    dns_sdblookup_t *	     lookup,
+					    void		    *dbdata,
+					    dns_sdblookup_t	    *lookup,
 					    dns_clientinfomethods_t *methods,
 					    dns_clientinfo_t *clientinfo);
-typedef isc_result_t (*dns_sdblookup2func_t)(const dns_name_t *	      zone,
-					     const dns_name_t *	      name,
-					     void *		      dbdata,
-					     dns_sdblookup_t *	      lookup,
+typedef isc_result_t (*dns_sdblookup2func_t)(const dns_name_t	     *zone,
+					     const dns_name_t	     *name,
+					     void		     *dbdata,
+					     dns_sdblookup_t	     *lookup,
 					     dns_clientinfomethods_t *methods,
 					     dns_clientinfo_t *clientinfo);
 

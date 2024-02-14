@@ -1,36 +1,15 @@
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
+ * SPDX-License-Identifier: MPL-2.0
  *
- * THE SOFTWARE IS PROVIDED "AS IS" AND STICHTING NLNET
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * STICHTING NLNET BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * The development of Dynamically Loadable Zones (DLZ) for Bind 9 was
- * conceived and contributed by Rob Butler.
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all
- * copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND ROB BUTLER
- * DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL
- * ROB BUTLER BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
- * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
- * OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
- * OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
- * USE OR PERFORMANCE OF THIS SOFTWARE.
+ * See the COPYRIGHT file distributed with this work for additional
+ * information regarding copyright ownership.
  */
 
 /*
@@ -434,7 +413,7 @@ bdb_opendb(DBTYPE db_type, DB **db_out, const char *db_name, int flags) {
 		return (ISC_R_FAILURE);
 	}
 
-	if (create_allowed == true) {
+	if (create_allowed) {
 		createFlag = DB_CREATE;
 	}
 	/* open the database. */
@@ -537,7 +516,7 @@ insert_data(void) {
 					data_type = 'b';
 				}
 			} else if (data_type == 'c' || data_type == 'C') {
-				if (have_czone == true) {
+				if (have_czone) {
 					isc_buffer_putstr(
 						&buf2, token.value.as_pointer);
 					/* add string terminator to buffer */
@@ -564,7 +543,8 @@ insert_data(void) {
 
 			if ((data_type != 'u' &&
 			     isc_buffer_usedlength(&buf) > 0) ||
-			    data_type == 'b') {
+			    data_type == 'b')
+			{
 				/* perform insert operation */
 				if (data_type == 'd' || data_type == 'D') {
 					/* add string terminator to buffer */
@@ -634,7 +614,7 @@ openBDB(void) {
 	}
 
 	/* open BDB environment */
-	if (create_allowed == true) {
+	if (create_allowed) {
 		/* allowed to create new files */
 		bdbres = db.dbenv->open(db.dbenv, db_envdir,
 					DB_INIT_CDB | DB_INIT_MPOOL | DB_CREATE,
@@ -917,7 +897,7 @@ operation_listOrDelete(bool dlt) {
 	int curIndex = 0;
 
 	/* verify that only allowed parameters were passed. */
-	if (dlt == true) {
+	if (dlt) {
 		checkInvalidParam(zone, "z", "for delete operation");
 		checkInvalidParam(host, "h", "for delete operation");
 		checkInvalidOption(list_everything, true, "e",
@@ -944,9 +924,10 @@ operation_listOrDelete(bool dlt) {
 	memset(&bdbdata, 0, sizeof(bdbdata));
 
 	/* Dump database in "dlzbdb" bulk format */
-	if (list_everything == true) {
+	if (list_everything) {
 		if (bulk_write('c', db.client, db.cursor, &bdbkey, &bdbdata) !=
-		    ISC_R_SUCCESS) {
+		    ISC_R_SUCCESS)
+		{
 			return;
 		}
 		memset(&bdbkey, 0, sizeof(bdbkey));
@@ -969,7 +950,7 @@ operation_listOrDelete(bool dlt) {
 		bdbkey.data = &recno;
 		bdbkey.size = sizeof(recno);
 
-		if (dlt == true) {
+		if (dlt) {
 			bdbres = db.data->del(db.data, NULL, &bdbkey, 0);
 		} else {
 			bdbdata.flags = DB_DBT_REALLOC;
@@ -1082,7 +1063,7 @@ operation_listOrDelete(bool dlt) {
 	/* if client_zone was passed */
 	if (c_zone != NULL) {
 		/* create a cursor and make sure it worked. */
-		if (dlt == true) {
+		if (dlt) {
 			/* open read-write cursor */
 			bdbres = db.client->cursor(db.client, NULL, &db.cursor,
 						   DB_WRITECURSOR);
@@ -1116,7 +1097,7 @@ operation_listOrDelete(bool dlt) {
 		}
 
 		while (bdbres == 0) {
-			if (dlt == false) {
+			if (!dlt) {
 				printf("%.*s | %.*s\n", (int)bdbkey.size,
 				       (char *)bdbkey.data, (int)bdbdata.size,
 				       (char *)bdbdata.data);
@@ -1169,7 +1150,8 @@ main(int argc, char **argv) {
 
 	/* use the ISC commandline parser to get all the program arguments */
 	while ((ch = isc_commandline_parse(argc, argv,
-					   "ldesna:f:k:z:h:c:i:")) != -1) {
+					   "ldesna:f:k:z:h:c:i:")) != -1)
+	{
 		switch (ch) {
 		case 'n':
 			create_allowed = true;

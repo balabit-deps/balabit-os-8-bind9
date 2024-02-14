@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -12,6 +14,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/task.h>
@@ -59,7 +62,8 @@ static char bar[] = "bar";
 
 int
 main(int argc, char *argv[]) {
-	isc_taskmgr_t *manager = NULL;
+	isc_nm_t *netmgr = NULL;
+	isc_taskmgr_t *taskmgr = NULL;
 	isc_task_t *t1 = NULL, *t2 = NULL;
 	isc_task_t *t3 = NULL, *t4 = NULL;
 	isc_event_t *event;
@@ -83,13 +87,13 @@ main(int argc, char *argv[]) {
 
 	isc_mem_create(&mctx);
 
-	RUNTIME_CHECK(isc_taskmgr_create(mctx, workers, 0, NULL, &manager) ==
-		      ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_managers_create(mctx, workers, 0, &netmgr,
+					  &taskmgr) == ISC_R_SUCCESS);
 
-	RUNTIME_CHECK(isc_task_create(manager, 0, &t1) == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc_task_create(manager, 0, &t2) == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc_task_create(manager, 0, &t3) == ISC_R_SUCCESS);
-	RUNTIME_CHECK(isc_task_create(manager, 0, &t4) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &t1) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &t2) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &t3) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &t4) == ISC_R_SUCCESS);
 
 	RUNTIME_CHECK(isc_task_onshutdown(t1, my_shutdown, one) ==
 		      ISC_R_SUCCESS);
@@ -190,10 +194,10 @@ main(int argc, char *argv[]) {
 	Sleep(10000);
 #endif /* ifndef WIN32 */
 	printf("destroy\n");
-	isc_timer_detach(&ti1);
-	isc_timer_detach(&ti2);
+	isc_timer_destroy(&ti1);
+	isc_timer_destroy(&ti2);
 	isc_timermgr_destroy(&timgr);
-	isc_taskmgr_destroy(&manager);
+	isc_managers_destroy(&netmgr, &taskmgr);
 	printf("destroyed\n");
 
 	isc_mem_stats(mctx, stdout);

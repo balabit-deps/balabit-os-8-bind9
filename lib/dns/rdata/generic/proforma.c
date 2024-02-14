@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -14,7 +16,7 @@
 
 #define RRTYPE_ #_ATTRIBUTES(0)
 
-static inline isc_result_t fromtext_ #(ARGS_FROMTEXT) {
+static isc_result_t fromtext_ #(ARGS_FROMTEXT) {
 	isc_token_t token;
 
 	REQUIRE(type == dns_rdatatype_proforma.c #);
@@ -26,7 +28,7 @@ static inline isc_result_t fromtext_ #(ARGS_FROMTEXT) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline isc_result_t totext_ #(ARGS_TOTEXT) {
+static isc_result_t totext_ #(ARGS_TOTEXT) {
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdata->rdclass == #);
 	REQUIRE(rdata->length != 0); /* XXX */
@@ -34,7 +36,7 @@ static inline isc_result_t totext_ #(ARGS_TOTEXT) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline isc_result_t fromwire_ #(ARGS_FROMWIRE) {
+static isc_result_t fromwire_ #(ARGS_FROMWIRE) {
 	REQUIRE(type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdclass == #);
 
@@ -44,7 +46,7 @@ static inline isc_result_t fromwire_ #(ARGS_FROMWIRE) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline isc_result_t towire_ #(ARGS_TOWIRE) {
+static isc_result_t towire_ #(ARGS_TOWIRE) {
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdata->rdclass == #);
 	REQUIRE(rdata->length != 0); /* XXX */
@@ -55,7 +57,7 @@ static inline isc_result_t towire_ #(ARGS_TOWIRE) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline int compare_ #(ARGS_COMPARE) {
+static int compare_ #(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
 
@@ -71,7 +73,7 @@ static inline int compare_ #(ARGS_COMPARE) {
 	return (isc_region_compare(&r1, &r2));
 }
 
-static inline isc_result_t fromstruct_ #(ARGS_FROMSTRUCT) {
+static isc_result_t fromstruct_ #(ARGS_FROMSTRUCT) {
 	dns_rdata_ #_t *# = source;
 
 	REQUIRE(type == dns_rdatatype_proforma.c #);
@@ -83,7 +85,7 @@ static inline isc_result_t fromstruct_ #(ARGS_FROMSTRUCT) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline isc_result_t tostruct_ #(ARGS_TOSTRUCT) {
+static isc_result_t tostruct_ #(ARGS_TOSTRUCT) {
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdata->rdclass == #);
 	REQUIRE(rdata->length != 0); /* XXX */
@@ -91,7 +93,7 @@ static inline isc_result_t tostruct_ #(ARGS_TOSTRUCT) {
 	return (ISC_R_NOTIMPLEMENTED);
 }
 
-static inline void freestruct_ #(ARGS_FREESTRUCT) {
+static void freestruct_ #(ARGS_FREESTRUCT) {
 	dns_rdata_ #_t *# = source;
 
 	REQUIRE(# != NULL);
@@ -99,7 +101,7 @@ static inline void freestruct_ #(ARGS_FREESTRUCT) {
 	REQUIRE(#->common.rdclass == #);
 }
 
-static inline isc_result_t additionaldata_ #(ARGS_ADDLDATA) {
+static isc_result_t additionaldata_ #(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdata->rdclass == #);
 
@@ -109,7 +111,7 @@ static inline isc_result_t additionaldata_ #(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t digest_ #(ARGS_DIGEST) {
+static isc_result_t digest_ #(ARGS_DIGEST) {
 	isc_region_t r;
 
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
@@ -120,7 +122,7 @@ static inline isc_result_t digest_ #(ARGS_DIGEST) {
 	return ((digest)(arg, &r));
 }
 
-static inline bool checkowner_ #(ARGS_CHECKOWNER) {
+static bool checkowner_ #(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdclass == #);
 
@@ -132,7 +134,7 @@ static inline bool checkowner_ #(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool checknames_ #(ARGS_CHECKNAMES) {
+static bool checknames_ #(ARGS_CHECKNAMES) {
 	REQUIRE(rdata->type == dns_rdatatype_proforma.c #);
 	REQUIRE(rdata->rdclass == #);
 
@@ -143,7 +145,7 @@ static inline bool checknames_ #(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int casecompare_ #(ARGS_COMPARE) {
+static int casecompare_ #(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
 

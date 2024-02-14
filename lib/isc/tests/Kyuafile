@@ -1,3 +1,14 @@
+-- Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+--
+-- SPDX-License-Identifier: MPL-2.0
+--
+-- This Source Code Form is subject to the terms of the Mozilla Public
+-- License, v. 2.0.  If a copy of the MPL was not distributed with this
+-- file, you can obtain one at https://mozilla.org/MPL/2.0/.
+--
+-- See the COPYRIGHT file distributed with this work for additional
+-- information regarding copyright ownership.
+
 syntax(2)
 test_suite('bind9')
 
@@ -14,9 +25,11 @@ tap_test_program{name='lex_test'}
 tap_test_program{name='md_test'}
 tap_test_program{name='mem_test'}
 tap_test_program{name='netaddr_test'}
+tap_test_program{name='netmgr_test'}
 tap_test_program{name='parse_test'}
 tap_test_program{name='pool_test'}
 tap_test_program{name='radix_test'}
+tap_test_program{name='quota_test'}
 tap_test_program{name='regex_test'}
 tap_test_program{name='result_test'}
 tap_test_program{name='safe_test'}

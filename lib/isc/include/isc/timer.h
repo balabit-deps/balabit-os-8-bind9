@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -86,46 +88,19 @@ typedef enum {
 	isc_timertype_inactive = 3    /*%< Inactive */
 } isc_timertype_t;
 
-typedef struct isc_timerevent {
+typedef struct isc_timerevent isc_timerevent_t;
+
+struct isc_timerevent {
 	struct isc_event common;
 	isc_time_t	 due;
-} isc_timerevent_t;
+	ISC_LINK(isc_timerevent_t) ev_timerlink;
+};
 
 #define ISC_TIMEREVENT_FIRSTEVENT (ISC_EVENTCLASS_TIMER + 0)
 #define ISC_TIMEREVENT_TICK	  (ISC_EVENTCLASS_TIMER + 1)
 #define ISC_TIMEREVENT_IDLE	  (ISC_EVENTCLASS_TIMER + 2)
 #define ISC_TIMEREVENT_LIFE	  (ISC_EVENTCLASS_TIMER + 3)
 #define ISC_TIMEREVENT_LASTEVENT  (ISC_EVENTCLASS_TIMER + 65535)
-
-/*%
- * This structure is actually just the common prefix of a timer manager
- * object implementation's version of an isc_timermgr_t.
- * \brief
- * Direct use of this structure by clients is forbidden.  timer implementations
- * may change the structure.  'magic' must be ISCAPI_TIMERMGR_MAGIC for any
- * of the isc_timer_ routines to work.  timer implementations must maintain
- * all timer invariants.
- */
-struct isc_timermgr {
-	unsigned int impmagic;
-	unsigned int magic;
-};
-
-#define ISCAPI_TIMERMGR_MAGIC ISC_MAGIC('A', 't', 'm', 'g')
-#define ISCAPI_TIMERMGR_VALID(m) \
-	((m) != NULL && (m)->magic == ISCAPI_TIMERMGR_MAGIC)
-
-/*%
- * This is the common prefix of a timer object.  The same note as
- * that for the timermgr structure applies.
- */
-struct isc_timer {
-	unsigned int impmagic;
-	unsigned int magic;
-};
-
-#define ISCAPI_TIMER_MAGIC    ISC_MAGIC('A', 't', 'm', 'r')
-#define ISCAPI_TIMER_VALID(s) ((s) != NULL && (s)->magic == ISCAPI_TIMER_MAGIC)
 
 /***
  *** Timer and Timer Manager Functions
@@ -251,25 +226,9 @@ isc_timer_touch(isc_timer_t *timer);
  */
 
 void
-isc_timer_attach(isc_timer_t *timer, isc_timer_t **timerp);
+isc_timer_destroy(isc_timer_t **timerp);
 /*%<
- * Attach *timerp to timer.
- *
- * Requires:
- *
- *\li	'timer' is a valid timer.
- *
- *\li	'timerp' points to a NULL timer.
- *
- * Ensures:
- *
- *\li	*timerp is attached to timer.
- */
-
-void
-isc_timer_detach(isc_timer_t **timerp);
-/*%<
- * Detach *timerp from its timer.
+ * Destroy *timerp.
  *
  * Requires:
  *
@@ -279,9 +238,6 @@ isc_timer_detach(isc_timer_t **timerp);
  *
  *\li	*timerp is NULL.
  *
- *\li	If '*timerp' is the last reference to the timer,
- *	then:
- *
  *\code
  *		The timer will be shutdown
  *
@@ -290,9 +246,13 @@ isc_timer_detach(isc_timer_t **timerp);
  *		All resources used by the timer have been freed
  *
  *		Any events already posted by the timer will be purged.
- *		Therefore, if isc_timer_detach() is called in the context
+ *		Therefore, if isc_timer_destroy() is called in the context
  *		of the timer's task, it is guaranteed that no more
  *		timer event callbacks will run after the call.
+ *
+ *		If this function is called from the timer event callback
+ *		the event itself must be destroyed before the timer
+ *		itself.
  *\endcode
  */
 
@@ -307,13 +267,9 @@ isc_timer_gettype(isc_timer_t *timer);
  */
 
 isc_result_t
-isc_timermgr_createinctx(isc_mem_t *mctx, isc_timermgr_t **managerp);
-
-isc_result_t
 isc_timermgr_create(isc_mem_t *mctx, isc_timermgr_t **managerp);
 /*%<
- * Create a timer manager.  isc_timermgr_createinctx() also associates
- * the new manager with the specified application context.
+ * Create a timer manager.
  *
  * Notes:
  *
@@ -324,8 +280,6 @@ isc_timermgr_create(isc_mem_t *mctx, isc_timermgr_t **managerp);
  *\li	'mctx' is a valid memory context.
  *
  *\li	'managerp' points to a NULL isc_timermgr_t.
- *
- *\li	'actx' is a valid application context (for createinctx()).
  *
  * Ensures:
  *

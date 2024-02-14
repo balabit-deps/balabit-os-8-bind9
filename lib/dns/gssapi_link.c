@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -175,11 +177,10 @@ gssapi_sign(dst_context_t *dctx, isc_buffer_t *sig) {
 static isc_result_t
 gssapi_verify(dst_context_t *dctx, const isc_region_t *sig) {
 	dst_gssapi_signverifyctx_t *ctx = dctx->ctxdata.gssctx;
-	isc_region_t message, r;
+	isc_region_t message;
 	gss_buffer_desc gmessage, gsig;
 	OM_uint32 minor, gret;
 	gss_ctx_id_t gssctx = dctx->key->keydata.gssctx;
-	unsigned char buf[sig->length];
 	char err[1024];
 
 	/*
@@ -188,11 +189,7 @@ gssapi_verify(dst_context_t *dctx, const isc_region_t *sig) {
 	 */
 	isc_buffer_usedregion(ctx->buffer, &message);
 	REGION_TO_GBUFFER(message, gmessage);
-
-	memmove(buf, sig->base, sig->length);
-	r.base = buf;
-	r.length = sig->length;
-	REGION_TO_GBUFFER(r, gsig);
+	REGION_TO_GBUFFER(*sig, gsig);
 
 	/*
 	 * Verify the data.
@@ -279,7 +276,7 @@ gssapi_restore(dst_key_t *key, const char *keystr) {
 	isc_buffer_remainingregion(b, &r);
 	REGION_TO_GBUFFER(r, gssbuffer);
 	major = gss_import_sec_context(&minor, &gssbuffer,
-				       &key->keydata.gssctx);
+				       (gss_ctx_id_t *)&key->keydata.gssctx);
 	if (major != GSS_S_COMPLETE) {
 		isc_buffer_free(&b);
 		return (ISC_R_FAILURE);
@@ -299,8 +296,8 @@ gssapi_dump(dst_key_t *key, isc_mem_t *mctx, char **buffer, int *length) {
 	isc_region_t r;
 	isc_result_t result;
 
-	major = gss_export_sec_context(&minor, &key->keydata.gssctx,
-				       &gssbuffer);
+	major = gss_export_sec_context(
+		&minor, (gss_ctx_id_t *)&key->keydata.gssctx, &gssbuffer);
 	if (major != GSS_S_COMPLETE) {
 		fprintf(stderr, "gss_export_sec_context -> %u, %u\n", major,
 			minor);

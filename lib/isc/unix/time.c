@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -32,7 +34,10 @@
 #define NS_PER_S  1000000000 /*%< Nanoseconds per second. */
 #define NS_PER_US 1000	     /*%< Nanoseconds per microsecond. */
 #define NS_PER_MS 1000000    /*%< Nanoseconds per millisecond. */
-#define US_PER_S  1000000    /*%< Microseconds per second. */
+
+#if defined(CLOCK_REALTIME)
+#define CLOCKSOURCE_HIRES CLOCK_REALTIME
+#endif /* #if defined(CLOCK_REALTIME) */
 
 #if defined(CLOCK_REALTIME_COARSE)
 #define CLOCKSOURCE CLOCK_REALTIME_COARSE
@@ -42,12 +47,18 @@
 #define CLOCKSOURCE CLOCK_REALTIME
 #endif /* if defined(CLOCK_REALTIME_COARSE) */
 
+#if !defined(CLOCKSOURCE_HIRES)
+#define CLOCKSOURCE_HIRES CLOCKSOURCE
+#endif /* #ifndef CLOCKSOURCE_HIRES */
+
 /*%
  *** Intervals
  ***/
 
+#if !defined(UNIT_TESTING)
 static const isc_interval_t zero_interval = { 0, 0 };
 const isc_interval_t *const isc_interval_zero = &zero_interval;
+#endif
 
 void
 isc_interval_set(isc_interval_t *i, unsigned int seconds,
@@ -75,8 +86,10 @@ isc_interval_iszero(const isc_interval_t *i) {
  *** Absolute Times
  ***/
 
+#if !defined(UNIT_TESTING)
 static const isc_time_t epoch = { 0, 0 };
 const isc_time_t *const isc_time_epoch = &epoch;
+#endif
 
 void
 isc_time_set(isc_time_t *t, unsigned int seconds, unsigned int nanoseconds) {
@@ -107,14 +120,14 @@ isc_time_isepoch(const isc_time_t *t) {
 	return (false);
 }
 
-isc_result_t
-isc_time_now(isc_time_t *t) {
+static isc_result_t
+time_now(isc_time_t *t, clockid_t clock) {
 	struct timespec ts;
 	char strbuf[ISC_STRERRORSIZE];
 
 	REQUIRE(t != NULL);
 
-	if (clock_gettime(CLOCKSOURCE, &ts) == -1) {
+	if (clock_gettime(clock, &ts) == -1) {
 		strerror_r(errno, strbuf, sizeof(strbuf));
 		UNEXPECTED_ERROR(__FILE__, __LINE__, "%s", strbuf);
 		return (ISC_R_UNEXPECTED);
@@ -137,6 +150,16 @@ isc_time_now(isc_time_t *t) {
 	t->nanoseconds = ts.tv_nsec;
 
 	return (ISC_R_SUCCESS);
+}
+
+isc_result_t
+isc_time_now_hires(isc_time_t *t) {
+	return time_now(t, CLOCKSOURCE_HIRES);
+}
+
+isc_result_t
+isc_time_now(isc_time_t *t) {
+	return time_now(t, CLOCKSOURCE);
 }
 
 isc_result_t
@@ -203,25 +226,22 @@ isc_time_compare(const isc_time_t *t1, const isc_time_t *t2) {
 isc_result_t
 isc_time_add(const isc_time_t *t, const isc_interval_t *i, isc_time_t *result) {
 	REQUIRE(t != NULL && i != NULL && result != NULL);
-	INSIST(t->nanoseconds < NS_PER_S && i->nanoseconds < NS_PER_S);
+	REQUIRE(t->nanoseconds < NS_PER_S && i->nanoseconds < NS_PER_S);
 
-	/*
-	 * Ensure the resulting seconds value fits in the size of an
-	 * unsigned int.  (It is written this way as a slight optimization;
-	 * note that even if both values == INT_MAX, then when added
-	 * and getting another 1 added below the result is UINT_MAX.)
-	 */
-	if ((t->seconds > INT_MAX || i->seconds > INT_MAX) &&
-	    ((long long)t->seconds + i->seconds > UINT_MAX))
-	{
+	/* Seconds */
+	if (t->seconds > UINT_MAX - i->seconds) {
 		return (ISC_R_RANGE);
 	}
-
 	result->seconds = t->seconds + i->seconds;
+
+	/* Nanoseconds */
 	result->nanoseconds = t->nanoseconds + i->nanoseconds;
 	if (result->nanoseconds >= NS_PER_S) {
-		result->seconds++;
+		if (result->seconds == UINT_MAX) {
+			return (ISC_R_RANGE);
+		}
 		result->nanoseconds -= NS_PER_S;
+		result->seconds++;
 	}
 
 	return (ISC_R_SUCCESS);
@@ -231,22 +251,24 @@ isc_result_t
 isc_time_subtract(const isc_time_t *t, const isc_interval_t *i,
 		  isc_time_t *result) {
 	REQUIRE(t != NULL && i != NULL && result != NULL);
-	INSIST(t->nanoseconds < NS_PER_S && i->nanoseconds < NS_PER_S);
+	REQUIRE(t->nanoseconds < NS_PER_S && i->nanoseconds < NS_PER_S);
 
-	if ((unsigned int)t->seconds < i->seconds ||
-	    ((unsigned int)t->seconds == i->seconds &&
-	     t->nanoseconds < i->nanoseconds))
-	{
+	/* Seconds */
+	if (t->seconds < i->seconds) {
 		return (ISC_R_RANGE);
 	}
-
 	result->seconds = t->seconds - i->seconds;
+
+	/* Nanoseconds */
 	if (t->nanoseconds >= i->nanoseconds) {
 		result->nanoseconds = t->nanoseconds - i->nanoseconds;
 	} else {
-		result->nanoseconds = NS_PER_S - i->nanoseconds +
-				      t->nanoseconds;
+		if (result->seconds == 0) {
+			return (ISC_R_RANGE);
+		}
 		result->seconds--;
+		result->nanoseconds = NS_PER_S + t->nanoseconds -
+				      i->nanoseconds;
 	}
 
 	return (ISC_R_SUCCESS);
@@ -293,20 +315,20 @@ isc_time_secondsastimet(const isc_time_t *t, time_t *secondsp) {
 
 	/*
 	 * Ensure that the number of seconds represented by t->seconds
-	 * can be represented by a time_t.  Since t->seconds is an unsigned
-	 * int and since time_t is mostly opaque, this is trickier than
-	 * it seems.  (This standardized opaqueness of time_t is *very*
-	 * frustrating; time_t is not even limited to being an integral
-	 * type.)
+	 * can be represented by a time_t.  Since t->seconds is an
+	 * unsigned int and since time_t is mostly opaque, this is
+	 * trickier than it seems.  (This standardized opaqueness of
+	 * time_t is *very* frustrating; time_t is not even limited to
+	 * being an integral type.)
 	 *
 	 * The mission, then, is to avoid generating any kind of warning
-	 * about "signed versus unsigned" while trying to determine if the
-	 * the unsigned int t->seconds is out range for tv_sec, which is
-	 * pretty much only true if time_t is a signed integer of the same
-	 * size as the return value of isc_time_seconds.
+	 * about "signed versus unsigned" while trying to determine if
+	 * the unsigned int t->seconds is out range for tv_sec,
+	 * which is pretty much only true if time_t is a signed integer
+	 * of the same size as the return value of isc_time_seconds.
 	 *
-	 * If the paradox in the if clause below is true, t->seconds is out
-	 * of range for time_t.
+	 * If the paradox in the if clause below is true, t->seconds is
+	 * out of range for time_t.
 	 */
 	seconds = (time_t)t->seconds;
 
@@ -365,7 +387,8 @@ isc_time_formathttptimestamp(const isc_time_t *t, char *buf, unsigned int len) {
 	REQUIRE(len > 0);
 
 	/*
-	 * 5 spaces, 1 comma, 3 GMT, 2 %d, 4 %Y, 8 %H:%M:%S, 3+ %a, 3+ %b (29+)
+	 * 5 spaces, 1 comma, 3 GMT, 2 %d, 4 %Y, 8 %H:%M:%S, 3+ %a, 3+
+	 * %b (29+)
 	 */
 	now = (time_t)t->seconds;
 	flen = strftime(buf, len, "%a, %d %b %Y %H:%M:%S GMT",
@@ -431,6 +454,26 @@ isc_time_formatISO8601Lms(const isc_time_t *t, char *buf, unsigned int len) {
 }
 
 void
+isc_time_formatISO8601Lus(const isc_time_t *t, char *buf, unsigned int len) {
+	time_t now;
+	unsigned int flen;
+	struct tm tm;
+
+	REQUIRE(t != NULL);
+	INSIST(t->nanoseconds < NS_PER_S);
+	REQUIRE(buf != NULL);
+	REQUIRE(len > 0);
+
+	now = (time_t)t->seconds;
+	flen = strftime(buf, len, "%Y-%m-%dT%H:%M:%S", localtime_r(&now, &tm));
+	INSIST(flen < len);
+	if (flen > 0U && len - flen >= 6) {
+		snprintf(buf + flen, len - flen, ".%06u",
+			 t->nanoseconds / NS_PER_US);
+	}
+}
+
+void
 isc_time_formatISO8601(const isc_time_t *t, char *buf, unsigned int len) {
 	time_t now;
 	unsigned int flen;
@@ -464,6 +507,27 @@ isc_time_formatISO8601ms(const isc_time_t *t, char *buf, unsigned int len) {
 		flen -= 1; /* rewind one character (Z) */
 		snprintf(buf + flen, len - flen, ".%03uZ",
 			 t->nanoseconds / NS_PER_MS);
+	}
+}
+
+void
+isc_time_formatISO8601us(const isc_time_t *t, char *buf, unsigned int len) {
+	time_t now;
+	unsigned int flen;
+	struct tm tm;
+
+	REQUIRE(t != NULL);
+	INSIST(t->nanoseconds < NS_PER_S);
+	REQUIRE(buf != NULL);
+	REQUIRE(len > 0);
+
+	now = (time_t)t->seconds;
+	flen = strftime(buf, len, "%Y-%m-%dT%H:%M:%SZ", gmtime_r(&now, &tm));
+	INSIST(flen < len);
+	if (flen > 0U && len - flen >= 5) {
+		flen -= 1; /* rewind one character (Z) */
+		snprintf(buf + flen, len - flen, ".%06uZ",
+			 t->nanoseconds / NS_PER_US);
 	}
 }
 

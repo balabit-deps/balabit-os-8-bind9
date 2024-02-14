@@ -1,0 +1,36 @@
+From: =?utf-8?b?T25kxZllaiBTdXLDvQ==?= <ondrej@debian.org>
+Date: Wed, 18 May 2022 17:17:57 +0200
+Subject: Disable treat-warnings-as-errors in sphinx-build
+
+---
+ doc/arm/Makefile.in | 1 -
+ doc/man/Makefile.in | 2 --
+ 2 files changed, 3 deletions(-)
+
+diff --git a/doc/arm/Makefile.in b/doc/arm/Makefile.in
+index ce365e3..806f577 100644
+--- a/doc/arm/Makefile.in
++++ b/doc/arm/Makefile.in
+@@ -29,7 +29,6 @@ SPHINXBUILD = @SPHINX_BUILD@
+ SPHINXBUILDDIR = ${builddir}/_build
+ 
+ common_SPHINXOPTS =	\
+-	-W		\
+ 	-a		\
+ 	-v		\
+ 	-c "${abs_srcdir}"
+diff --git a/doc/man/Makefile.in b/doc/man/Makefile.in
+index 75794f7..7148293 100644
+--- a/doc/man/Makefile.in
++++ b/doc/man/Makefile.in
+@@ -158,10 +158,8 @@ BIND9_VERSIONSTRING=@BIND9_VERSIONSTRING@
+ # You can set these variables from the command line.
+ SPHINXBUILD = @SPHINX_BUILD@
+ SPHINXBUILDDIR = ${builddir}/_build
+-SPHINX_W = -W
+ 
+ common_SPHINXOPTS =		\
+-	$(SPHINX_W)		\
+ 	-a			\
+ 	-v			\
+ 	-c "${abs_srcdir}"

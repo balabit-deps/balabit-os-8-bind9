@@ -1,17 +1,25 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
  */
 
 /*
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Copyright (c) 2001 Mike Barcroft <mike@FreeBSD.org>
  * Copyright (c) 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
+ *
+ * This code is derived from software contributed to Berkeley by
+ * Chris Torek.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -46,6 +54,7 @@
 #include <string.h>
 
 #include <isc/string.h> /* IWYU pragma: keep */
+#include <isc/util.h>
 
 #if !defined(HAVE_STRLCPY)
 size_t
@@ -106,6 +115,29 @@ strlcat(char *dst, const char *src, size_t size) {
 	return (dlen + (s - src)); /* count does not include NUL */
 }
 #endif /* !defined(HAVE_STRLCAT) */
+
+#if !defined(HAVE_STRNSTR)
+char *
+strnstr(const char *s, const char *find, size_t slen) {
+	char c, sc, *r;
+	size_t len;
+
+	if ((c = *find++) != '\0') {
+		len = strlen(find);
+		do {
+			do {
+				if (slen-- < 1 || (sc = *s++) == '\0')
+					return (NULL);
+			} while (sc != c);
+			if (len > slen)
+				return (NULL);
+		} while (strncmp(s, find, len) != 0);
+		s--;
+	}
+	DE_CONST(s, r);
+	return (r);
+}
+#endif
 
 int
 isc_string_strerror_r(int errnum, char *buf, size_t buflen) {

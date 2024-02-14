@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -16,7 +18,7 @@
 
 #define RRTYPE_RP_ATTRIBUTES (0)
 
-static inline isc_result_t
+static isc_result_t
 fromtext_rp(ARGS_FROMTEXT) {
 	isc_token_t token;
 	dns_name_t name;
@@ -55,7 +57,7 @@ fromtext_rp(ARGS_FROMTEXT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_rp(ARGS_TOTEXT) {
 	isc_region_t region;
 	dns_name_t rmail;
@@ -87,7 +89,7 @@ totext_rp(ARGS_TOTEXT) {
 	return (dns_name_totext(&prefix, sub, target));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_rp(ARGS_FROMWIRE) {
 	dns_name_t rmail;
 	dns_name_t email;
@@ -106,7 +108,7 @@ fromwire_rp(ARGS_FROMWIRE) {
 	return (dns_name_fromwire(&email, source, dctx, options, target));
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_rp(ARGS_TOWIRE) {
 	isc_region_t region;
 	dns_name_t rmail;
@@ -134,7 +136,7 @@ towire_rp(ARGS_TOWIRE) {
 	return (dns_name_towire(&rmail, cctx, target));
 }
 
-static inline int
+static int
 compare_rp(ARGS_COMPARE) {
 	isc_region_t region1;
 	isc_region_t region2;
@@ -174,7 +176,7 @@ compare_rp(ARGS_COMPARE) {
 	return (dns_name_rdatacompare(&name1, &name2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_rp(ARGS_FROMSTRUCT) {
 	dns_rdata_rp_t *rp = source;
 	isc_region_t region;
@@ -193,7 +195,7 @@ fromstruct_rp(ARGS_FROMSTRUCT) {
 	return (isc_buffer_copyregion(target, &region));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_rp(ARGS_TOSTRUCT) {
 	isc_result_t result;
 	isc_region_t region;
@@ -231,7 +233,7 @@ cleanup:
 	return (ISC_R_NOMEMORY);
 }
 
-static inline void
+static void
 freestruct_rp(ARGS_FREESTRUCT) {
 	dns_rdata_rp_t *rp = source;
 
@@ -247,7 +249,7 @@ freestruct_rp(ARGS_FREESTRUCT) {
 	rp->mctx = NULL;
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_rp(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_rp);
 
@@ -258,7 +260,7 @@ additionaldata_rp(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_rp(ARGS_DIGEST) {
 	isc_region_t r;
 	dns_name_t name;
@@ -278,7 +280,7 @@ digest_rp(ARGS_DIGEST) {
 	return (dns_name_digest(&name, digest, arg));
 }
 
-static inline bool
+static bool
 checkowner_rp(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_rp);
 
@@ -290,7 +292,7 @@ checkowner_rp(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_rp(ARGS_CHECKNAMES) {
 	isc_region_t region;
 	dns_name_t name;
@@ -311,7 +313,7 @@ checknames_rp(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_rp(ARGS_COMPARE) {
 	return (compare_rp(rdata1, rdata2));
 }
