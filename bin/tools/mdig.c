@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -20,10 +22,12 @@
 #include <isc/hash.h>
 #include <isc/hex.h>
 #include <isc/log.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/net.h>
 #include <isc/nonce.h>
 #include <isc/parseint.h>
+#include <isc/portset.h>
 #include <isc/print.h>
 #include <isc/random.h>
 #include <isc/sockaddr.h>
@@ -82,10 +86,15 @@
 #define UDPTIMEOUT 5
 #define MAXTRIES   0xffffffff
 
-static isc_mem_t *mctx;
-static dns_requestmgr_t *requestmgr;
-static const char *batchname;
-static FILE *batchfp;
+#define NS_PER_US  1000	   /*%< Nanoseconds per microsecond. */
+#define US_PER_SEC 1000000 /*%< Microseconds per second. */
+#define US_PER_MS  1000	   /*%< Microseconds per millisecond. */
+
+static isc_mem_t *mctx = NULL;
+static dns_requestmgr_t *requestmgr = NULL;
+static const char *batchname = NULL;
+static FILE *batchfp = NULL;
+static bool burst = false;
 static bool have_ipv4 = false;
 static bool have_ipv6 = false;
 static bool have_src = false;
@@ -109,7 +118,7 @@ static bool yaml = false;
 static bool continue_on_error = false;
 static uint32_t display_splitwidth = 0xffffffff;
 static isc_sockaddr_t srcaddr;
-static char *server;
+static char *server = NULL;
 static isc_sockaddr_t dstaddr;
 static in_port_t port = 53;
 static isc_dscp_t dscp = -1;
@@ -209,8 +218,7 @@ recvresponse(isc_task_t *task, isc_event_t *event) {
 		}
 	}
 
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &response);
-	CHECK("dns_message_create", result);
+	dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &response);
 
 	parseflags |= DNS_MESSAGEPARSE_PRESERVEORDER;
 	if (besteffort) {
@@ -324,7 +332,7 @@ recvresponse(isc_task_t *task, isc_event_t *event) {
 			if (hash != NULL) {
 				*hash = '\0';
 			}
-			printf("    response_address: %s\n", sockstr);
+			printf("    response_address: \"%s\"\n", sockstr);
 			printf("    response_port: %u\n", sport);
 		}
 
@@ -335,7 +343,7 @@ recvresponse(isc_task_t *task, isc_event_t *event) {
 			if (hash != NULL) {
 				*hash = '\0';
 			}
-			printf("    query_address: %s\n", sockstr);
+			printf("    query_address: \"%s\"\n", sockstr);
 			printf("    query_port: %u\n", sport);
 		}
 
@@ -471,7 +479,8 @@ repopulate_buffer:
 						dns_rdataset_next(rdataset);
 					dns_rdata_reset(&rdata);
 					if (strlen("\n") >=
-					    isc_buffer_availablelength(buf)) {
+					    isc_buffer_availablelength(buf))
+					{
 						goto buftoosmall;
 					}
 					isc_buffer_putstr(buf, "\n");
@@ -533,10 +542,10 @@ cleanup:
 		dns_master_styledestroy(&style, mctx);
 	}
 	if (query != NULL) {
-		dns_message_destroy(&query);
+		dns_message_detach(&query);
 	}
 	if (response != NULL) {
-		dns_message_destroy(&response);
+		dns_message_detach(&response);
 	}
 	dns_request_destroy(&reqev->request);
 	isc_event_free(&event);
@@ -574,10 +583,10 @@ compute_cookie(unsigned char *cookie, size_t len) {
 
 static isc_result_t
 sendquery(struct query *query, isc_task_t *task) {
-	dns_request_t *request;
-	dns_message_t *message;
-	dns_name_t *qname;
-	dns_rdataset_t *qrdataset;
+	dns_request_t *request = NULL;
+	dns_message_t *message = NULL;
+	dns_name_t *qname = NULL;
+	dns_rdataset_t *qrdataset = NULL;
 	isc_result_t result;
 	dns_fixedname_t queryname;
 	isc_buffer_t buf;
@@ -592,9 +601,7 @@ sendquery(struct query *query, isc_task_t *task) {
 				   dns_rootname, 0, NULL);
 	CHECK("dns_name_fromtext", result);
 
-	message = NULL;
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &message);
-	CHECK("dns_message_create", result);
+	dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &message);
 
 	message->opcode = dns_opcode_query;
 	if (query->recurse) {
@@ -615,15 +622,12 @@ sendquery(struct query *query, isc_task_t *task) {
 	message->rdclass = query->rdclass;
 	message->id = (unsigned short)(random() & 0xFFFF);
 
-	qname = NULL;
 	result = dns_message_gettempname(message, &qname);
 	CHECK("dns_message_gettempname", result);
 
-	qrdataset = NULL;
 	result = dns_message_gettemprdataset(message, &qrdataset);
 	CHECK("dns_message_gettemprdataset", result);
 
-	dns_name_init(qname, NULL);
 	dns_name_clone(dns_fixedname_name(&queryname), qname);
 	dns_rdataset_makequestion(qrdataset, query->rdclass, query->rdtype);
 	ISC_LIST_APPEND(qname->list, qrdataset, link);
@@ -1224,18 +1228,29 @@ plus_option(char *option, struct query *query, bool global) {
 			GLOBAL();
 			besteffort = state;
 			break;
-		case 'u': /* bufsize */
-			FULLCHECK("bufsize");
-			if (value == NULL) {
-				goto need_value;
-			}
-			if (!state) {
+		case 'u':
+			switch (cmd[2]) {
+			case 'f': /* bufsize */
+				FULLCHECK("bufsize");
+				if (value == NULL) {
+					goto need_value;
+				}
+				if (!state) {
+					goto invalid_option;
+				}
+				result = parse_uint(&num, value, COMMSIZE,
+						    "buffer size");
+				CHECK("parse_uint(buffer size)", result);
+				query->udpsize = num;
+				break;
+			case 'r': /* burst */
+				FULLCHECK("burst");
+				GLOBAL();
+				burst = state;
+				break;
+			default:
 				goto invalid_option;
 			}
-			result = parse_uint(&num, value, COMMSIZE,
-					    "buffer size");
-			CHECK("parse_uint(buffer size)", result);
-			query->udpsize = num;
 			break;
 		default:
 			goto invalid_option;
@@ -1687,7 +1702,7 @@ dash_option(const char *option, char *next, struct query *query, bool global,
 				have_ipv6 = false;
 			} else {
 				fatal("can't find IPv4 networking");
-				/* NOTREACHED */
+				UNREACHABLE();
 				return (false);
 			}
 			break;
@@ -1698,7 +1713,7 @@ dash_option(const char *option, char *next, struct query *query, bool global,
 				have_ipv4 = false;
 			} else {
 				fatal("can't find IPv6 networking");
-				/* NOTREACHED */
+				UNREACHABLE();
 				return (false);
 			}
 			break;
@@ -1806,7 +1821,7 @@ dash_option(const char *option, char *next, struct query *query, bool global,
 		fprintf(stderr, "Invalid option: -%s\n", option);
 		usage();
 	}
-	/* NOTREACHED */
+	UNREACHABLE();
 	return (false);
 }
 
@@ -1879,7 +1894,8 @@ preparse_args(int argc, char **argv) {
 		}
 		/* Look for dash value option. */
 		if (strpbrk(option, dash_opts) != &option[0] ||
-		    strlen(option) > 1U) {
+		    strlen(option) > 1U)
+		{
 			/* Error or value in option. */
 			continue;
 		}
@@ -1966,13 +1982,15 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 
 			if (rc <= 1) {
 				if (dash_option(&rv[0][1], NULL, query, global,
-						&setname)) {
+						&setname))
+				{
 					rc--;
 					rv++;
 				}
 			} else {
 				if (dash_option(&rv[0][1], rv[1], query, global,
-						&setname)) {
+						&setname))
+				{
 					rc--;
 					rv++;
 				}
@@ -2046,22 +2064,64 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 	}
 }
 
+/*
+ * Try honoring the operating system's preferred ephemeral port range.
+ */
+static void
+set_source_ports(dns_dispatchmgr_t *manager) {
+	isc_portset_t *v4portset = NULL, *v6portset = NULL;
+	in_port_t udpport_low, udpport_high;
+	isc_result_t result;
+
+	result = isc_portset_create(mctx, &v4portset);
+	if (result != ISC_R_SUCCESS) {
+		fatal("isc_portset_create (v4) failed");
+	}
+
+	result = isc_net_getudpportrange(AF_INET, &udpport_low, &udpport_high);
+	if (result != ISC_R_SUCCESS) {
+		fatal("isc_net_getudpportrange (v4) failed");
+	}
+
+	isc_portset_addrange(v4portset, udpport_low, udpport_high);
+
+	result = isc_portset_create(mctx, &v6portset);
+	if (result != ISC_R_SUCCESS) {
+		fatal("isc_portset_create (v6) failed");
+	}
+	result = isc_net_getudpportrange(AF_INET6, &udpport_low, &udpport_high);
+	if (result != ISC_R_SUCCESS) {
+		fatal("isc_net_getudpportrange (v6) failed");
+	}
+
+	isc_portset_addrange(v6portset, udpport_low, udpport_high);
+
+	result = dns_dispatchmgr_setavailports(manager, v4portset, v6portset);
+	if (result != ISC_R_SUCCESS) {
+		fatal("dns_dispatchmgr_setavailports failed");
+	}
+
+	isc_portset_destroy(mctx, &v4portset);
+	isc_portset_destroy(mctx, &v6portset);
+}
+
 /*% Main processing routine for mdig */
 int
 main(int argc, char *argv[]) {
-	struct query *query;
+	struct query *query = NULL;
 	isc_result_t result;
 	isc_sockaddr_t bind_any;
-	isc_log_t *lctx;
-	isc_logconfig_t *lcfg;
-	isc_taskmgr_t *taskmgr;
-	isc_task_t *task;
-	isc_timermgr_t *timermgr;
-	isc_socketmgr_t *socketmgr;
-	dns_dispatchmgr_t *dispatchmgr;
+	isc_log_t *lctx = NULL;
+	isc_logconfig_t *lcfg = NULL;
+	isc_nm_t *netmgr = NULL;
+	isc_taskmgr_t *taskmgr = NULL;
+	isc_task_t *task = NULL;
+	isc_timermgr_t *timermgr = NULL;
+	isc_socketmgr_t *socketmgr = NULL;
+	dns_dispatchmgr_t *dispatchmgr = NULL;
 	unsigned int attrs, attrmask;
-	dns_dispatch_t *dispatchvx;
-	dns_view_t *view;
+	dns_dispatch_t *dispatchvx = NULL;
+	dns_view_t *view = NULL;
 	int ns;
 	unsigned int i;
 
@@ -2081,12 +2141,9 @@ main(int argc, char *argv[]) {
 
 	preparse_args(argc, argv);
 
-	mctx = NULL;
 	isc_mem_create(&mctx);
 
-	lctx = NULL;
-	lcfg = NULL;
-	RUNCHECK(isc_log_create(mctx, &lctx, &lcfg));
+	isc_log_create(mctx, &lctx, &lcfg);
 
 	RUNCHECK(dst_lib_init(mctx, NULL));
 	isc_nonce_buf(cookie_secret, sizeof(cookie_secret));
@@ -2115,19 +2172,16 @@ main(int argc, char *argv[]) {
 		fatal("can't choose between IPv4 and IPv6");
 	}
 
-	taskmgr = NULL;
-	RUNCHECK(isc_taskmgr_create(mctx, 1, 0, NULL, &taskmgr));
-	task = NULL;
+	RUNCHECK(isc_managers_create(mctx, 1, 0, &netmgr, &taskmgr));
 	RUNCHECK(isc_task_create(taskmgr, 0, &task));
-	timermgr = NULL;
-
 	RUNCHECK(isc_timermgr_create(mctx, &timermgr));
-	socketmgr = NULL;
 	RUNCHECK(isc_socketmgr_create(mctx, &socketmgr));
-	dispatchmgr = NULL;
 	RUNCHECK(dns_dispatchmgr_create(mctx, &dispatchmgr));
 
+	set_source_ports(dispatchmgr);
+
 	attrs = DNS_DISPATCHATTR_UDP | DNS_DISPATCHATTR_MAKEQUERY;
+
 	if (have_ipv4) {
 		isc_sockaddr_any(&bind_any);
 		attrs |= DNS_DISPATCHATTR_IPV4;
@@ -2137,24 +2191,66 @@ main(int argc, char *argv[]) {
 	}
 	attrmask = DNS_DISPATCHATTR_UDP | DNS_DISPATCHATTR_TCP |
 		   DNS_DISPATCHATTR_IPV4 | DNS_DISPATCHATTR_IPV6;
-	dispatchvx = NULL;
 	RUNCHECK(dns_dispatch_getudp(dispatchmgr, socketmgr, taskmgr,
 				     have_src ? &srcaddr : &bind_any, 4096, 100,
 				     100, 17, 19, attrs, attrmask,
 				     &dispatchvx));
-	requestmgr = NULL;
 	RUNCHECK(dns_requestmgr_create(
 		mctx, timermgr, socketmgr, taskmgr, dispatchmgr,
 		have_ipv4 ? dispatchvx : NULL, have_ipv6 ? dispatchvx : NULL,
 		&requestmgr));
 
-	view = NULL;
 	RUNCHECK(dns_view_create(mctx, 0, "_test", &view));
 
 	query = ISC_LIST_HEAD(queries);
 	RUNCHECK(isc_app_onrun(mctx, task, sendqueries, query));
 
+	/*
+	 * Stall to the start of a new second.
+	 */
+	if (burst) {
+		isc_time_t start, now;
+		RUNCHECK(isc_time_now(&start));
+		/*
+		 * Sleep to 1ms of the end of the second then run a busy loop
+		 * until the second changes.
+		 */
+		do {
+			RUNCHECK(isc_time_now(&now));
+			if (isc_time_seconds(&start) == isc_time_seconds(&now))
+			{
+				int us = US_PER_SEC -
+					 (isc_time_nanoseconds(&now) /
+					  NS_PER_US);
+				if (us > US_PER_MS) {
+					usleep(us - US_PER_MS);
+				}
+			} else {
+				break;
+			}
+		} while (1);
+	}
+
 	(void)isc_app_run();
+
+	dns_view_detach(&view);
+
+	dns_requestmgr_shutdown(requestmgr);
+	dns_requestmgr_detach(&requestmgr);
+
+	dns_dispatch_detach(&dispatchvx);
+	dns_dispatchmgr_destroy(&dispatchmgr);
+
+	isc_socketmgr_destroy(&socketmgr);
+	isc_timermgr_destroy(&timermgr);
+
+	isc_task_shutdown(task);
+	isc_task_detach(&task);
+	isc_managers_destroy(&netmgr, &taskmgr);
+
+	dst_lib_destroy();
+
+	isc_log_destroy(&lctx);
 
 	query = ISC_LIST_HEAD(queries);
 	while (query != NULL) {
@@ -2180,25 +2276,6 @@ main(int argc, char *argv[]) {
 	if (default_query.ecs_addr != NULL) {
 		isc_mem_free(mctx, default_query.ecs_addr);
 	}
-
-	dns_view_detach(&view);
-
-	dns_requestmgr_shutdown(requestmgr);
-	dns_requestmgr_detach(&requestmgr);
-
-	dns_dispatch_detach(&dispatchvx);
-	dns_dispatchmgr_destroy(&dispatchmgr);
-
-	isc_socketmgr_destroy(&socketmgr);
-	isc_timermgr_destroy(&timermgr);
-
-	isc_task_shutdown(task);
-	isc_task_detach(&task);
-	isc_taskmgr_destroy(&taskmgr);
-
-	dst_lib_destroy();
-
-	isc_log_destroy(&lctx);
 
 	isc_mem_destroy(&mctx);
 

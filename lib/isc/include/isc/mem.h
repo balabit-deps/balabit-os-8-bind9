@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,6 +23,7 @@
 #include <isc/mutex.h>
 #include <isc/platform.h>
 #include <isc/types.h>
+#include <isc/util.h>
 
 ISC_LANG_BEGINDECLS
 
@@ -115,8 +118,8 @@ LIBISC_EXTERNAL_DATA extern unsigned int isc_mem_defaultflags;
  * by carefully separating memory contexts.
  */
 
-#ifndef ISC_MEM_USE_INTERNAL_MALLOC
-#define ISC_MEM_USE_INTERNAL_MALLOC 1
+#if !defined(ISC_MEM_USE_INTERNAL_MALLOC) && !__SANITIZE_ADDRESS__
+#define ISC_MEM_USE_INTERNAL_MALLOC 0
 #endif /* ifndef ISC_MEM_USE_INTERNAL_MALLOC */
 
 /*
@@ -127,10 +130,26 @@ LIBISC_EXTERNAL_DATA extern unsigned int isc_mem_defaultflags;
 #define ISC_MEMFLAG_FILL \
 	0x00000004 /* fill with pattern after alloc and frees */
 
+/*%
+ * Define ISC_MEM_DEFAULTFILL=1 to turn filling the memory with pattern
+ * after alloc and free.
+ */
 #if !ISC_MEM_USE_INTERNAL_MALLOC
+
+#if ISC_MEM_DEFAULTFILL
+#define ISC_MEMFLAG_DEFAULT ISC_MEMFLAG_FILL
+#else /* if ISC_MEM_DEFAULTFILL */
 #define ISC_MEMFLAG_DEFAULT 0
+#endif /* if ISC_MEM_DEFAULTFILL */
+
 #else /* if !ISC_MEM_USE_INTERNAL_MALLOC */
+
+#if ISC_MEM_DEFAULTFILL
 #define ISC_MEMFLAG_DEFAULT ISC_MEMFLAG_INTERNAL | ISC_MEMFLAG_FILL
+#else /* if ISC_MEM_DEFAULTFILL */
+#define ISC_MEMFLAG_DEFAULT ISC_MEMFLAG_INTERNAL
+#endif /* if ISC_MEM_DEFAULTFILL */
+
 #endif /* if !ISC_MEM_USE_INTERNAL_MALLOC */
 
 /*%
@@ -172,6 +191,8 @@ typedef struct isc_memmethods {
 	void *(*memreallocate)(isc_mem_t *mctx, void *ptr,
 			       size_t size _ISC_MEM_FLARG);
 	char *(*memstrdup)(isc_mem_t *mctx, const char *s _ISC_MEM_FLARG);
+	char *(*memstrndup)(isc_mem_t *mctx, const char *s,
+			    size_t size _ISC_MEM_FLARG);
 	void (*memfree)(isc_mem_t *mctx, void *ptr _ISC_MEM_FLARG);
 } isc_memmethods_t;
 
@@ -226,7 +247,9 @@ struct isc_mempool {
 #define isc_mem_reallocate(c, p, s) \
 	ISCMEMFUNC(reallocate)((c), (p), (s)_ISC_MEM_FILELINE)
 #define isc_mem_strdup(c, p) ISCMEMFUNC(strdup)((c), (p)_ISC_MEM_FILELINE)
-#define isc_mempool_get(c)   ISCMEMPOOLFUNC(get)((c)_ISC_MEM_FILELINE)
+#define isc_mem_strndup(c, p, s) \
+	ISCMEMFUNC(strndup)((c), (p), (s)_ISC_MEM_FILELINE)
+#define isc_mempool_get(c) ISCMEMPOOLFUNC(get)((c)_ISC_MEM_FILELINE)
 
 #define isc_mem_put(c, p, s)                                     \
 	do {                                                     \
@@ -490,33 +513,6 @@ isc_mempool_setname(isc_mempool_t *mpctx, const char *name);
  *\li	name != NULL;
  */
 
-void
-isc_mempool_associatelock(isc_mempool_t *mpctx, isc_mutex_t *lock);
-/*%<
- * Associate a lock with this memory pool.
- *
- * This lock is used when getting or putting items using this memory pool,
- * and it is also used to set or get internal state via the isc_mempool_get*()
- * and isc_mempool_set*() set of functions.
- *
- * Multiple pools can each share a single lock.  For instance, if "manager"
- * type object contained pools for various sizes of events, and each of
- * these pools used a common lock.  Note that this lock must NEVER be used
- * by other than mempool routines once it is given to a pool, since that can
- * easily cause double locking.
- *
- * Requires:
- *
- *\li	mpctpx is a valid pool.
- *
- *\li	lock != NULL.
- *
- *\li	No previous lock is assigned to this pool.
- *
- *\li	The lock is initialized before calling this function via the normal
- *	means of doing that.
- */
-
 /*
  * The following functions get/set various parameters.  Note that due to
  * the unlocked nature of pools these are potentially random values unless
@@ -586,18 +582,51 @@ isc_mempool_setfillcount(isc_mempool_t *mpctx, unsigned int limit);
  *\li	limit > 0
  */
 
+#if defined(UNIT_TESTING) && defined(malloc)
+/*
+ * cmocka.h redefined malloc as a macro, we #undef it
+ * to avoid replacing ISC_ATTR_MALLOC with garbage.
+ */
+#pragma push_macro("malloc")
+#undef malloc
+#define POP_MALLOC_MACRO 1
+#endif
+
 /*
  * Pseudo-private functions for use via macros.  Do not call directly.
  */
+void ISCMEMFUNC(putanddetach)(isc_mem_t **, void *, size_t _ISC_MEM_FLARG);
+void ISCMEMFUNC(put)(isc_mem_t *, void *, size_t _ISC_MEM_FLARG);
+void ISCMEMFUNC(free)(isc_mem_t *, void *_ISC_MEM_FLARG);
+
+ISC_ATTR_RETURNS_NONNULL
+ISC_ATTR_MALLOC_DEALLOCATOR_IDX(ISCMEMFUNC(put), 2)
 void *ISCMEMFUNC(get)(isc_mem_t *, size_t _ISC_MEM_FLARG);
-void  ISCMEMFUNC(putanddetach)(isc_mem_t **, void *, size_t _ISC_MEM_FLARG);
-void  ISCMEMFUNC(put)(isc_mem_t *, void *, size_t _ISC_MEM_FLARG);
+
+ISC_ATTR_RETURNS_NONNULL
+ISC_ATTR_MALLOC_DEALLOCATOR_IDX(ISCMEMFUNC(free), 2)
 void *ISCMEMFUNC(allocate)(isc_mem_t *, size_t _ISC_MEM_FLARG);
+
+ISC_ATTR_RETURNS_NONNULL
+ISC_ATTR_DEALLOCATOR_IDX(ISCMEMFUNC(free), 2)
 void *ISCMEMFUNC(reallocate)(isc_mem_t *, void *, size_t _ISC_MEM_FLARG);
-void  ISCMEMFUNC(free)(isc_mem_t *, void *_ISC_MEM_FLARG);
+
+ISC_ATTR_RETURNS_NONNULL
+ISC_ATTR_MALLOC_DEALLOCATOR_IDX(ISCMEMFUNC(free), 2)
 char *ISCMEMFUNC(strdup)(isc_mem_t *, const char *_ISC_MEM_FLARG);
+char *ISCMEMFUNC(strndup)(isc_mem_t *, const char *, size_t _ISC_MEM_FLARG);
+
+ISC_ATTR_MALLOC_DEALLOCATOR_IDX(ISCMEMPOOLFUNC(put), 2)
 void *ISCMEMPOOLFUNC(get)(isc_mempool_t *_ISC_MEM_FLARG);
-void  ISCMEMPOOLFUNC(put)(isc_mempool_t *, void *_ISC_MEM_FLARG);
+
+void ISCMEMPOOLFUNC(put)(isc_mempool_t *, void *_ISC_MEM_FLARG);
+
+#ifdef POP_MALLOC_MACRO
+/*
+ * Restore cmocka.h macro for malloc.
+ */
+#pragma pop_macro("malloc")
+#endif
 
 ISC_LANG_ENDDECLS
 

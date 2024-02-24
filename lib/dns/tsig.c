@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -144,7 +146,7 @@ tsig_log(dns_tsigkey_t *key, int level, const char *fmt, ...) {
 	char namestr[DNS_NAME_FORMATSIZE];
 	char creatorstr[DNS_NAME_FORMATSIZE];
 
-	if (isc_log_wouldlog(dns_lctx, level) == false) {
+	if (!isc_log_wouldlog(dns_lctx, level)) {
 		return;
 	}
 	if (key != NULL) {
@@ -331,7 +333,8 @@ dns_tsigkey_createfromkey(const dns_name_t *name, const dns_name_t *algorithm,
 	 * Ignore this if it's a GSS key, since the key size is meaningless.
 	 */
 	if (dstkey != NULL && dst_key_size(dstkey) < 64 &&
-	    dstalg != DST_ALG_GSSAPI) {
+	    dstalg != DST_ALG_GSSAPI)
+	{
 		char namestr[DNS_NAME_FORMATSIZE];
 		dns_name_format(name, namestr, sizeof(namestr));
 		isc_log_write(dns_lctx, DNS_LOGCATEGORY_DNSSEC,
@@ -349,7 +352,7 @@ dns_tsigkey_createfromkey(const dns_name_t *name, const dns_name_t *algorithm,
 cleanup_refs:
 	tkey->magic = 0;
 	while (refs-- > 0) {
-		isc_refcount_decrement(&tkey->refs);
+		isc_refcount_decrement0(&tkey->refs);
 	}
 	isc_refcount_destroy(&tkey->refs);
 
@@ -760,7 +763,7 @@ dns_tsig_sign(dns_message_t *msg) {
 	unsigned char data[128];
 	isc_buffer_t databuf, sigbuf;
 	isc_buffer_t *dynbuf = NULL;
-	dns_name_t *owner;
+	dns_name_t *owner = NULL;
 	dns_rdata_t *rdata = NULL;
 	dns_rdatalist_t *datalist = NULL;
 	dns_rdataset_t *dataset = NULL;
@@ -868,7 +871,8 @@ dns_tsig_sign(dns_message_t *msg) {
 			}
 			isc_buffer_putuint16(&databuf, querytsig.siglen);
 			if (isc_buffer_availablelength(&databuf) <
-			    querytsig.siglen) {
+			    querytsig.siglen)
+			{
 				ret = ISC_R_NOSPACE;
 				goto cleanup_context;
 			}
@@ -1016,20 +1020,17 @@ dns_tsig_sign(dns_message_t *msg) {
 		tsig.signature = NULL;
 	}
 
-	owner = NULL;
 	ret = dns_message_gettempname(msg, &owner);
 	if (ret != ISC_R_SUCCESS) {
 		goto cleanup_rdata;
 	}
-	dns_name_init(owner, NULL);
-	dns_name_dup(&key->name, msg->mctx, owner);
+	dns_name_copynf(&key->name, owner);
 
-	datalist = NULL;
 	ret = dns_message_gettemprdatalist(msg, &datalist);
 	if (ret != ISC_R_SUCCESS) {
 		goto cleanup_owner;
 	}
-	dataset = NULL;
+
 	ret = dns_message_gettemprdataset(msg, &dataset);
 	if (ret != ISC_R_SUCCESS) {
 		goto cleanup_rdatalist;
@@ -1150,18 +1151,6 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
 			return (ret);
 		}
 	}
-#if defined(__clang__) && (__clang_major__ < 3 ||                           \
-			   (__clang_major__ == 3 && __clang_minor__ < 2) || \
-			   (__clang_major__ == 4 && __clang_minor__ < 2))
-	/* false positive: http://llvm.org/bugs/show_bug.cgi?id=14461 */
-	else
-	{
-		memset(&querytsig, 0, sizeof(querytsig));
-	}
-#endif /* if defined(__clang__) && (__clang_major__ < 3 || (__clang_major__ == \
-	* 3                                                                    \
-	* && __clang_minor__ < 2) || (__clang_major__ == 4 && __clang_minor__  \
-	* < 2)) */
 
 	/*
 	 * Do the key name and algorithm match that of the query?
@@ -1224,7 +1213,8 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
 			return (DNS_R_FORMERR);
 		}
 		if (tsig.siglen > 0 &&
-		    (tsig.siglen < 10 || tsig.siglen < ((siglen + 1) / 2))) {
+		    (tsig.siglen < 10 || tsig.siglen < ((siglen + 1) / 2)))
+		{
 			tsig_log(msg->tsigkey, 2,
 				 "signature length below minimum");
 			return (DNS_R_FORMERR);
@@ -1360,8 +1350,8 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
 			goto cleanup_context;
 		}
 		msg->verified_sig = 1;
-	} else if (tsig.error != dns_tsigerror_badsig &&
-		   tsig.error != dns_tsigerror_badkey)
+	} else if (!response || (tsig.error != dns_tsigerror_badsig &&
+				 tsig.error != dns_tsigerror_badkey))
 	{
 		tsig_log(msg->tsigkey, 2, "signature was empty");
 		return (DNS_R_TSIGVERIFYFAILURE);
@@ -1393,7 +1383,8 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
 		uint16_t digestbits = dst_key_getbits(key);
 
 		if (tsig.siglen > 0 && digestbits != 0 &&
-		    tsig.siglen < ((digestbits + 7) / 8)) {
+		    tsig.siglen < ((digestbits + 7) / 8))
+		{
 			msg->tsigstatus = dns_tsigerror_badtrunc;
 			tsig_log(msg->tsigkey, 2,
 				 "truncated signature length too small");
@@ -1409,7 +1400,7 @@ dns_tsig_verify(isc_buffer_t *source, dns_message_t *msg,
 		}
 	}
 
-	if (tsig.error != dns_rcode_noerror) {
+	if (response && tsig.error != dns_rcode_noerror) {
 		msg->tsigstatus = tsig.error;
 		if (tsig.error == dns_tsigerror_badtime) {
 			ret = DNS_R_CLOCKSKEW;
@@ -1528,7 +1519,8 @@ tsig_verify_tcp(isc_buffer_t *source, dns_message_t *msg) {
 			}
 			if (tsig.siglen > 0 &&
 			    (tsig.siglen < 10 ||
-			     tsig.siglen < ((siglen + 1) / 2))) {
+			     tsig.siglen < ((siglen + 1) / 2)))
+			{
 				tsig_log(tsigkey, 2,
 					 "signature length below minimum");
 				ret = DNS_R_FORMERR;
@@ -1698,7 +1690,8 @@ tsig_verify_tcp(isc_buffer_t *source, dns_message_t *msg) {
 			uint16_t digestbits = dst_key_getbits(key);
 
 			if (tsig.siglen > 0 && digestbits != 0 &&
-			    tsig.siglen < ((digestbits + 7) / 8)) {
+			    tsig.siglen < ((digestbits + 7) / 8))
+			{
 				msg->tsigstatus = dns_tsigerror_badtrunc;
 				tsig_log(msg->tsigkey, 2,
 					 "truncated signature length "
@@ -1707,7 +1700,8 @@ tsig_verify_tcp(isc_buffer_t *source, dns_message_t *msg) {
 				goto cleanup_context;
 			}
 			if (tsig.siglen > 0 && digestbits == 0 &&
-			    tsig.siglen < siglen) {
+			    tsig.siglen < siglen)
+			{
 				msg->tsigstatus = dns_tsigerror_badtrunc;
 				tsig_log(msg->tsigkey, 2,
 					 "signature length too small");
@@ -1750,8 +1744,9 @@ isc_result_t
 dns_tsigkey_find(dns_tsigkey_t **tsigkey, const dns_name_t *name,
 		 const dns_name_t *algorithm, dns_tsig_keyring_t *ring) {
 	dns_tsigkey_t *key;
-	isc_stdtime_t now;
 	isc_result_t result;
+	isc_rwlocktype_t locktype = isc_rwlocktype_read;
+	isc_stdtime_t now;
 
 	REQUIRE(tsigkey != NULL);
 	REQUIRE(*tsigkey == NULL);
@@ -1763,25 +1758,30 @@ dns_tsigkey_find(dns_tsigkey_t **tsigkey, const dns_name_t *name,
 	RWUNLOCK(&ring->lock, isc_rwlocktype_write);
 
 	isc_stdtime_get(&now);
-	RWLOCK(&ring->lock, isc_rwlocktype_read);
+
+again:
+	RWLOCK(&ring->lock, locktype);
 	key = NULL;
 	result = dns_rbt_findname(ring->keys, name, 0, NULL, (void *)&key);
 	if (result == DNS_R_PARTIALMATCH || result == ISC_R_NOTFOUND) {
-		RWUNLOCK(&ring->lock, isc_rwlocktype_read);
+		RWUNLOCK(&ring->lock, locktype);
 		return (ISC_R_NOTFOUND);
 	}
 	if (algorithm != NULL && !dns_name_equal(key->algorithm, algorithm)) {
-		RWUNLOCK(&ring->lock, isc_rwlocktype_read);
+		RWUNLOCK(&ring->lock, locktype);
 		return (ISC_R_NOTFOUND);
 	}
 	if (key->inception != key->expire && isc_serial_lt(key->expire, now)) {
 		/*
 		 * The key has expired.
 		 */
-		RWUNLOCK(&ring->lock, isc_rwlocktype_read);
-		RWLOCK(&ring->lock, isc_rwlocktype_write);
+		if (locktype == isc_rwlocktype_read) {
+			RWUNLOCK(&ring->lock, locktype);
+			locktype = isc_rwlocktype_write;
+			goto again;
+		}
 		remove_fromring(key);
-		RWUNLOCK(&ring->lock, isc_rwlocktype_write);
+		RWUNLOCK(&ring->lock, locktype);
 		return (ISC_R_NOTFOUND);
 	}
 #if 0
@@ -1796,7 +1796,7 @@ dns_tsigkey_find(dns_tsigkey_t **tsigkey, const dns_name_t *name,
 	}
 #endif /* if 0 */
 	isc_refcount_increment(&key->refs);
-	RWUNLOCK(&ring->lock, isc_rwlocktype_read);
+	RWUNLOCK(&ring->lock, locktype);
 	adjust_lru(key);
 	*tsigkey = key;
 	return (ISC_R_SUCCESS);
@@ -1830,12 +1830,7 @@ dns_tsigkeyring_create(isc_mem_t *mctx, dns_tsig_keyring_t **ringp) {
 
 	ring = isc_mem_get(mctx, sizeof(dns_tsig_keyring_t));
 
-	result = isc_rwlock_init(&ring->lock, 0, 0);
-	if (result != ISC_R_SUCCESS) {
-		isc_mem_put(mctx, ring, sizeof(dns_tsig_keyring_t));
-		return (result);
-	}
-
+	isc_rwlock_init(&ring->lock, 0, 0);
 	ring->keys = NULL;
 	result = dns_rbt_create(mctx, free_tsignode, NULL, &ring->keys);
 	if (result != ISC_R_SUCCESS) {

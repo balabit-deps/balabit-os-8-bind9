@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -93,9 +95,9 @@ main(int argc, char **argv) {
 
 	isc_mem_create(&mctx);
 
-#if HAVE_PKCS11
+#if USE_PKCS11
 	pk11_result_register();
-#endif /* if HAVE_PKCS11 */
+#endif /* if USE_PKCS11 */
 	dns_result_register();
 
 	isc_commandline_errprint = false;
@@ -132,7 +134,7 @@ main(int argc, char **argv) {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			/* Does not return. */
 			usage();
@@ -149,7 +151,8 @@ main(int argc, char **argv) {
 	}
 
 	if (argc < isc_commandline_index + 1 ||
-	    argv[isc_commandline_index] == NULL) {
+	    argv[isc_commandline_index] == NULL)
+	{
 		fatal("The key file name was not specified");
 	}
 	if (argc > isc_commandline_index + 1) {

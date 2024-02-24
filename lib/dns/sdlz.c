@@ -1,9 +1,11 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -249,7 +251,7 @@ dns_sdlz_tolower(char *str) {
 	}
 }
 
-static inline unsigned int
+static unsigned int
 initial_size(const char *data) {
 	unsigned int len = (strlen(data) / 64) + 1;
 	return (len * 64 + 64);
@@ -529,7 +531,7 @@ getnodedata(dns_db_t *db, const dns_name_t *name, bool create,
 	REQUIRE(nodep != NULL && *nodep == NULL);
 
 	if (sdlz->dlzimp->methods->newversion == NULL) {
-		REQUIRE(create == false);
+		REQUIRE(!create);
 	}
 
 	isc_buffer_init(&b, namestr, sizeof(namestr));
@@ -587,7 +589,8 @@ getnodedata(dns_db_t *db, const dns_name_t *name, bool create,
 	 * for wildcards at each level.
 	 */
 	if (result == ISC_R_NOTFOUND && !create &&
-	    (options & DNS_DBFIND_NOWILD) == 0) {
+	    (options & DNS_DBFIND_NOWILD) == 0)
+	{
 		unsigned int i, dlabels, nlabels;
 
 		nlabels = dns_name_countlabels(name);
@@ -638,7 +641,7 @@ getnodedata(dns_db_t *db, const dns_name_t *name, bool create,
 	}
 
 	if (result != ISC_R_SUCCESS) {
-		isc_refcount_decrement(&node->references);
+		isc_refcount_decrementz(&node->references);
 		destroynode(node);
 		return (result);
 	}
@@ -650,7 +653,7 @@ getnodedata(dns_db_t *db, const dns_name_t *name, bool create,
 				      sdlz->dbdata, node);
 		MAYBE_UNLOCK(sdlz->dlzimp);
 		if (result != ISC_R_SUCCESS && result != ISC_R_NOTIMPLEMENTED) {
-			isc_refcount_decrement(&node->references);
+			isc_refcount_decrementz(&node->references);
 			destroynode(node);
 			return (result);
 		}
@@ -734,8 +737,7 @@ expirenode(dns_db_t *db, dns_dbnode_t *node, isc_stdtime_t now) {
 	UNUSED(db);
 	UNUSED(node);
 	UNUSED(now);
-	INSIST(0);
-	ISC_UNREACHABLE();
+	UNREACHABLE();
 }
 
 static void
@@ -762,7 +764,8 @@ createiterator(dns_db_t *db, unsigned int options,
 	}
 
 	if ((options & DNS_DB_NSEC3ONLY) != 0 ||
-	    (options & DNS_DB_NONSEC3) != 0) {
+	    (options & DNS_DB_NONSEC3) != 0)
+	{
 		return (ISC_R_NOTIMPLEMENTED);
 	}
 
@@ -930,11 +933,13 @@ findext(dns_db_t *db, const dns_name_t *name, dns_dbversion_t *version,
 					      rdataset, sigrdataset);
 
 			if (result == ISC_R_SUCCESS && i == nlabels &&
-			    type == dns_rdatatype_any) {
+			    type == dns_rdatatype_any)
+			{
 				result = DNS_R_ZONECUT;
 				dns_rdataset_disassociate(rdataset);
 				if (sigrdataset != NULL &&
-				    dns_rdataset_isassociated(sigrdataset)) {
+				    dns_rdataset_isassociated(sigrdataset))
+				{
 					dns_rdataset_disassociate(sigrdataset);
 				}
 				break;
@@ -1016,7 +1021,8 @@ find(dns_db_t *db, const dns_name_t *name, dns_dbversion_t *version,
 
 static isc_result_t
 allrdatasets(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
-	     isc_stdtime_t now, dns_rdatasetiter_t **iteratorp) {
+	     unsigned int options, isc_stdtime_t now,
+	     dns_rdatasetiter_t **iteratorp) {
 	dns_sdlz_db_t *sdlz = (dns_sdlz_db_t *)db;
 	sdlz_rdatasetiter_t *iterator;
 
@@ -1036,6 +1042,7 @@ allrdatasets(dns_db_t *db, dns_dbnode_t *node, dns_dbversion_t *version,
 	iterator->common.node = NULL;
 	attachnode(db, node, &iterator->common.node);
 	iterator->common.version = version;
+	iterator->common.options = options;
 	iterator->common.now = now;
 
 	*iteratorp = (dns_rdatasetiter_t *)iterator;
@@ -1281,7 +1288,10 @@ static dns_dbmethods_t sdlzdb_methods = {
 	NULL, /* getsize */
 	NULL, /* setservestalettl */
 	NULL, /* getservestalettl */
-	NULL  /* setgluecachestats */
+	NULL, /* setservestalerefresh */
+	NULL, /* getservestalerefresh */
+	NULL, /* setgluecachestats */
+	NULL  /* adjusthashsize */
 };
 
 /*
@@ -1298,7 +1308,7 @@ dbiterator_destroy(dns_dbiterator_t **iteratorp) {
 		dns_sdlznode_t *node;
 		node = ISC_LIST_HEAD(sdlziter->nodelist);
 		ISC_LIST_UNLINK(sdlziter->nodelist, node, link);
-		isc_refcount_decrement(&node->references);
+		isc_refcount_decrementz(&node->references);
 		destroynode(node);
 	}
 
@@ -1872,7 +1882,6 @@ dns_sdlz_putrr(dns_sdlzlookup_t *lookup, const char *type, dns_ttl_t ttl,
 					    mctx, rdatabuf, &lookup->callbacks);
 		if (result != ISC_R_SUCCESS) {
 			isc_buffer_free(&rdatabuf);
-			result = DNS_R_SERVFAIL;
 		}
 		if (size >= 65535) {
 			break;
@@ -1884,6 +1893,7 @@ dns_sdlz_putrr(dns_sdlzlookup_t *lookup, const char *type, dns_ttl_t ttl,
 	} while (result == ISC_R_NOSPACE);
 
 	if (result != ISC_R_SUCCESS) {
+		result = DNS_R_SERVFAIL;
 		goto failure;
 	}
 
@@ -1953,7 +1963,8 @@ dns_sdlz_putnamedrr(dns_sdlzallnodes_t *allnodes, const char *name,
 		dns_name_dup(newname, mctx, sdlznode->name);
 		ISC_LIST_PREPEND(allnodes->nodelist, sdlznode, link);
 		if (allnodes->origin == NULL &&
-		    dns_name_equal(newname, &sdlz->common.origin)) {
+		    dns_name_equal(newname, &sdlz->common.origin))
+		{
 			allnodes->origin = sdlznode;
 		}
 	}

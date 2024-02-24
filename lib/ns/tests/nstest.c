@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -22,11 +24,13 @@
 #include <isc/buffer.h>
 #include <isc/file.h>
 #include <isc/hash.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/netmgr.h>
 #include <isc/os.h>
 #include <isc/print.h>
 #include <isc/random.h>
+#include <isc/resource.h>
 #include <isc/socket.h>
 #include <isc/stdio.h>
 #include <isc/string.h>
@@ -55,7 +59,7 @@ isc_taskmgr_t *taskmgr = NULL;
 isc_task_t *maintask = NULL;
 isc_timermgr_t *timermgr = NULL;
 isc_socketmgr_t *socketmgr = NULL;
-isc_nm_t *nm = NULL;
+isc_nm_t *netmgr = NULL;
 dns_zonemgr_t *zonemgr = NULL;
 dns_dispatchmgr_t *dispatchmgr = NULL;
 ns_clientmgr_t *clientmgr = NULL;
@@ -64,7 +68,7 @@ ns_server_t *sctx = NULL;
 bool app_running = false;
 int ncpus;
 bool debug_mem_record = true;
-static atomic_bool run_managers = ATOMIC_VAR_INIT(false);
+static atomic_bool run_managers = false;
 
 static bool dst_active = false;
 static bool test_running = false;
@@ -78,11 +82,13 @@ atomic_uint_fast32_t client_refs[32];
 atomic_uintptr_t client_addrs[32];
 
 void
-__wrap_isc_nmhandle_unref(isc_nmhandle_t *handle);
+__wrap_isc__nmhandle_attach(isc_nmhandle_t *source, isc_nmhandle_t **targetp);
+void
+__wrap_isc__nmhandle_detach(isc_nmhandle_t **handlep);
 
 void
-__wrap_isc_nmhandle_unref(isc_nmhandle_t *handle) {
-	ns_client_t *client = (ns_client_t *)handle;
+__wrap_isc__nmhandle_attach(isc_nmhandle_t *source, isc_nmhandle_t **targetp) {
+	ns_client_t *client = (ns_client_t *)source;
 	int i;
 
 	for (i = 0; i < 32; i++) {
@@ -90,7 +96,29 @@ __wrap_isc_nmhandle_unref(isc_nmhandle_t *handle) {
 			break;
 		}
 	}
-	REQUIRE(i < 32);
+	INSIST(i < 32);
+	INSIST(atomic_load(&client_refs[i]) > 0);
+
+	atomic_fetch_add(&client_refs[i], 1);
+
+	*targetp = source;
+	return;
+}
+
+void
+__wrap_isc__nmhandle_detach(isc_nmhandle_t **handlep) {
+	isc_nmhandle_t *handle = *handlep;
+	ns_client_t *client = (ns_client_t *)handle;
+	int i;
+
+	*handlep = NULL;
+
+	for (i = 0; i < 32; i++) {
+		if (atomic_load(&client_addrs[i]) == (uintptr_t)client) {
+			break;
+		}
+	}
+	INSIST(i < 32);
 
 	if (atomic_fetch_sub(&client_refs[i], 1) == 1) {
 		dns_view_detach(&client->view);
@@ -99,8 +127,20 @@ __wrap_isc_nmhandle_unref(isc_nmhandle_t *handle) {
 		ns__client_put_cb(client);
 		isc_mem_put(mctx, client, sizeof(ns_client_t));
 	}
+
 	return;
 }
+
+#ifdef USE_LIBTOOL
+void
+isc__nmhandle_attach(isc_nmhandle_t *source, isc_nmhandle_t **targetp) {
+	__wrap_isc__nmhandle_attach(source, targetp);
+}
+void
+isc__nmhandle_detach(isc_nmhandle_t **handle) {
+	__wrap_isc__nmhandle_detach(handle);
+}
+#endif /* USE_LIBTOOL */
 
 /*
  * Logging categories: this needs to match the list in lib/ns/log.c.
@@ -132,7 +172,7 @@ matchview(isc_netaddr_t *srcaddr, isc_netaddr_t *destaddr,
 /*
  * These need to be shut down from a running task.
  */
-static atomic_bool shutdown_done = ATOMIC_VAR_INIT(false);
+static atomic_bool shutdown_done = false;
 static void
 shutdown_managers(isc_task_t *task, isc_event_t *event) {
 	UNUSED(task);
@@ -179,19 +219,10 @@ cleanup_managers(void) {
 	if (socketmgr != NULL) {
 		isc_socketmgr_destroy(&socketmgr);
 	}
-	ns_test_nap(500000);
-	if (nm != NULL) {
-		/*
-		 * Force something in the workqueue as a workaround
-		 * for libuv bug - not sending uv_close callback.
-		 */
-		isc_nm_pause(nm);
-		isc_nm_resume(nm);
-		isc_nm_detach(&nm);
-	}
-	if (taskmgr != NULL) {
-		isc_taskmgr_destroy(&taskmgr);
-	}
+
+	isc_managers_destroy(netmgr == NULL ? NULL : &netmgr,
+			     taskmgr == NULL ? NULL : &taskmgr);
+
 	if (timermgr != NULL) {
 		isc_timermgr_destroy(&timermgr);
 	}
@@ -216,8 +247,8 @@ create_managers(void) {
 	isc_event_t *event = NULL;
 	ncpus = isc_os_ncpus();
 
-	CHECK(isc_taskmgr_create(mctx, ncpus, 0, NULL, &taskmgr));
-	CHECK(isc_task_create(taskmgr, 0, &maintask));
+	CHECK(isc_managers_create(mctx, ncpus, 0, &netmgr, &taskmgr));
+	CHECK(isc_task_create_bound(taskmgr, 0, &maintask, 0));
 	isc_taskmgr_setexcltask(taskmgr, maintask);
 	CHECK(isc_task_onshutdown(maintask, shutdown_managers, NULL));
 
@@ -225,14 +256,12 @@ create_managers(void) {
 
 	CHECK(isc_socketmgr_create(mctx, &socketmgr));
 
-	nm = isc_nm_start(mctx, ncpus);
-
 	CHECK(ns_server_create(mctx, matchview, &sctx));
 
 	CHECK(dns_dispatchmgr_create(mctx, &dispatchmgr));
 
 	CHECK(ns_interfacemgr_create(mctx, sctx, taskmgr, timermgr, socketmgr,
-				     nm, dispatchmgr, maintask, ncpus, NULL,
+				     netmgr, dispatchmgr, maintask, ncpus, NULL,
 				     ncpus, &interfacemgr));
 
 	CHECK(ns_listenlist_default(mctx, port, -1, true, &listenon));
@@ -269,6 +298,22 @@ ns_test_begin(FILE *logfile, bool start_managers) {
 	test_running = true;
 
 	if (start_managers) {
+		isc_resourcevalue_t files;
+
+		/*
+		 * The 'listenlist_test', 'notify_test', and 'query_test'
+		 * tests need more than 256 descriptors with 8 cpus.
+		 * Bump up to at least 1024.
+		 */
+		result = isc_resource_getcurlimit(isc_resource_openfiles,
+						  &files);
+		if (result == ISC_R_SUCCESS) {
+			if (files < 1024) {
+				files = 1024;
+				(void)isc_resource_setlimit(
+					isc_resource_openfiles, files);
+			}
+		}
 		CHECK(isc_app_start());
 	}
 	if (debug_mem_record) {
@@ -288,7 +333,7 @@ ns_test_begin(FILE *logfile, bool start_managers) {
 		isc_logconfig_t *logconfig = NULL;
 
 		INSIST(lctx == NULL);
-		CHECK(isc_log_create(mctx, &lctx, &logconfig));
+		isc_log_create(mctx, &lctx, &logconfig);
 
 		isc_log_registercategories(lctx, categories);
 		isc_log_setcontext(lctx);
@@ -299,9 +344,8 @@ ns_test_begin(FILE *logfile, bool start_managers) {
 		destination.file.name = NULL;
 		destination.file.versions = ISC_LOG_ROLLNEVER;
 		destination.file.maximum_size = 0;
-		CHECK(isc_log_createchannel(logconfig, "stderr",
-					    ISC_LOG_TOFILEDESC, ISC_LOG_DYNAMIC,
-					    &destination, 0));
+		isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+				      ISC_LOG_DYNAMIC, &destination, 0);
 		CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL));
 	}
 
@@ -413,7 +457,7 @@ ns_test_makezone(const char *name, dns_zone_t **zonep, dns_view_t *view,
 	CHECK(dns_name_fromtext(origin, &buffer, dns_rootname, 0, NULL));
 	CHECK(dns_zone_setorigin(zone, origin));
 	dns_zone_setview(zone, view);
-	dns_zone_settype(zone, dns_zone_master);
+	dns_zone_settype(zone, dns_zone_primary);
 	dns_zone_setclass(zone, view->rdclass);
 	dns_view_addzone(view, zone);
 
@@ -583,7 +627,7 @@ attach_query_msg_to_client(ns_client_t *client, const char *qnamestr,
 			   dns_rdatatype_t qtype, unsigned int qflags) {
 	dns_rdataset_t *qrdataset = NULL;
 	dns_message_t *message = NULL;
-	unsigned char query[65536];
+	unsigned char query[65535];
 	dns_name_t *qname = NULL;
 	isc_buffer_t querybuf;
 	dns_compress_t cctx;
@@ -595,10 +639,7 @@ attach_query_msg_to_client(ns_client_t *client, const char *qnamestr,
 	/*
 	 * Create a new DNS message holding a query.
 	 */
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &message);
-	if (result != ISC_R_SUCCESS) {
-		return (result);
-	}
+	dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &message);
 
 	/*
 	 * Set query ID to a random value.
@@ -658,7 +699,7 @@ attach_query_msg_to_client(ns_client_t *client, const char *qnamestr,
 	 * Destroy the created message as it was rendered into "querybuf" and
 	 * the latter is all we are going to need from now on.
 	 */
-	dns_message_destroy(&message);
+	dns_message_detach(&message);
 
 	/*
 	 * Parse the rendered query, storing results in client->message.
@@ -671,7 +712,7 @@ put_name:
 put_rdataset:
 	dns_message_puttemprdataset(message, &qrdataset);
 destroy_message:
-	dns_message_destroy(&message);
+	dns_message_detach(&message);
 
 	return (result);
 }
@@ -744,10 +785,12 @@ create_qctx_for_client(ns_client_t *client, query_ctx_t **qctxp) {
 	saved_hook_table = ns__hook_table;
 	ns__hook_table = query_hooks;
 
-	ns_query_start(client);
+	ns_query_start(client, client->handle);
 
 	ns__hook_table = saved_hook_table;
 	ns_hooktable_free(mctx, (void **)&query_hooks);
+
+	isc_nmhandle_detach(&client->reqhandle);
 
 	if (*qctxp == NULL) {
 		return (ISC_R_NOMEMORY);
@@ -761,6 +804,7 @@ ns_test_qctx_create(const ns_test_qctx_create_params_t *params,
 		    query_ctx_t **qctxp) {
 	ns_client_t *client = NULL;
 	isc_result_t result;
+	isc_nmhandle_t *handle = NULL;
 
 	REQUIRE(params != NULL);
 	REQUIRE(params->qname != NULL);
@@ -791,7 +835,7 @@ ns_test_qctx_create(const ns_test_qctx_create_params_t *params,
 	result = attach_query_msg_to_client(client, params->qname,
 					    params->qtype, params->qflags);
 	if (result != ISC_R_SUCCESS) {
-		goto detach_client;
+		goto detach_view;
 	}
 
 	/*
@@ -807,21 +851,25 @@ ns_test_qctx_create(const ns_test_qctx_create_params_t *params,
 	 */
 	result = create_qctx_for_client(client, qctxp);
 	if (result != ISC_R_SUCCESS) {
-		goto destroy_query;
+		goto detach_query;
 	}
 
 	/*
-	 * Reference count for "client" is now at 2, so decrement it in order
-	 * for it to drop to zero when "qctx" gets destroyed.
+	 * The reference count for "client" is now at 2, so we need to
+	 * decrement it in order for it to drop to zero when "qctx" gets
+	 * destroyed.
 	 */
-	isc_nmhandle_unref(client->handle);
+	handle = client->handle;
+	isc_nmhandle_detach(&handle);
 
 	return (ISC_R_SUCCESS);
 
-destroy_query:
-	dns_message_destroy(&client->message);
+detach_query:
+	dns_message_detach(&client->message);
+detach_view:
+	dns_view_detach(&client->view);
 detach_client:
-	isc_nmhandle_unref(client->handle);
+	isc_nmhandle_detach(&client->handle);
 
 	return (result);
 }
@@ -843,7 +891,7 @@ ns_test_qctx_destroy(query_ctx_t **qctxp) {
 		dns_db_detach(&qctx->db);
 	}
 	if (qctx->client != NULL) {
-		isc_nmhandle_unref(qctx->client->handle);
+		isc_nmhandle_detach(&qctx->client->handle);
 	}
 
 	isc_mem_put(mctx, qctx, sizeof(*qctx));
@@ -864,21 +912,11 @@ ns_test_hook_catch_call(void *arg, void *data, isc_result_t *resultp) {
  */
 void
 ns_test_nap(uint32_t usec) {
-#ifdef HAVE_NANOSLEEP
 	struct timespec ts;
 
 	ts.tv_sec = usec / 1000000;
 	ts.tv_nsec = (usec % 1000000) * 1000;
 	nanosleep(&ts, NULL);
-#elif HAVE_USLEEP
-	usleep(usec);
-#else  /* ifdef HAVE_NANOSLEEP */
-	/*
-	 * No fractional-second sleep function is available, so we
-	 * round up to the nearest second and sleep instead
-	 */
-	sleep((usec / 1000000) + 1);
-#endif /* ifdef HAVE_NANOSLEEP */
 }
 
 isc_result_t
@@ -917,7 +955,6 @@ fromhex(char c) {
 
 	printf("bad input format: %02x\n", c);
 	exit(3);
-	/* NOTREACHED */
 }
 
 isc_result_t
@@ -946,7 +983,8 @@ ns_test_getdata(const char *file, unsigned char *buf, size_t bufsiz,
 				break;
 			}
 			if (*rp != ' ' && *rp != '\t' && *rp != '\r' &&
-			    *rp != '\n') {
+			    *rp != '\n')
+			{
 				*wp++ = *rp;
 				len++;
 			}

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -92,17 +94,6 @@ typedef isc_event_t isc_appevent_t;
 #define ISC_APPEVENT_FIRSTEVENT (ISC_EVENTCLASS_APP + 0)
 #define ISC_APPEVENT_SHUTDOWN	(ISC_EVENTCLASS_APP + 1)
 #define ISC_APPEVENT_LASTEVENT	(ISC_EVENTCLASS_APP + 65535)
-
-/*%
- * This structure is actually just the common prefix of an application context
- * implementation's version of an isc_appctx_t.
- * \brief
- * Direct use of this structure by clients is forbidden.  app implementations
- * may change the structure.  'magic' must be ISCAPI_APPCTX_MAGIC for any
- * of the isc_app_ routines to work.  app implementations must maintain
- * all app context invariants.
- */
-struct isc_appctx;
 
 ISC_LANG_BEGINDECLS
 

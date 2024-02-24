@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -132,7 +134,8 @@ dns_peerlist_addpeer(dns_peerlist_t *peers, dns_peer_t *peer) {
 	 * More specifics to front of list.
 	 */
 	for (p = ISC_LIST_HEAD(peers->elements); p != NULL;
-	     p = ISC_LIST_NEXT(p, next)) {
+	     p = ISC_LIST_NEXT(p, next))
+	{
 		if (p->prefixlen < peer->prefixlen) {
 			break;
 		}
@@ -157,7 +160,8 @@ dns_peerlist_peerbyaddr(dns_peerlist_t *servers, const isc_netaddr_t *addr,
 	server = ISC_LIST_HEAD(servers->elements);
 	while (server != NULL) {
 		if (isc_netaddr_eqprefix(addr, &server->address,
-					 server->prefixlen)) {
+					 server->prefixlen))
+		{
 			break;
 		}
 
@@ -198,8 +202,7 @@ dns_peer_new(isc_mem_t *mem, const isc_netaddr_t *addr, dns_peer_t **peerptr) {
 		prefixlen = 128;
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	return (dns_peer_newprefix(mem, addr, prefixlen, peerptr));

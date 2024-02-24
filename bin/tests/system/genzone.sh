@@ -1,10 +1,12 @@
 #!/bin/sh
-#
+
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -12,10 +14,10 @@
 #
 # Set up a test zone
 #
-# Usage: genzone.sh master-server-number slave-server-number...
+# Usage: genzone.sh master-server-number secondary-server-number...
 #
 # e.g., "genzone.sh 2 3 4" means ns2 is the master and ns3, ns4
-# are slaves.
+# are secondaries.
 #
 
 master="$1"
@@ -31,9 +33,8 @@ cat <<EOF
 					3600 )
 EOF
 
-for n
-do
-	cat <<EOF
+for n; do
+  cat <<EOF
 @			NS	ns${n}
 ns${n}			A	10.53.0.${n}
 EOF
@@ -369,10 +370,16 @@ csync01			CSYNC	0 0 A NS AAAA
 csync02			CSYNC	0 0
 
 ;type	63
-zonemd01		ZONEMD	2019020700 1 0 (
+zonemd01		ZONEMD	2019020700 1 1 (
                                 C220B8A6ED5728A971902F7E3D4FD93A
                                 DEEA88B0453C2E8E8C863D465AB06CF3
                                 4EB95B266398C98B59124FA239CB7EEB
+				)
+zonemd02		ZONEMD	2019020700 1 2 (
+				08CFA1115C7B948C4163A901270395EA
+			        226A930CD2CBCF2FA9A5E6EB85F37C8A
+                                4E114D884E66F176EAB121CB02DB7D65
+                                2E0CC4827E7A3204F166B47E5613FD27
 				)
 
 ; type 64 -- 98 (unassigned)
@@ -418,7 +425,7 @@ eui64			EUI64	01-23-45-67-89-ab-cd-ef
 ; The text representation is not specified in the draft.
 ; This example was written based on the bind9 RR parsing code.
 ;tkey01			TKEY	928321914 928321915 (
-;				255		; algorithm
+;				algorithm-name.	; algorithm
 ;				65535 		; mode
 ;				0		; error
 ;				3 		; key size
@@ -428,7 +435,7 @@ eui64			EUI64	01-23-45-67-89-ab-cd-ef
 ;				)
 ;; A TKEY with empty "other data"
 ;tkey02			TKEY	928321914 928321915 (
-;				255		; algorithm
+;				algorithm-name.	; algorithm
 ;				65535 		; mode
 ;				0		; error
 ;				3 		; key size
@@ -486,6 +493,12 @@ dlv			DLV	30795 1 1 (
 ; type 32770 -- 65279 (unassigned)
 
 ; type 65280-65534 (private use)
+
+https0			HTTPS	0 example.net.
+https1			HTTPS	1 . port=60
+
+svcb0			SVCB	0 example.net.
+svcb1			SVCB	1 . port=60
 
 ; keydata (internal type used for managed keys)
 keydata			TYPE65533	\# 0

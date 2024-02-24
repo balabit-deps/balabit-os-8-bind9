@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -154,8 +156,17 @@
 #define DNS_R_BADSIG0		(ISC_RESULTCLASS_DNS + 116)
 #define DNS_R_TOOMANYRECORDS	(ISC_RESULTCLASS_DNS + 117)
 #define DNS_R_VERIFYFAILURE	(ISC_RESULTCLASS_DNS + 118)
+#define DNS_R_ATZONETOP		(ISC_RESULTCLASS_DNS + 119)
+#define DNS_R_NOKEYMATCH	(ISC_RESULTCLASS_DNS + 120)
+#define DNS_R_TOOMANYKEYS	(ISC_RESULTCLASS_DNS + 121)
+#define DNS_R_KEYNOTACTIVE	(ISC_RESULTCLASS_DNS + 122)
+#define DNS_R_NSEC3ITERRANGE	(ISC_RESULTCLASS_DNS + 123)
+#define DNS_R_NSEC3SALTRANGE	(ISC_RESULTCLASS_DNS + 124)
+#define DNS_R_NSEC3BADALG	(ISC_RESULTCLASS_DNS + 125)
+#define DNS_R_NSEC3RESALT	(ISC_RESULTCLASS_DNS + 126)
+#define DNS_R_INCONSISTENTRR	(ISC_RESULTCLASS_DNS + 127)
 
-#define DNS_R_NRESULTS 119 /*%< Number of results */
+#define DNS_R_NRESULTS 128 /*%< Number of results */
 
 /*
  * DNS wire format rcodes.

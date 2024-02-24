@@ -44,6 +44,9 @@
     <ClInclude Include="..\include\isc\backtrace.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\isc\barrier.h">
+      <Filter>Library Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\isc\base32.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
@@ -107,9 +110,6 @@
     <ClInclude Include="..\include\isc\hmac.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\isc\hp.h">
-      <Filter>Library Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\isc\ht.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
@@ -146,6 +146,9 @@
     <ClInclude Include="..\include\isc\magic.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\isc\managers.h">
+      <Filter>Library Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\isc\mem.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
@@ -177,9 +180,6 @@
       <Filter>Library Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\isc\print.h">
-      <Filter>Library Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\include\isc\queue.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\isc\quota.h">
@@ -261,6 +261,12 @@
       <Filter>Library Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\isc\types.h">
+      <Filter>Library Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\isc\url.h">
+      <Filter>Library Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\isc\utf8.h">
       <Filter>Library Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\isc\util.h">
@@ -352,7 +358,13 @@
     <ClInclude Include="..\entropy_private.h">
       <Filter>Win32 Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\netmgr_p.h">
+      <Filter>Win32 Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\openssl_shim.h">
+      <Filter>Win32 Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\trampoline_p.h">
       <Filter>Win32 Header Files</Filter>
     </ClInclude>
     <ClInclude Include="errno2result.h">
@@ -509,9 +521,6 @@
     <ClCompile Include="..\hmac.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\hp.c">
-      <Filter>Library Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\ht.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
@@ -533,6 +542,9 @@
     <ClCompile Include="..\log.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\managers.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\mem.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
@@ -540,6 +552,24 @@
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\netaddr.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\netmgr.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\tcp.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\udp.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\uverr2result.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\uv-compat.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\netmgr\tcpdns.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\netscope.c">
@@ -558,9 +588,6 @@
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\portset.c">
-      <Filter>Library Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\queue.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\quota.c">
@@ -585,6 +612,9 @@
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\rwlock.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\safe.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\serial.c">
@@ -614,7 +644,19 @@
     <ClCompile Include="..\timer.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\tls.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\trampoline.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\tm.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\url.c">
+      <Filter>Library Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utf8.c">
       <Filter>Library Source Files</Filter>
     </ClCompile>
 @IF PKCS11

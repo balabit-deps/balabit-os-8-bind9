@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -85,14 +87,10 @@ make_signing(signing_testcase_t *testcase, dns_rdata_t *private,
 	buf[2] = (testcase->keyid & 0xff);
 	buf[3] = testcase->remove;
 	buf[4] = testcase->complete;
-      private
-	->data = buf;
-      private
-	->length = len;
-      private
-	->type = privatetype;
-      private
-	->rdclass = dns_rdataclass_in;
+	private->data = buf;
+	private->length = len;
+	private->type = privatetype;
+	private->rdclass = dns_rdataclass_in;
 }
 
 static void
@@ -158,8 +156,8 @@ private_signing_totext_test(void **state) {
 	const char *results[] = { "Signing with key 12345/RSASHA512",
 				  "Removing signatures for key 54321/RSASHA256",
 				  "Done signing with key 22222/NSEC3RSASHA1",
-				  "Done removing signatures for key "
-				  "33333/RSASHA1" };
+				  ("Done removing signatures for key "
+				   "33333/RSASHA1") };
 	int ncases = 4;
 
 	UNUSED(state);
@@ -193,8 +191,8 @@ private_nsec3_totext_test(void **state) {
 	const char *results[] = { "Creating NSEC3 chain 1 0 1 BEEF",
 				  "Creating NSEC3 chain 1 1 10 DADD",
 				  "Pending NSEC3 chain 1 0 20 BEAD",
-				  "Removing NSEC3 chain 1 0 30 DEAF / creating "
-				  "NSEC chain",
+				  ("Removing NSEC3 chain 1 0 30 DEAF / "
+				   "creating NSEC chain"),
 				  "Removing NSEC3 chain 1 0 100 FEEDABEE" };
 	int ncases = 5;
 
@@ -232,7 +230,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

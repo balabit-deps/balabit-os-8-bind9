@@ -1,13 +1,17 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
- *
+ */
+
+/*
  * Portions Copyright (C) Network Associates, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -53,6 +57,21 @@
 
 #include <dst/dst.h>
 
+#ifdef GSSAPI
+#ifdef WIN32
+/*
+ * MSVC does not like macros in #include lines.
+ */
+#include <gssapi/gssapi.h>
+#include <gssapi/gssapi_krb5.h>
+#else /* ifdef WIN32 */
+#include ISC_PLATFORM_GSSAPIHEADER
+#ifdef ISC_PLATFORM_GSSAPI_KRB5_HEADER
+#include ISC_PLATFORM_GSSAPI_KRB5_HEADER
+#endif /* ifdef ISC_PLATFORM_GSSAPI_KRB5_HEADER */
+#endif /* ifdef WIN32 */
+#endif /* ifdef GSSAPI */
+
 ISC_LANG_BEGINDECLS
 
 #define KEY_MAGIC ISC_MAGIC('D', 'S', 'T', 'K')
@@ -79,6 +98,7 @@ typedef enum { DO_SIGN, DO_VERIFY } dst_use_t;
 struct dst_key {
 	unsigned int magic;
 	isc_refcount_t refs;
+	isc_mutex_t mdlock;	    /*%< lock for read/write metadata */
 	dns_name_t *key_name;	    /*%< name of the key */
 	unsigned int key_size;	    /*%< size of the key in bits */
 	unsigned int key_proto;	    /*%< protocols this key is used for
@@ -96,7 +116,7 @@ struct dst_key {
 	char *label;		    /*%< engine label (HSM) */
 	union {
 		void *generic;
-		gss_ctx_id_t gssctx;
+		dns_gss_ctx_id_t gssctx;
 		DH *dh;
 #if USE_OPENSSL
 		EVP_PKEY *pkey;
@@ -123,9 +143,11 @@ struct dst_key {
 	bool keystateset[DST_MAX_KEYSTATES + 1];	  /*%< data
 							   * set? */
 
+	bool kasp;     /*%< key has kasp state */
 	bool inactive; /*%< private key not present as it is
 			* inactive */
 	bool external; /*%< external key */
+	bool modified; /*%< set to true if key file metadata has changed */
 
 	int fmt_major; /*%< private key format, major version
 			* */
@@ -200,7 +222,7 @@ struct dst_func {
  * Initializers
  */
 isc_result_t
-dst__openssl_init(isc_mem_t *, const char *engine);
+dst__openssl_init(const char *engine);
 #define dst__pkcs11_init pk11_initialize
 
 isc_result_t
@@ -234,10 +256,8 @@ isc_result_t
 dst__pkcs11dsa_init(struct dst_func **funcp);
 isc_result_t
 dst__pkcs11ecdsa_init(struct dst_func **funcp);
-#if defined(HAVE_PKCS11_ED25519) || defined(HAVE_PKCS11_ED448)
 isc_result_t
 dst__pkcs11eddsa_init(struct dst_func **funcp);
-#endif /* if defined(HAVE_PKCS11_ED25519) || defined(HAVE_PKCS11_ED448) */
 #endif /* USE_PKCS11 */
 #ifdef GSSAPI
 isc_result_t

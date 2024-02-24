@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -118,7 +120,7 @@ struct dns_adbfind {
 	int	       name_bucket;
 	unsigned int   flags;
 	dns_adbname_t *adbname;
-	dns_adb_t *    adb;
+	dns_adb_t     *adb;
 	isc_event_t    event;
 	ISC_LINK(dns_adbfind_t) plink;
 };
@@ -205,6 +207,10 @@ struct dns_adbfind {
  *      lame for this query.
  */
 #define DNS_ADBFIND_OVERQUOTA 0x00000400
+/*%
+ *	Don't perform a fetch even if there are no address records available.
+ */
+#define DNS_ADBFIND_NOFETCH 0x00000800
 
 /*%
  * The answers to queries come back as a list of these.

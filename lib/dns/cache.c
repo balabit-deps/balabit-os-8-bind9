@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -142,6 +144,7 @@ struct dns_cache {
 	char **db_argv;
 	size_t size;
 	dns_ttl_t serve_stale_ttl;
+	dns_ttl_t serve_stale_refresh;
 	isc_stats_t *stats;
 
 	/* Locked by 'filelock'. */
@@ -166,7 +169,7 @@ cleaner_shutdown_action(isc_task_t *task, isc_event_t *event);
 static void
 overmem_cleaning_action(isc_task_t *task, isc_event_t *event);
 
-static inline isc_result_t
+static isc_result_t
 cache_create_db(dns_cache_t *cache, dns_db_t **db) {
 	isc_result_t result;
 	result = dns_db_create(cache->mctx, cache->db_type, dns_rootname,
@@ -555,7 +558,7 @@ cache_cleaner_init(dns_cache_t *cache, isc_taskmgr_t *taskmgr,
 		result = isc_task_onshutdown(cleaner->task,
 					     cleaner_shutdown_action, cache);
 		if (result != ISC_R_SUCCESS) {
-			isc_refcount_decrement(&cleaner->cache->live_tasks);
+			isc_refcount_decrement0(&cleaner->cache->live_tasks);
 			UNEXPECTED_ERROR(__FILE__, __LINE__,
 					 "cache cleaner: "
 					 "isc_task_onshutdown() failed: %s",
@@ -957,6 +960,8 @@ dns_cache_setcachesize(dns_cache_t *cache, size_t size) {
 		 */
 		isc_mem_setwater(cache->mctx, water, cache, hiwater, lowater);
 	}
+
+	dns_db_adjusthashsize(cache->db, size);
 }
 
 size_t
@@ -998,6 +1003,28 @@ dns_cache_getservestalettl(dns_cache_t *cache) {
 	return (result == ISC_R_SUCCESS ? ttl : 0);
 }
 
+void
+dns_cache_setservestalerefresh(dns_cache_t *cache, dns_ttl_t interval) {
+	REQUIRE(VALID_CACHE(cache));
+
+	LOCK(&cache->lock);
+	cache->serve_stale_refresh = interval;
+	UNLOCK(&cache->lock);
+
+	(void)dns_db_setservestalerefresh(cache->db, interval);
+}
+
+dns_ttl_t
+dns_cache_getservestalerefresh(dns_cache_t *cache) {
+	isc_result_t result;
+	dns_ttl_t interval;
+
+	REQUIRE(VALID_CACHE(cache));
+
+	result = dns_db_getservestalerefresh(cache->db, &interval);
+	return (result == ISC_R_SUCCESS ? interval : 0);
+}
+
 /*
  * The cleaner task is shutting down; do the necessary cleanup.
  */
@@ -1019,7 +1046,7 @@ cleaner_shutdown_action(isc_task_t *task, isc_event_t *event) {
 	/* Make sure we don't reschedule anymore. */
 	(void)isc_task_purge(task, NULL, DNS_EVENT_CACHECLEAN, NULL);
 
-	INSIST(isc_refcount_decrement(&cache->live_tasks) == 1);
+	isc_refcount_decrementz(&cache->live_tasks);
 
 	cache_free(cache);
 }
@@ -1075,7 +1102,8 @@ clearnode(dns_db_t *db, dns_dbnode_t *node) {
 	isc_result_t result;
 	dns_rdatasetiter_t *iter = NULL;
 
-	result = dns_db_allrdatasets(db, node, NULL, (isc_stdtime_t)0, &iter);
+	result = dns_db_allrdatasets(db, node, NULL, DNS_DB_STALEOK,
+				     (isc_stdtime_t)0, &iter);
 	if (result != ISC_R_SUCCESS) {
 		return (result);
 	}

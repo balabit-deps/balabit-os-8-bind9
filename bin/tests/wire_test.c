@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -35,7 +37,7 @@ process_message(isc_buffer_t *source);
 static isc_result_t
 printmessage(dns_message_t *msg);
 
-static inline void
+static void
 CHECKRESULT(isc_result_t result, const char *msg) {
 	if (result != ISC_R_SUCCESS) {
 		printf("%s: %s\n", msg, dns_result_totext(result));
@@ -56,7 +58,6 @@ fromhex(char c) {
 
 	fprintf(stderr, "bad input format: %02x\n", c);
 	exit(3);
-	/* NOTREACHED */
 }
 
 static void
@@ -207,7 +208,8 @@ main(int argc, char *argv[]) {
 					break;
 				}
 				if (*rp != ' ' && *rp != '\t' && *rp != '\r' &&
-				    *rp != '\n') {
+				    *rp != '\n')
+				{
 					*wp++ = *rp;
 					len++;
 				}
@@ -258,9 +260,7 @@ main(int argc, char *argv[]) {
 		process_message(input);
 	}
 
-	if (input != NULL) {
-		isc_buffer_free(&input);
-	}
+	isc_buffer_free(&input);
 
 	if (printmemstats) {
 		isc_mem_stats(mctx, stdout);
@@ -277,8 +277,7 @@ process_message(isc_buffer_t *source) {
 	int i;
 
 	message = NULL;
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &message);
-	CHECKRESULT(result, "dns_message_create failed");
+	dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &message);
 
 	result = dns_message_parse(message, source, parseflags);
 	if (result == DNS_R_RECOVERABLE) {
@@ -294,7 +293,7 @@ process_message(isc_buffer_t *source) {
 	}
 
 	if (dorender) {
-		unsigned char b2[64 * 1024];
+		unsigned char b2[65535];
 		isc_buffer_t buffer;
 		dns_compress_t cctx;
 
@@ -341,16 +340,14 @@ process_message(isc_buffer_t *source) {
 		dns_compress_invalidate(&cctx);
 
 		message->from_to_wire = DNS_MESSAGE_INTENTPARSE;
-		dns_message_destroy(&message);
+		dns_message_detach(&message);
 
 		printf("Message rendered.\n");
 		if (printmemstats) {
 			isc_mem_stats(mctx, stdout);
 		}
 
-		result = dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE,
-					    &message);
-		CHECKRESULT(result, "dns_message_create failed");
+		dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &message);
 
 		result = dns_message_parse(message, &buffer, parseflags);
 		CHECKRESULT(result, "dns_message_parse failed");
@@ -358,5 +355,5 @@ process_message(isc_buffer_t *source) {
 		result = printmessage(message);
 		CHECKRESULT(result, "printmessage() failed");
 	}
-	dns_message_destroy(&message);
+	dns_message_detach(&message);
 }

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -477,7 +479,8 @@ getaddrinfo(const char *hostname, const char *servname,
 			family = AF_INET;
 			goto common;
 		} else if (ntmp[0] != '\0' &&
-			   inet_pton(AF_INET6, ntmp, abuf) == 1) {
+			   inet_pton(AF_INET6, ntmp, abuf) == 1)
+		{
 			if (family && family != AF_INET6) {
 				return (EAI_NONAME);
 			}
@@ -703,7 +706,8 @@ make_resstates(isc_mem_t *mctx, const char *hostname, gai_statehead_t *head,
 	 * original name and the 'ndots' configuration parameter.
 	 */
 	if (dns_name_countlabels(resstate0->qname) >
-	    irs_resconf_getndots(resconf) + 1) {
+	    irs_resconf_getndots(resconf) + 1)
+	{
 		ISC_LIST_PREPEND(head->resstates, resstate0, link);
 	} else {
 		ISC_LIST_APPEND(head->resstates, resstate0, link);
@@ -929,12 +933,14 @@ done:
 				     rest = ISC_LIST_NEXT(rest, link))
 				{
 					if (rest->trans4 != NULL &&
-					    rest->trans4->xid != NULL) {
+					    rest->trans4->xid != NULL)
+					{
 						dns_client_cancelresolve(
 							rest->trans4->xid);
 					}
 					if (rest->trans6 != NULL &&
-					    rest->trans6->xid != NULL) {
+					    rest->trans6->xid != NULL)
+					{
 						dns_client_cancelresolve(
 							rest->trans6->xid);
 					}
@@ -1131,14 +1137,16 @@ set_order(int family,
 		if (order != NULL) {
 			last = NULL;
 			for (tok = strtok_r(order, ":", &last); tok;
-			     tok = strtok_r(NULL, ":", &last)) {
+			     tok = strtok_r(NULL, ":", &last))
+			{
 				if (strcasecmp(tok, "inet6") == 0) {
 					if ((found & FOUND_IPV6) == 0) {
 						*net_order++ = add_ipv6;
 					}
 					found |= FOUND_IPV6;
 				} else if (strcasecmp(tok, "inet") == 0 ||
-					   strcasecmp(tok, "inet4") == 0) {
+					   strcasecmp(tok, "inet4") == 0)
+				{
 					if ((found & FOUND_IPV4) == 0) {
 						*net_order++ = add_ipv4;
 					}

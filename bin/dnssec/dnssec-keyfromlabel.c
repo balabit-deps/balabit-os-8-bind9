@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -63,7 +65,8 @@ usage(void) {
 			"        DH | RSASHA1 |\n"
 			"        NSEC3RSASHA1 |\n"
 			"        RSASHA256 | RSASHA512 |\n"
-			"        ECDSAP256SHA256 | ECDSAP384SHA384\n");
+			"        ECDSAP256SHA256 | ECDSAP384SHA384 |\n"
+			"        ED25519 | ED448\n");
 	fprintf(stderr, "    -3: use NSEC3-capable algorithm\n");
 	fprintf(stderr, "    -c class (default: IN)\n");
 	fprintf(stderr, "    -E <engine>:\n");
@@ -329,14 +332,14 @@ main(int argc, char **argv) {
 			prepub = strtottl(isc_commandline_argument);
 			break;
 		case 'F':
-		/* Reserved for FIPS mode */
-		/* FALLTHROUGH */
+			/* Reserved for FIPS mode */
+			FALLTHROUGH;
 		case '?':
 			if (isc_commandline_option != '?') {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			/* Does not return. */
 			usage();
@@ -573,7 +576,8 @@ main(int argc, char **argv) {
 		flags |= DNS_KEYOWNER_ZONE;
 	} else if ((options & DST_TYPE_KEY) != 0) { /* KEY */
 		if (strcasecmp(nametype, "host") == 0 ||
-		    strcasecmp(nametype, "entity") == 0) {
+		    strcasecmp(nametype, "entity") == 0)
+		{
 			flags |= DNS_KEYOWNER_ENTITY;
 		} else if (strcasecmp(nametype, "user") == 0) {
 			flags |= DNS_KEYOWNER_USER;
@@ -600,7 +604,8 @@ main(int argc, char **argv) {
 	if (protocol == -1) {
 		protocol = DNS_KEYPROTO_DNSSEC;
 	} else if ((options & DST_TYPE_KEY) == 0 &&
-		   protocol != DNS_KEYPROTO_DNSSEC) {
+		   protocol != DNS_KEYPROTO_DNSSEC)
+	{
 		fatal("invalid DNSKEY protocol: %d", protocol);
 	}
 
@@ -635,7 +640,7 @@ main(int argc, char **argv) {
 		dns_secalg_format(alg, algstr, sizeof(algstr));
 		fatal("failed to get key %s/%s: %s", namestr, algstr,
 		      isc_result_totext(ret));
-		/* NOTREACHED */
+		UNREACHABLE();
 		exit(-1);
 	}
 

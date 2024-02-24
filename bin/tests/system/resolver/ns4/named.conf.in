@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -26,28 +28,38 @@ options {
 };
 
 zone "." {
-	type master;
+	type primary;
 	file "root.db";
 };
 
 zone "moves" {
-	type master;
+	type primary;
 	file "moves.db";
 };
 
 zone "child.server" {
-	type master;
+	type primary;
 	file "child.server.db";
 };
 
 zone "tld" {
-	type master;
+	type primary;
 	file "tld.db";
 };
 
 zone "broken" {
-	type master;
+	type primary;
 	file "broken.db";
+};
+
+zone "sourcens" {
+    type primary;
+    file "sourcens.db";
+};
+
+zone "v4only.net" {
+	type primary;
+	file "v4only.net.db";
 };
 
 key rndc_key {

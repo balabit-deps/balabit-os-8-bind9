@@ -1,8 +1,10 @@
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -17,25 +19,32 @@ VERSION=@BIND9_VERSION@
 
 SUBDIRS =	dlzexternal dyndb pipelined rndc rpz rsabigexponent tkey
 
-CINCLUDES =	${ISC_INCLUDES} ${DNS_INCLUDES}
+CINCLUDES =	${ISC_INCLUDES} \
+		${DNS_INCLUDES}	\
+		${ISCCFG_INCLUDES} \
+		${IRS_INCLUDES}
 
 CDEFINES =	@USE_GSSAPI@ @CONTRIB_DLZ@
 CWARNINGS =
 
-DNSLIBS =
-ISCLIBS =	../../../lib/isc/libisc.@A@ ${OPENSSL_LIBS} ${JSON_C_LIBS} ${LIBXML2_LIBS} ${ZLIB_LIBS}
+ISCLIBS =	../../../lib/isc/libisc.@A@ @NO_LIBTOOL_ISCLIBS@
+DNSLIBS =	../../../lib/dns/libdns.@A@ @NO_LIBTOOL_DNSLIBS@
+ISCCFGLIBS =	../../../lib/isccfg/libisccfg.@A@
+IRSLIBS =	../../../lib/irs/libirs.@A@
 
-DNSDEPLIBS =
-ISCDEPLIBS =
+ISCDEPLIBS =	../../../lib/isc/libisc.@A@
+DNSDEPLIBS =	../../../lib/dns/libdns.@A@
+ISCCFGDEPLIBS =	../../../lib/isccfg/libisccfg.@A@
+IRSDEPLIBS =	../../../lib/irs/libirs.@A@
 
-DEPLIBS =
+DEPLIBS =	${IRSDEPLIBS} ${ISCCFGDEPLIBS} ${DNSDEPLIBS} ${ISCDEPLIBS}
 
-LIBS =		@LIBS@
+LIBS =		${IRSLIBS} ${ISCCFGLIBS} ${DNSLIBS} ${ISCLIBS} @LIBS@
 
-OBJS =		feature-test.@O@
-SRCS =		feature-test.c
+OBJS =		feature-test.@O@ resolve.@O@
+SRCS =		feature-test.c resolve.c
 
-TARGETS =	feature-test@EXEEXT@
+TARGETS =	feature-test@EXEEXT@ resolve@EXEEXT@
 
 @BIND9_MAKE_RULES@
 
@@ -43,6 +52,10 @@ subdirs: ${TARGETS}
 
 feature-test@EXEEXT@: feature-test.@O@
 	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ feature-test.@O@ ${ISCLIBS} ${LIBS}
+
+resolve@EXEEXT@: resolve.@O@ ${DEPLIBS}
+	${LIBTOOL_MODE_LINK} ${PURIFY} ${CC} ${CFLAGS} ${LDFLAGS} -o $@ \
+	resolve.@O@ ${LIBS}
 
 # Running the scripts below is bypassed when a separate build directory is
 # used.

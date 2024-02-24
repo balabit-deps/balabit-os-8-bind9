@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -81,16 +83,16 @@ ISC_LANG_BEGINDECLS
 struct dns_view {
 	/* Unlocked. */
 	unsigned int	  magic;
-	isc_mem_t *	  mctx;
+	isc_mem_t	 *mctx;
 	dns_rdataclass_t  rdclass;
-	char *		  name;
-	dns_zt_t *	  zonetable;
-	dns_resolver_t *  resolver;
-	dns_adb_t *	  adb;
+	char		 *name;
+	dns_zt_t	 *zonetable;
+	dns_resolver_t	 *resolver;
+	dns_adb_t	 *adb;
 	dns_requestmgr_t *requestmgr;
-	dns_cache_t *	  cache;
-	dns_db_t *	  cachedb;
-	dns_db_t *	  hints;
+	dns_cache_t	 *cache;
+	dns_db_t	 *cachedb;
+	dns_db_t	 *hints;
 
 	/*
 	 * security roots and negative trust anchors.
@@ -101,7 +103,7 @@ struct dns_view {
 
 	isc_mutex_t  lock;
 	bool	     frozen;
-	isc_task_t * task;
+	isc_task_t  *task;
 	isc_event_t  resevent;
 	isc_event_t  adbevent;
 	isc_event_t  reqevent;
@@ -111,11 +113,11 @@ struct dns_view {
 	bool	     cacheshared;
 
 	/* Configurable data. */
-	dns_tsig_keyring_t *  statickeys;
-	dns_tsig_keyring_t *  dynamickeys;
-	dns_peerlist_t *      peers;
-	dns_order_t *	      order;
-	dns_fwdtable_t *      fwdtable;
+	dns_tsig_keyring_t   *statickeys;
+	dns_tsig_keyring_t   *dynamickeys;
+	dns_peerlist_t	     *peers;
+	dns_order_t	     *order;
+	dns_fwdtable_t	     *fwdtable;
 	bool		      recursion;
 	bool		      qminimization;
 	bool		      qmin_strict;
@@ -130,24 +132,24 @@ struct dns_view {
 	bool		      trust_anchor_telemetry;
 	bool		      root_key_sentinel;
 	dns_transfer_format_t transfer_format;
-	dns_acl_t *	      cacheacl;
-	dns_acl_t *	      cacheonacl;
-	dns_acl_t *	      queryacl;
-	dns_acl_t *	      queryonacl;
-	dns_acl_t *	      recursionacl;
-	dns_acl_t *	      recursiononacl;
-	dns_acl_t *	      sortlist;
-	dns_acl_t *	      notifyacl;
-	dns_acl_t *	      transferacl;
-	dns_acl_t *	      updateacl;
-	dns_acl_t *	      upfwdacl;
-	dns_acl_t *	      denyansweracl;
-	dns_acl_t *	      nocasecompress;
+	dns_acl_t	     *cacheacl;
+	dns_acl_t	     *cacheonacl;
+	dns_acl_t	     *queryacl;
+	dns_acl_t	     *queryonacl;
+	dns_acl_t	     *recursionacl;
+	dns_acl_t	     *recursiononacl;
+	dns_acl_t	     *sortlist;
+	dns_acl_t	     *notifyacl;
+	dns_acl_t	     *transferacl;
+	dns_acl_t	     *updateacl;
+	dns_acl_t	     *upfwdacl;
+	dns_acl_t	     *denyansweracl;
+	dns_acl_t	     *nocasecompress;
 	bool		      msgcompression;
-	dns_rbt_t *	      answeracl_exclude;
-	dns_rbt_t *	      denyanswernames;
-	dns_rbt_t *	      answernames_exclude;
-	dns_rrl_t *	      rrl;
+	dns_rbt_t	     *answeracl_exclude;
+	dns_rbt_t	     *denyanswernames;
+	dns_rbt_t	     *answernames_exclude;
+	dns_rrl_t	     *rrl;
 	bool		      provideixfr;
 	bool		      requestnsid;
 	bool		      sendcookie;
@@ -157,34 +159,35 @@ struct dns_view {
 	dns_ttl_t	      minncachettl;
 	uint32_t	      nta_lifetime;
 	uint32_t	      nta_recheck;
-	char *		      nta_file;
+	char		     *nta_file;
 	dns_ttl_t	      prefetch_trigger;
 	dns_ttl_t	      prefetch_eligible;
 	in_port_t	      dstport;
 	dns_aclenv_t	      aclenv;
 	dns_rdatatype_t	      preferred_glue;
 	bool		      flush;
-	dns_namelist_t *      delonly;
+	dns_namelist_t	     *delonly;
 	bool		      rootdelonly;
-	dns_namelist_t *      rootexclude;
+	dns_namelist_t	     *rootexclude;
 	bool		      checknames;
 	uint16_t	      maxudp;
 	dns_ttl_t	      staleanswerttl;
 	dns_stale_answer_t    staleanswersok;	  /* rndc setting */
 	bool		      staleanswersenable; /* named.conf setting
 						   * */
+	uint32_t	  staleanswerclienttimeout;
 	uint16_t	  nocookieudp;
 	uint16_t	  padding;
-	dns_acl_t *	  pad_acl;
+	dns_acl_t	 *pad_acl;
 	unsigned int	  maxbits;
 	dns_dns64list_t	  dns64;
 	unsigned int	  dns64cnt;
-	dns_rpz_zones_t * rpzs;
+	dns_rpz_zones_t	 *rpzs;
 	dns_catz_zones_t *catzs;
 	dns_dlzdblist_t	  dlz_searched;
 	dns_dlzdblist_t	  dlz_unsearched;
 	uint32_t	  fail_ttl;
-	dns_badcache_t *  failcache;
+	dns_badcache_t	 *failcache;
 
 	/*
 	 * Configurable data for server use only,
@@ -217,19 +220,19 @@ struct dns_view {
 	 * XXX: This should be a pointer to an opaque type that
 	 * named implements.
 	 */
-	char *	 new_zone_dir;
-	char *	 new_zone_file;
-	char *	 new_zone_db;
-	void *	 new_zone_dbenv;
+	char	*new_zone_dir;
+	char	*new_zone_file;
+	char	*new_zone_db;
+	void	*new_zone_dbenv;
 	uint64_t new_zone_mapsize;
-	void *	 new_zone_config;
+	void	*new_zone_config;
 	void (*cfg_destroy)(void **);
 	isc_mutex_t new_zone_lock;
 
 	unsigned char secret[32]; /* Client secret */
 	unsigned int  v6bias;
 
-	dns_dtenv_t *	dtenv;	 /* Dnstap environment */
+	dns_dtenv_t    *dtenv;	 /* Dnstap environment */
 	dns_dtmsgtype_t dttypes; /* Dnstap message types
 				  * to log */
 
@@ -248,25 +251,6 @@ struct dns_view {
 #define DNS_VIEWATTR_RESSHUTDOWN 0x01
 #define DNS_VIEWATTR_ADBSHUTDOWN 0x02
 #define DNS_VIEWATTR_REQSHUTDOWN 0x04
-
-#ifdef HAVE_LMDB
-#include <lmdb.h>
-/*
- * MDB_NOTLS is used to prevent problems after configuration is reloaded, due
- * to the way LMDB's use of thread-local storage (TLS) interacts with the BIND9
- * thread model.
- */
-#define DNS_LMDB_COMMON_FLAGS (MDB_CREATE | MDB_NOSUBDIR | MDB_NOTLS)
-#ifndef __OpenBSD__
-#define DNS_LMDB_FLAGS (DNS_LMDB_COMMON_FLAGS)
-#else /* __OpenBSD__ */
-/*
- * OpenBSD does not have a unified buffer cache, which requires both reads and
- * writes to be performed using mmap().
- */
-#define DNS_LMDB_FLAGS (DNS_LMDB_COMMON_FLAGS | MDB_WRITEMAP)
-#endif /* __OpenBSD__ */
-#endif /* HAVE_LMDB */
 
 isc_result_t
 dns_view_create(isc_mem_t *mctx, dns_rdataclass_t rdclass, const char *name,
@@ -1213,7 +1197,7 @@ dns_view_ntacovers(dns_view_t *view, isc_stdtime_t now, const dns_name_t *name,
 
 void
 dns_view_untrust(dns_view_t *view, const dns_name_t *keyname,
-		 dns_rdata_dnskey_t *dnskey);
+		 const dns_rdata_dnskey_t *dnskey);
 /*%<
  * Remove keys that match 'keyname' and 'dnskey' from the views trust
  * anchors.
@@ -1223,6 +1207,19 @@ dns_view_untrust(dns_view_t *view, const dns_name_t *keyname,
  * operation, that is an error.  We fail closed, inserting a NULL
  * key so as to prevent validation until a legimitate key has been
  * provided.)
+ *
+ * Requires:
+ * \li	'view' is valid.
+ * \li	'keyname' is valid.
+ * \li	'dnskey' is valid.
+ */
+
+bool
+dns_view_istrusted(dns_view_t *view, const dns_name_t *keyname,
+		   const dns_rdata_dnskey_t *dnskey);
+/*%<
+ * Determine if the key defined by 'keyname' and 'dnskey' is
+ * trusted by 'view'.
  *
  * Requires:
  * \li	'view' is valid.
@@ -1343,6 +1340,15 @@ dns_view_setviewrevert(dns_view_t *view);
 /*%<
  * Revert dns_zone_setview() calls previously made for all zones in this
  * view.
+ *
+ * Requires:
+ *\li	'view' to be valid.
+ */
+
+bool
+dns_view_staleanswerenabled(dns_view_t *view);
+/*%<
+ * Check if stale answers are enabled for this view.
  *
  * Requires:
  *\li	'view' to be valid.

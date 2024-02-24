@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -362,6 +364,34 @@ dns_rdataslab_size(unsigned char *slab, unsigned int reservelen) {
 }
 
 unsigned int
+dns_rdataslab_rdatasize(unsigned char *slab, unsigned int reservelen) {
+	unsigned int count, length, rdatalen = 0;
+	unsigned char *current;
+
+	REQUIRE(slab != NULL);
+
+	current = slab + reservelen;
+	count = *current++ * 256;
+	count += *current++;
+#if DNS_RDATASET_FIXED
+	current += (4 * count);
+#endif /* if DNS_RDATASET_FIXED */
+	while (count > 0) {
+		count--;
+		length = *current++ * 256;
+		length += *current++;
+		rdatalen += length;
+#if DNS_RDATASET_FIXED
+		current += length + 2;
+#else  /* if DNS_RDATASET_FIXED */
+		current += length;
+#endif /* if DNS_RDATASET_FIXED */
+	}
+
+	return (rdatalen);
+}
+
+unsigned int
 dns_rdataslab_count(unsigned char *slab, unsigned int reservelen) {
 	unsigned int count;
 	unsigned char *current;
@@ -380,7 +410,7 @@ dns_rdataslab_count(unsigned char *slab, unsigned int reservelen) {
  * 'type' and class 'rdclass', and advance '*current' to
  * point to the next item in the slab.
  */
-static inline void
+static void
 rdata_from_slab(unsigned char **current, dns_rdataclass_t rdclass,
 		dns_rdatatype_t type, dns_rdata_t *rdata) {
 	unsigned char *tcurrent = *current;
@@ -416,7 +446,7 @@ rdata_from_slab(unsigned char **current, dns_rdataclass_t rdclass,
  * contains an rdata identical to 'rdata'.  This does case insensitive
  * comparisons per DNSSEC.
  */
-static inline bool
+static bool
 rdata_in_slab(unsigned char *slab, unsigned int reservelen,
 	      dns_rdataclass_t rdclass, dns_rdatatype_t type,
 	      dns_rdata_t *rdata) {
@@ -923,7 +953,8 @@ dns_rdataslab_equal(unsigned char *slab1, unsigned char *slab2,
 #endif /* if DNS_RDATASET_FIXED */
 
 		if (length1 != length2 ||
-		    memcmp(current1, current2, length1) != 0) {
+		    memcmp(current1, current2, length1) != 0)
+		{
 			return (false);
 		}
 

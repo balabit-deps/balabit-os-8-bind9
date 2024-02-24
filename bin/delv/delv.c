@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -33,6 +35,7 @@
 #include <isc/hex.h>
 #include <isc/lib.h>
 #include <isc/log.h>
+#include <isc/managers.h>
 #include <isc/md.h>
 #include <isc/mem.h>
 #ifdef WIN32
@@ -71,7 +74,6 @@
 #include <isccfg/log.h>
 #include <isccfg/namedconf.h>
 
-#include <irs/netdb.h>
 #include <irs/resconf.h>
 
 #define CHECK(r)                             \
@@ -271,11 +273,7 @@ setup_logging(FILE *errout) {
 	isc_logdestination_t destination;
 	isc_logconfig_t *logconfig = NULL;
 
-	result = isc_log_create(mctx, &lctx, &logconfig);
-	if (result != ISC_R_SUCCESS) {
-		fatal("Couldn't set up logging");
-	}
-
+	isc_log_create(mctx, &lctx, &logconfig);
 	isc_log_registercategories(lctx, categories);
 	isc_log_registermodules(lctx, modules);
 	isc_log_setcontext(lctx);
@@ -287,20 +285,12 @@ setup_logging(FILE *errout) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-
-	result = isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
-				       ISC_LOG_DYNAMIC, &destination,
-				       ISC_LOG_PRINTPREFIX);
-	if (result != ISC_R_SUCCESS) {
-		fatal("Couldn't set up log channel 'stderr'");
-	}
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination,
+			      ISC_LOG_PRINTPREFIX);
 
 	isc_log_setdebuglevel(lctx, loglevel);
-
-	result = isc_log_settag(logconfig, ";; ");
-	if (result != ISC_R_SUCCESS) {
-		fatal("Couldn't set log tag");
-	}
+	isc_log_settag(logconfig, ";; ");
 
 	result = isc_log_usechannel(logconfig, "stderr",
 				    ISC_LOGCATEGORY_DEFAULT, NULL);
@@ -309,12 +299,9 @@ setup_logging(FILE *errout) {
 	}
 
 	if (resolve_trace && loglevel < 1) {
-		result = isc_log_createchannel(
-			logconfig, "resolver", ISC_LOG_TOFILEDESC,
-			ISC_LOG_DEBUG(1), &destination, ISC_LOG_PRINTPREFIX);
-		if (result != ISC_R_SUCCESS) {
-			fatal("Couldn't set up log channel 'resolver'");
-		}
+		isc_log_createchannel(logconfig, "resolver", ISC_LOG_TOFILEDESC,
+				      ISC_LOG_DEBUG(1), &destination,
+				      ISC_LOG_PRINTPREFIX);
 
 		result = isc_log_usechannel(logconfig, "resolver",
 					    DNS_LOGCATEGORY_RESOLVER,
@@ -325,12 +312,9 @@ setup_logging(FILE *errout) {
 	}
 
 	if (validator_trace && loglevel < 3) {
-		result = isc_log_createchannel(
-			logconfig, "validator", ISC_LOG_TOFILEDESC,
-			ISC_LOG_DEBUG(3), &destination, ISC_LOG_PRINTPREFIX);
-		if (result != ISC_R_SUCCESS) {
-			fatal("Couldn't set up log channel 'validator'");
-		}
+		isc_log_createchannel(logconfig, "validator",
+				      ISC_LOG_TOFILEDESC, ISC_LOG_DEBUG(3),
+				      &destination, ISC_LOG_PRINTPREFIX);
 
 		result = isc_log_usechannel(logconfig, "validator",
 					    DNS_LOGCATEGORY_DNSSEC,
@@ -341,12 +325,9 @@ setup_logging(FILE *errout) {
 	}
 
 	if (message_trace && loglevel < 10) {
-		result = isc_log_createchannel(
-			logconfig, "messages", ISC_LOG_TOFILEDESC,
-			ISC_LOG_DEBUG(10), &destination, ISC_LOG_PRINTPREFIX);
-		if (result != ISC_R_SUCCESS) {
-			fatal("Couldn't set up log channel 'messages'");
-		}
+		isc_log_createchannel(logconfig, "messages", ISC_LOG_TOFILEDESC,
+				      ISC_LOG_DEBUG(10), &destination,
+				      ISC_LOG_PRINTPREFIX);
 
 		result = isc_log_usechannel(logconfig, "messages",
 					    DNS_LOGCATEGORY_RESOLVER,
@@ -477,7 +458,8 @@ printdata(dns_rdataset_t *rdataset, dns_name_t *owner,
 			     result = dns_rdataset_next(rdataset))
 			{
 				if ((rdataset->attributes &
-				     DNS_RDATASETATTR_NEGATIVE) != 0) {
+				     DNS_RDATASETATTR_NEGATIVE) != 0)
+				{
 					continue;
 				}
 
@@ -501,7 +483,8 @@ printdata(dns_rdataset_t *rdataset, dns_name_t *owner,
 		} else {
 			dns_indent_t indent = { "  ", 2 };
 			if (!yaml && (rdataset->attributes &
-				      DNS_RDATASETATTR_NEGATIVE) != 0) {
+				      DNS_RDATASETATTR_NEGATIVE) != 0)
+			{
 				isc_buffer_putstr(&target, "; ");
 			}
 			result = dns_master_rdatasettotext(
@@ -622,11 +605,14 @@ key_fromconfig(const cfg_obj_t *key, dns_client_t *client) {
 	dns_name_t *keyname;
 	isc_result_t result;
 	bool match_root = false;
-	enum { INITIAL_KEY,
-	       STATIC_KEY,
-	       INITIAL_DS,
-	       STATIC_DS,
-	       TRUSTED } anchortype;
+	enum {
+		INITIAL_KEY,
+		STATIC_KEY,
+		INITIAL_DS,
+		STATIC_DS,
+		TRUSTED
+	} anchortype;
+	const cfg_obj_t *obj;
 
 	keynamestr = cfg_obj_asstring(cfg_tuple_get(key, "name"));
 	CHECK(convert_name(&fkeyname, &keyname, keynamestr));
@@ -659,21 +645,30 @@ key_fromconfig(const cfg_obj_t *key, dns_client_t *client) {
 	rdata3 = cfg_obj_asuint32(cfg_tuple_get(key, "rdata3"));
 
 	/* What type of trust anchor is this? */
-	atstr = cfg_obj_asstring(cfg_tuple_get(key, "anchortype"));
-	if (strcasecmp(atstr, "static-key") == 0) {
+	obj = cfg_tuple_get(key, "anchortype");
+	if (cfg_obj_isvoid(obj)) {
+		/*
+		 * "anchortype" is not defined, this must be a static-key
+		 * configured with trusted-keys.
+		 */
 		anchortype = STATIC_KEY;
-	} else if (strcasecmp(atstr, "static-ds") == 0) {
-		anchortype = STATIC_DS;
-	} else if (strcasecmp(atstr, "initial-key") == 0) {
-		anchortype = INITIAL_KEY;
-	} else if (strcasecmp(atstr, "initial-ds") == 0) {
-		anchortype = INITIAL_DS;
 	} else {
-		delv_log(ISC_LOG_ERROR,
-			 "key '%s': invalid initialization method '%s'",
-			 keynamestr, atstr);
-		result = ISC_R_FAILURE;
-		goto cleanup;
+		atstr = cfg_obj_asstring(obj);
+		if (strcasecmp(atstr, "static-key") == 0) {
+			anchortype = STATIC_KEY;
+		} else if (strcasecmp(atstr, "static-ds") == 0) {
+			anchortype = STATIC_DS;
+		} else if (strcasecmp(atstr, "initial-key") == 0) {
+			anchortype = INITIAL_KEY;
+		} else if (strcasecmp(atstr, "initial-ds") == 0) {
+			anchortype = INITIAL_DS;
+		} else {
+			delv_log(ISC_LOG_ERROR,
+				 "key '%s': invalid initialization method '%s'",
+				 keynamestr, atstr);
+			result = ISC_R_FAILURE;
+			goto cleanup;
+		}
 	}
 
 	isc_buffer_init(&databuf, data, sizeof(data));
@@ -791,7 +786,8 @@ load_keys(const cfg_obj_t *keys, dns_client_t *client) {
 		keylist = cfg_listelt_value(elt);
 
 		for (elt2 = cfg_list_first(keylist); elt2 != NULL;
-		     elt2 = cfg_list_next(elt2)) {
+		     elt2 = cfg_list_next(elt2))
+		{
 			key = cfg_listelt_value(elt2);
 			CHECK(key_fromconfig(key, client));
 		}
@@ -859,6 +855,7 @@ setup_dnsseckeys(dns_client_t *client) {
 
 		isc_buffer_init(&b, anchortext, sizeof(anchortext) - 1);
 		isc_buffer_add(&b, sizeof(anchortext) - 1);
+		cfg_parser_reset(parser);
 		result = cfg_parse_buffer(parser, &b, NULL, 0,
 					  &cfg_type_bindkeys, 0, &bindkeys);
 		if (result != ISC_R_SUCCESS) {
@@ -956,7 +953,8 @@ addserver(dns_client_t *client) {
 		result = ISC_R_SUCCESS;
 		for (cur = res; cur != NULL; cur = cur->ai_next) {
 			if (cur->ai_family != AF_INET &&
-			    cur->ai_family != AF_INET6) {
+			    cur->ai_family != AF_INET6)
+			{
 				continue;
 			}
 			sa = isc_mem_get(mctx, sizeof(*sa));
@@ -1339,7 +1337,6 @@ dash_option(char *option, char *next, bool *open_type_class) {
 		case 'h':
 			usage();
 			exit(0);
-		/* NOTREACHED */
 		case 'i':
 			no_sigs = true;
 			root_validation = false;
@@ -1350,10 +1347,8 @@ dash_option(char *option, char *next, bool *open_type_class) {
 		case 'v':
 			fputs("delv " VERSION "\n", stderr);
 			exit(0);
-		/* NOTREACHED */
 		default:
-			INSIST(0);
-			ISC_UNREACHABLE();
+			UNREACHABLE();
 		}
 		if (strlen(option) > 1U) {
 			option = &option[1];
@@ -1459,7 +1454,8 @@ dash_option(char *option, char *next, bool *open_type_class) {
 				warn("extra query type");
 			}
 			if (rdtype == dns_rdatatype_ixfr ||
-			    rdtype == dns_rdatatype_axfr) {
+			    rdtype == dns_rdatatype_axfr)
+			{
 				fatal("Transfer not supported");
 			}
 			qtype = rdtype;
@@ -1491,7 +1487,7 @@ dash_option(char *option, char *next, bool *open_type_class) {
 		fprintf(stderr, "Invalid option: -%s\n", option);
 		usage();
 	}
-	/* NOTREACHED */
+	UNREACHABLE();
 	return (false);
 }
 
@@ -1538,7 +1534,8 @@ preparse_args(int argc, char **argv) {
 
 		/* Look for dash value option. */
 		if (strpbrk(option, dash_opts) != &option[0] ||
-		    strlen(option) > 1U) {
+		    strlen(option) > 1U)
+		{
 			/* Error or value in option. */
 			continue;
 		}
@@ -1576,13 +1573,15 @@ parse_args(int argc, char **argv) {
 		} else if (argv[0][0] == '-') {
 			if (argc <= 1) {
 				if (dash_option(&argv[0][1], NULL,
-						&open_type_class)) {
+						&open_type_class))
+				{
 					argc--;
 					argv++;
 				}
 			} else {
 				if (dash_option(&argv[0][1], argv[1],
-						&open_type_class)) {
+						&open_type_class))
+				{
 					argc--;
 					argv++;
 				}
@@ -1601,7 +1600,8 @@ parse_args(int argc, char **argv) {
 						warn("extra query type");
 					}
 					if (rdtype == dns_rdatatype_ixfr ||
-					    rdtype == dns_rdatatype_axfr) {
+					    rdtype == dns_rdatatype_axfr)
+					{
 						fatal("Transfer not supported");
 					}
 					qtype = rdtype;
@@ -1736,6 +1736,7 @@ main(int argc, char *argv[]) {
 	dns_namelist_t namelist;
 	unsigned int resopt, clopt;
 	isc_appctx_t *actx = NULL;
+	isc_nm_t *netmgr = NULL;
 	isc_taskmgr_t *taskmgr = NULL;
 	isc_socketmgr_t *socketmgr = NULL;
 	isc_timermgr_t *timermgr = NULL;
@@ -1759,9 +1760,9 @@ main(int argc, char *argv[]) {
 	isc_mem_create(&mctx);
 
 	CHECK(isc_appctx_create(mctx, &actx));
-	CHECK(isc_taskmgr_createinctx(mctx, 1, 0, &taskmgr));
-	CHECK(isc_socketmgr_createinctx(mctx, &socketmgr));
-	CHECK(isc_timermgr_createinctx(mctx, &timermgr));
+	CHECK(isc_managers_create(mctx, 1, 0, &netmgr, &taskmgr));
+	CHECK(isc_socketmgr_create(mctx, &socketmgr));
+	CHECK(isc_timermgr_create(mctx, &timermgr));
 
 	parse_args(argc, argv);
 
@@ -1782,8 +1783,8 @@ main(int argc, char *argv[]) {
 
 	/* Create client */
 	clopt = DNS_CLIENTCREATEOPT_USECACHE;
-	result = dns_client_createx(mctx, actx, taskmgr, socketmgr, timermgr,
-				    clopt, &client, srcaddr4, srcaddr6);
+	result = dns_client_create(mctx, actx, taskmgr, socketmgr, timermgr,
+				   clopt, &client, srcaddr4, srcaddr6);
 	if (result != ISC_R_SUCCESS) {
 		delv_log(ISC_LOG_ERROR, "dns_client_create: %s",
 			 isc_result_totext(result));
@@ -1803,7 +1804,7 @@ main(int argc, char *argv[]) {
 	CHECK(convert_name(&qfn, &query_name, qname));
 
 	/* Set up resolution options */
-	resopt = DNS_CLIENTRESOPT_ALLOWRUN | DNS_CLIENTRESOPT_NOCDFLAG;
+	resopt = DNS_CLIENTRESOPT_NOCDFLAG;
 	if (no_sigs) {
 		resopt |= DNS_CLIENTRESOPT_NODNSSEC;
 	}
@@ -1866,7 +1867,7 @@ cleanup:
 		dns_client_destroy(&client);
 	}
 	if (taskmgr != NULL) {
-		isc_taskmgr_destroy(&taskmgr);
+		isc_managers_destroy(&netmgr, &taskmgr);
 	}
 	if (timermgr != NULL) {
 		isc_timermgr_destroy(&timermgr);

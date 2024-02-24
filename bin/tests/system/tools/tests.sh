@@ -1,10 +1,12 @@
 #!/bin/sh
-#
+
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -15,32 +17,35 @@ SYSTEMTESTTOP=..
 status=0
 
 checkout() {
-	case $? in
-	0) : ok ;;
-	*) echo_i "failed"
-	   status=`expr $status + 1`
-	   return 1 ;;
-	esac
-	case $out in
-	*$hash*) : ok ;;
-	*) echo_i "expect $hash"
-	   echo_i "output $out"
-	   echo_i "failed"
-	   status=`expr $status + 1` ;;
-	esac
+  case $? in
+    0) : ok ;;
+    *)
+      echo_i "failed"
+      status=$(expr $status + 1)
+      return 1
+      ;;
+  esac
+  case $out in
+    *$hash*) : ok ;;
+    *)
+      echo_i "expect $hash"
+      echo_i "output $out"
+      echo_i "failed"
+      status=$(expr $status + 1)
+      ;;
+  esac
 }
 
 # test cases taken from RFC 5155 appendix A
 algo=1 flags=0 iters=12 salt="aabbccdd"
-while	read name hash
-do
-	echo_i "checking $NSEC3HASH $name"
-	out=`$NSEC3HASH $salt $algo $iters $name`
-	checkout
+while read name hash; do
+  echo_i "checking $NSEC3HASH $name"
+  out=$($NSEC3HASH $salt $algo $iters $name)
+  checkout
 
-	echo_i "checking $NSEC3HASH -r $name"
-	out=`$NSEC3HASH -r $algo $flags $iters $salt $name`
-	checkout
+  echo_i "checking $NSEC3HASH -r $name"
+  out=$($NSEC3HASH -r $algo $flags $iters $salt $name)
+  checkout
 
 done <<EOF
 *.w.example R53BQ7CC2UVMUBFU5OCMM6PERS9TK9EN
@@ -59,44 +64,46 @@ EOF
 
 # test empty salt
 checkempty() {
-	hash=CK0POJMG874LJREF7EFN8430QVIT8BSM checkout &&
-	hash=- checkout
+  hash=CK0POJMG874LJREF7EFN8430QVIT8BSM checkout \
+    && hash=- checkout
 }
 name=com algo=1 flags=1 iters=0
 echo_i "checking $NSEC3HASH '' $name"
-out=`$NSEC3HASH '' $algo $iters $name`
+out=$($NSEC3HASH '' $algo $iters $name)
 checkempty
 echo_i "checking $NSEC3HASH - $name"
-out=`$NSEC3HASH - $algo $iters $name`
+out=$($NSEC3HASH - $algo $iters $name)
 checkempty
 echo_i "checking $NSEC3HASH -- '' $name"
-out=`$NSEC3HASH -- '' $algo $iters $name`
+out=$($NSEC3HASH -- '' $algo $iters $name)
 checkempty
 echo_i "checking $NSEC3HASH -- - $name"
-out=`$NSEC3HASH -- - $algo $iters $name`
+out=$($NSEC3HASH -- - $algo $iters $name)
 checkempty
 echo_i "checking $NSEC3HASH -r '' $name"
-out=`$NSEC3HASH -r $algo $flags $iters '' $name`
+out=$($NSEC3HASH -r $algo $flags $iters '' $name)
 checkempty
 echo_i "checking $NSEC3HASH -r - $name"
-out=`$NSEC3HASH -r $algo $flags $iters - $name`
+out=$($NSEC3HASH -r $algo $flags $iters - $name)
 checkempty
 
 checkfail() {
-	case $? in
-	0) echo_i "failed to fail"
-	   status=`expr $status + 1`
-	   return 1 ;;
-	esac
+  case $? in
+    0)
+      echo_i "failed to fail"
+      status=$(expr $status + 1)
+      return 1
+      ;;
+  esac
 }
 echo_i "checking $NSEC3HASH missing args"
-out=`$NSEC3HASH 00 1 0 2>&1`
+out=$($NSEC3HASH 00 1 0 2>&1)
 checkfail
 echo_i "checking $NSEC3HASH extra args"
-out=`$NSEC3HASH 00 1 0 two names 2>&1`
+out=$($NSEC3HASH 00 1 0 two names 2>&1)
 checkfail
 echo_i "checking $NSEC3HASH bad option"
-out=`$NSEC3HASH -? 2>&1`
+out=$($NSEC3HASH -? 2>&1)
 checkfail
 
 echo_i "exit status: $status"

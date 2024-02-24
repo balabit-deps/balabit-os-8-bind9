@@ -1,9 +1,11 @@
 /*
  * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -39,6 +41,7 @@
 #include <isc/file.h>
 #include <isc/hash.h>
 #include <isc/hex.h>
+#include <isc/managers.h>
 #include <isc/md.h>
 #include <isc/mem.h>
 #include <isc/mutex.h>
@@ -98,7 +101,7 @@ static int nsec_datatype = dns_rdatatype_nsec;
 		     "dns_dbiterator_current()")
 
 #define IS_NSEC3  (nsec_datatype == dns_rdatatype_nsec3)
-#define OPTOUT(x) (((x)&DNS_NSEC3FLAG_OPTOUT) != 0)
+#define OPTOUT(x) (((x) & DNS_NSEC3FLAG_OPTOUT) != 0)
 
 #define REVOKE(x) ((dst_key_flags(x) & DNS_KEYFLAG_REVOKE) != 0)
 
@@ -123,7 +126,7 @@ struct signer_event {
 
 static dns_dnsseckeylist_t keylist;
 static unsigned int keycount = 0;
-isc_rwlock_t keylist_lock;
+static isc_rwlock_t keylist_lock;
 static isc_stdtime_t starttime = 0, endtime = 0, dnskey_endtime = 0, now;
 static int cycle = -1;
 static int jitter = 0;
@@ -143,6 +146,7 @@ static unsigned int nsigned = 0, nretained = 0, ndropped = 0;
 static unsigned int nverified = 0, nverifyfailed = 0;
 static const char *directory = NULL, *dsdir = NULL;
 static isc_mutex_t namelock, statslock;
+static isc_nm_t *netmgr = NULL;
 static isc_taskmgr_t *taskmgr = NULL;
 static dns_db_t *gdb;		  /* The database */
 static dns_dbversion_t *gversion; /* The database version */
@@ -176,8 +180,9 @@ static bool remove_orphansigs = false;
 static bool remove_inactkeysigs = false;
 static bool output_dnssec_only = false;
 static bool output_stdout = false;
-bool set_maxttl = false;
+static bool set_maxttl = false;
 static dns_ttl_t maxttl = 0;
+static bool no_max_check = false;
 
 #define INCSTAT(counter)            \
 	if (printstats) {           \
@@ -222,7 +227,7 @@ dumpnode(dns_name_t *name, dns_dbnode_t *node) {
 		return;
 	}
 
-	result = dns_db_allrdatasets(gdb, node, gversion, 0, &iter);
+	result = dns_db_allrdatasets(gdb, node, gversion, 0, 0, &iter);
 	check_result(result, "dns_db_allrdatasets");
 
 	dns_rdataset_init(&rds);
@@ -322,28 +327,28 @@ signwithkey(dns_name_t *name, dns_rdataset_t *rdataset, dst_key_t *key,
 	dns_diff_append(add, &tuple);
 }
 
-static inline bool
+static bool
 issigningkey(dns_dnsseckey_t *key) {
 	return (key->force_sign || key->hint_sign);
 }
 
-static inline bool
+static bool
 ispublishedkey(dns_dnsseckey_t *key) {
 	return ((key->force_publish || key->hint_publish) && !key->hint_remove);
 }
 
-static inline bool
+static bool
 iszonekey(dns_dnsseckey_t *key) {
 	return (dns_name_equal(dst_key_name(key->key), gorigin) &&
 		dst_key_iszonekey(key->key));
 }
 
-static inline bool
+static bool
 isksk(dns_dnsseckey_t *key) {
 	return (key->ksk);
 }
 
-static inline bool
+static bool
 iszsk(dns_dnsseckey_t *key) {
 	return (ignore_kskflag || !key->ksk);
 }
@@ -359,7 +364,8 @@ keythatsigned_unlocked(dns_rdata_rrsig_t *rrsig) {
 	dns_dnsseckey_t *key;
 
 	for (key = ISC_LIST_HEAD(keylist); key != NULL;
-	     key = ISC_LIST_NEXT(key, link)) {
+	     key = ISC_LIST_NEXT(key, link))
+	{
 		if (rrsig->keyid == dst_key_id(key->key) &&
 		    rrsig->algorithm == dst_key_alg(key->key) &&
 		    dns_name_equal(&rrsig->signer, dst_key_name(key->key)))
@@ -380,9 +386,9 @@ keythatsigned(dns_rdata_rrsig_t *rrsig) {
 	dst_key_t *pubkey = NULL, *privkey = NULL;
 	dns_dnsseckey_t *key = NULL;
 
-	isc_rwlock_lock(&keylist_lock, isc_rwlocktype_read);
+	RWLOCK(&keylist_lock, isc_rwlocktype_read);
 	key = keythatsigned_unlocked(rrsig);
-	isc_rwlock_unlock(&keylist_lock, isc_rwlocktype_read);
+	RWUNLOCK(&keylist_lock, isc_rwlocktype_read);
 	if (key != NULL) {
 		return (key);
 	}
@@ -458,11 +464,11 @@ expecttofindkey(dns_name_t *name) {
 	dns_name_format(name, namestr, sizeof(namestr));
 	fatal("failure looking for '%s DNSKEY' in database: %s", namestr,
 	      isc_result_totext(result));
-	/* NOTREACHED */
+	UNREACHABLE();
 	return (false); /* removes a warning */
 }
 
-static inline bool
+static bool
 setverifies(dns_name_t *name, dns_rdataset_t *set, dst_key_t *key,
 	    dns_rdata_t *rrsig) {
 	isc_result_t result;
@@ -550,11 +556,7 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 
 		key = keythatsigned(&rrsig);
 		sig_format(&rrsig, sigstr, sizeof(sigstr));
-		if (key != NULL && issigningkey(key)) {
-			expired = isc_serial_gt(now + cycle, rrsig.timeexpire);
-		} else {
-			expired = isc_serial_gt(now, rrsig.timeexpire);
-		}
+		expired = isc_serial_gt(now + cycle, rrsig.timeexpire);
 
 		if (isc_serial_gt(rrsig.timesigned, rrsig.timeexpire)) {
 			/* rrsig is dropped and not replaced */
@@ -563,7 +565,8 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 				 "invalid validity period\n",
 				 sigstr);
 		} else if (key == NULL && !future &&
-			   expecttofindkey(&rrsig.signer)) {
+			   expecttofindkey(&rrsig.signer))
+		{
 			/* rrsig is dropped and not replaced */
 			vbprintf(2,
 				 "\trrsig by %s dropped - "
@@ -574,7 +577,8 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 			vbprintf(2, "\trrsig by %s %s - dnskey not found\n",
 				 keep ? "retained" : "dropped", sigstr);
 		} else if (!dns_dnssec_keyactive(key->key, now) &&
-			   remove_inactkeysigs) {
+			   remove_inactkeysigs)
+		{
 			keep = false;
 			vbprintf(2, "\trrsig by %s dropped - key inactive\n",
 				 sigstr);
@@ -590,10 +594,10 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 				vbprintf(2, "\trrsig by %s dropped - %s\n",
 					 sigstr,
 					 expired ? "expired"
-						 : rrsig.originalttl != set->ttl
-							   ? "ttl change"
-							   : "failed to "
-							     "verify");
+					 : rrsig.originalttl != set->ttl
+						 ? "ttl change"
+						 : "failed to "
+						   "verify");
 				resign = true;
 			}
 		} else if (!ispublishedkey(key) && remove_orphansigs) {
@@ -611,10 +615,10 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 				vbprintf(2, "\trrsig by %s dropped - %s\n",
 					 sigstr,
 					 expired ? "expired"
-						 : rrsig.originalttl != set->ttl
-							   ? "ttl change"
-							   : "failed to "
-							     "verify");
+					 : rrsig.originalttl != set->ttl
+						 ? "ttl change"
+						 : "failed to "
+						   "verify");
 			}
 		} else if (!expired) {
 			vbprintf(2, "\trrsig by %s retained\n", sigstr);
@@ -644,7 +648,7 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 			}
 		} else {
 			tuple = NULL;
-			vbprintf(2, "removing signature by %s\n", sigstr);
+			vbprintf(2, "\tremoving signature by %s\n", sigstr);
 			result = dns_difftuple_create(
 				mctx, DNS_DIFFOP_DELRESIGN, name, sigset.ttl,
 				&sigrdata, &tuple);
@@ -675,7 +679,8 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 	}
 
 	for (key = ISC_LIST_HEAD(keylist); key != NULL;
-	     key = ISC_LIST_NEXT(key, link)) {
+	     key = ISC_LIST_NEXT(key, link))
+	{
 		if (nowsignedby[key->index]) {
 			continue;
 		}
@@ -690,31 +695,91 @@ signset(dns_diff_t *del, dns_diff_t *add, dns_dbnode_t *node, dns_name_t *name,
 		    dns_name_equal(name, gorigin))
 		{
 			bool have_ksk;
-			dns_dnsseckey_t *tmpkey;
+			dns_dnsseckey_t *curr;
 
 			have_ksk = isksk(key);
-			for (tmpkey = ISC_LIST_HEAD(keylist); tmpkey != NULL;
-			     tmpkey = ISC_LIST_NEXT(tmpkey, link))
+			for (curr = ISC_LIST_HEAD(keylist); curr != NULL;
+			     curr = ISC_LIST_NEXT(curr, link))
 			{
 				if (dst_key_alg(key->key) !=
-				    dst_key_alg(tmpkey->key)) {
+				    dst_key_alg(curr->key))
+				{
 					continue;
 				}
-				if (REVOKE(tmpkey->key)) {
+				if (REVOKE(curr->key)) {
 					continue;
 				}
-				if (isksk(tmpkey)) {
+				if (isksk(curr)) {
 					have_ksk = true;
 				}
 			}
 			if (isksk(key) || !have_ksk ||
-			    (iszsk(key) && !keyset_kskonly)) {
+			    (iszsk(key) && !keyset_kskonly))
+			{
 				signwithkey(name, set, key->key, ttl, add,
 					    "signing with dnskey");
 			}
 		} else if (iszsk(key)) {
-			signwithkey(name, set, key->key, ttl, add,
-				    "signing with dnskey");
+			/*
+			 * Sign with the ZSK unless there is a predecessor
+			 * key that already signs this RRset.
+			 */
+			bool have_pre_sig = false;
+			dns_dnsseckey_t *curr;
+			uint32_t pre;
+			isc_result_t ret = dst_key_getnum(
+				key->key, DST_NUM_PREDECESSOR, &pre);
+			if (ret == ISC_R_SUCCESS) {
+				/*
+				 * This key has a predecessor, look for the
+				 * corresponding key in the keylist. The
+				 * key we are looking for must be:
+				 * - From the same cryptographic algorithm.
+				 * - Have the ZSK type (iszsk).
+				 * - Have key ID equal to the predecessor id.
+				 * - Have a successor that matches 'key' id.
+				 */
+				for (curr = ISC_LIST_HEAD(keylist);
+				     curr != NULL;
+				     curr = ISC_LIST_NEXT(curr, link))
+				{
+					uint32_t suc;
+
+					if (dst_key_alg(key->key) !=
+						    dst_key_alg(curr->key) ||
+					    !iszsk(curr) ||
+					    dst_key_id(curr->key) != pre)
+					{
+						continue;
+					}
+					ret = dst_key_getnum(curr->key,
+							     DST_NUM_SUCCESSOR,
+							     &suc);
+					if (ret != ISC_R_SUCCESS ||
+					    dst_key_id(key->key) != suc)
+					{
+						continue;
+					}
+
+					/*
+					 * curr is the predecessor we were
+					 * looking for. Check if this key
+					 * signs this RRset.
+					 */
+					if (nowsignedby[curr->index]) {
+						have_pre_sig = true;
+					}
+				}
+			}
+
+			/*
+			 * If we have a signature of a predecessor key,
+			 * skip signing with this key.
+			 */
+			if (!have_pre_sig) {
+				signwithkey(name, set, key->key, ttl, add,
+					    "signing with dnskey");
+			}
 		}
 	}
 
@@ -1127,7 +1192,7 @@ signname(dns_dbnode_t *node, dns_name_t *name) {
 	dns_diff_init(mctx, &del);
 	dns_diff_init(mctx, &add);
 	rdsiter = NULL;
-	result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+	result = dns_db_allrdatasets(gdb, node, gversion, 0, 0, &rdsiter);
 	check_result(result, "dns_db_allrdatasets()");
 	result = dns_rdatasetiter_first(rdsiter);
 	while (result == ISC_R_SUCCESS) {
@@ -1145,7 +1210,8 @@ signname(dns_dbnode_t *node, dns_name_t *name) {
 		 */
 		if (isdelegation) {
 			if (rdataset.type != nsec_datatype &&
-			    rdataset.type != dns_rdatatype_ds) {
+			    rdataset.type != dns_rdatatype_ds)
+			{
 				goto skip;
 			}
 		} else if (rdataset.type == dns_rdatatype_ds) {
@@ -1188,7 +1254,7 @@ signname(dns_dbnode_t *node, dns_name_t *name) {
  * See if the node contains any non RRSIG/NSEC records and report to
  * caller.  Clean out extraneous RRSIG records for node.
  */
-static inline bool
+static bool
 active_node(dns_dbnode_t *node) {
 	dns_rdatasetiter_t *rdsiter = NULL;
 	dns_rdatasetiter_t *rdsiter2 = NULL;
@@ -1200,7 +1266,7 @@ active_node(dns_dbnode_t *node) {
 	bool found;
 
 	dns_rdataset_init(&rdataset);
-	result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+	result = dns_db_allrdatasets(gdb, node, gversion, 0, 0, &rdsiter);
 	check_result(result, "dns_db_allrdatasets()");
 	result = dns_rdatasetiter_first(rdsiter);
 	while (result == ISC_R_SUCCESS) {
@@ -1246,7 +1312,8 @@ active_node(dns_dbnode_t *node) {
 		/*
 		 * Delete RRSIGs for types that no longer exist.
 		 */
-		result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter2);
+		result = dns_db_allrdatasets(gdb, node, gversion, 0, 0,
+					     &rdsiter2);
 		check_result(result, "dns_db_allrdatasets()");
 		for (result = dns_rdatasetiter_first(rdsiter);
 		     result == ISC_R_SUCCESS;
@@ -1294,7 +1361,8 @@ active_node(dns_dbnode_t *node) {
 				check_result(result, "dns_db_deleterdataset("
 						     "rrsig)");
 			} else if (result != ISC_R_NOMORE &&
-				   result != ISC_R_SUCCESS) {
+				   result != ISC_R_SUCCESS)
+			{
 				fatal("rdataset iteration failed: %s",
 				      isc_result_totext(result));
 			}
@@ -1333,8 +1401,8 @@ get_soa_ttls(void) {
 	result = dns_rdataset_first(&soaset);
 	check_result(result, "dns_rdataset_first");
 	dns_rdataset_current(&soaset, &rdata);
-	zone_soa_min_ttl = dns_soa_getminimum(&rdata);
 	soa_ttl = soaset.ttl;
+	zone_soa_min_ttl = ISC_MIN(dns_soa_getminimum(&rdata), soa_ttl);
 	if (set_maxttl) {
 		zone_soa_min_ttl = ISC_MIN(zone_soa_min_ttl, maxttl);
 		soa_ttl = ISC_MIN(soa_ttl, maxttl);
@@ -1351,7 +1419,8 @@ setsoaserial(uint32_t serial, dns_updatemethod_t method) {
 	dns_dbnode_t *node = NULL;
 	dns_rdataset_t rdataset;
 	dns_rdata_t rdata = DNS_RDATA_INIT;
-	uint32_t old_serial, new_serial;
+	uint32_t old_serial, new_serial = 0;
+	dns_updatemethod_t used = dns_updatemethod_none;
 
 	result = dns_db_getoriginnode(gdb, &node);
 	if (result != ISC_R_SUCCESS) {
@@ -1374,17 +1443,22 @@ setsoaserial(uint32_t serial, dns_updatemethod_t method) {
 	old_serial = dns_soa_getserial(&rdata);
 
 	if (method == dns_updatemethod_date ||
-	    method == dns_updatemethod_unixtime) {
-		new_serial = dns_update_soaserial(old_serial, method);
+	    method == dns_updatemethod_unixtime)
+	{
+		new_serial = dns_update_soaserial(old_serial, method, &used);
 	} else if (serial != 0 || method == dns_updatemethod_none) {
 		/* Set SOA serial to the value provided. */
 		new_serial = serial;
+		used = method;
 	} else {
-		/* Increment SOA serial using RFC 1982 arithmetic */
-		new_serial = (old_serial + 1) & 0xFFFFFFFF;
-		if (new_serial == 0) {
-			new_serial = 1;
-		}
+		new_serial = dns_update_soaserial(old_serial, method, &used);
+	}
+
+	if (method != used) {
+		fprintf(stderr,
+			"%s: warning: Serial number would not advance, "
+			"using increment method instead\n",
+			program);
 	}
 
 	/* If the new serial is not likely to cause a zone transfer
@@ -1441,7 +1515,7 @@ cleannode(dns_db_t *db, dns_dbversion_t *dbversion, dns_dbnode_t *node) {
 	}
 
 	dns_rdataset_init(&set);
-	result = dns_db_allrdatasets(db, node, dbversion, 0, &rdsiter);
+	result = dns_db_allrdatasets(db, node, dbversion, 0, 0, &rdsiter);
 	check_result(result, "dns_db_allrdatasets");
 	result = dns_rdatasetiter_first(rdsiter);
 	while (result == ISC_R_SUCCESS) {
@@ -1585,10 +1659,12 @@ assignwork(isc_task_t *task, isc_task_t *worker) {
 			     !dns_name_issubdomain(name, zonecut)))
 			{
 				if (is_delegation(gdb, gversion, gorigin, name,
-						  node, NULL)) {
+						  node, NULL))
+				{
 					zonecut = savezonecut(&fzonecut, name);
 					if (!OPTOUT(nsec3flags) ||
-					    secure(name, node)) {
+					    secure(name, node))
+					{
 						found = true;
 					}
 				} else if (has_dname(gdb, gversion, node)) {
@@ -1739,7 +1815,7 @@ remove_records(dns_dbnode_t *node, dns_rdatatype_t which, bool checknsec) {
 	/*
 	 * Delete any records of the given type at the apex.
 	 */
-	result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+	result = dns_db_allrdatasets(gdb, node, gversion, 0, 0, &rdsiter);
 	check_result(result, "dns_db_allrdatasets()");
 	for (result = dns_rdatasetiter_first(rdsiter); result == ISC_R_SUCCESS;
 	     result = dns_rdatasetiter_next(rdsiter))
@@ -1750,12 +1826,14 @@ remove_records(dns_dbnode_t *node, dns_rdatatype_t which, bool checknsec) {
 		dns_rdataset_disassociate(&rdataset);
 		if (type == which || covers == which) {
 			if (which == dns_rdatatype_nsec && checknsec &&
-			    !update_chain) {
+			    !update_chain)
+			{
 				fatal("Zone contains NSEC records.  Use -u "
 				      "to update to NSEC3.");
 			}
 			if (which == dns_rdatatype_nsec3param && checknsec &&
-			    !update_chain) {
+			    !update_chain)
+			{
 				fatal("Zone contains NSEC3 chains.  Use -u "
 				      "to update to NSEC.");
 			}
@@ -1780,7 +1858,7 @@ remove_sigs(dns_dbnode_t *node, bool delegation, dns_rdatatype_t which) {
 	dns_rdataset_t rdataset;
 
 	dns_rdataset_init(&rdataset);
-	result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+	result = dns_db_allrdatasets(gdb, node, gversion, 0, 0, &rdsiter);
 	check_result(result, "dns_db_allrdatasets()");
 	for (result = dns_rdatasetiter_first(rdsiter); result == ISC_R_SUCCESS;
 	     result = dns_rdatasetiter_next(rdsiter))
@@ -1844,7 +1922,8 @@ nsecify(void) {
 	{
 		result = dns_dbiterator_current(dbiter, &node, name);
 		check_dns_dbiterator_current(result);
-		result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+		result = dns_db_allrdatasets(gdb, node, gversion, 0, 0,
+					     &rdsiter);
 		check_result(result, "dns_db_allrdatasets()");
 		for (result = dns_rdatasetiter_first(rdsiter);
 		     result == ISC_R_SUCCESS;
@@ -2202,7 +2281,8 @@ rrset_cleanup(dns_name_t *name, dns_rdataset_t *rdataset, dns_diff_t *add,
 			count2++;
 			dns_rdataset_current(&tmprdataset, &rdata2);
 			if (count1 < count2 &&
-			    dns_rdata_casecompare(&rdata1, &rdata2) == 0) {
+			    dns_rdata_casecompare(&rdata1, &rdata2) == 0)
+			{
 				vbprintf(2, "removing duplicate at %s/%s\n",
 					 namestr, typestr);
 				result = dns_difftuple_create(
@@ -2257,7 +2337,8 @@ cleanup_zone(void) {
 	{
 		result = dns_dbiterator_current(dbiter, &node, name);
 		check_dns_dbiterator_current(result);
-		result = dns_db_allrdatasets(gdb, node, gversion, 0, &rdsiter);
+		result = dns_db_allrdatasets(gdb, node, gversion, 0, 0,
+					     &rdsiter);
 		check_result(result, "dns_db_allrdatasets()");
 		for (result = dns_rdatasetiter_first(rdsiter);
 		     result == ISC_R_SUCCESS;
@@ -2369,14 +2450,16 @@ nsec3ify(unsigned int hashalg, dns_iterations_t iterations,
 				continue;
 			}
 			if (is_delegation(gdb, gversion, gorigin, nextname,
-					  nextnode, &nsttl)) {
+					  nextnode, &nsttl))
+			{
 				zonecut = savezonecut(&fzonecut, nextname);
 				remove_sigs(nextnode, true, 0);
 				if (generateds) {
 					add_ds(nextname, nextnode, nsttl);
 				}
 				if (OPTOUT(nsec3flags) &&
-				    !secure(nextname, nextnode)) {
+				    !secure(nextname, nextnode))
+				{
 					dns_db_detachnode(gdb, &nextnode);
 					result = dns_dbiterator_next(dbiter);
 					continue;
@@ -2510,10 +2593,12 @@ nsec3ify(unsigned int hashalg, dns_iterations_t iterations,
 				continue;
 			}
 			if (is_delegation(gdb, gversion, gorigin, nextname,
-					  nextnode, NULL)) {
+					  nextnode, NULL))
+			{
 				zonecut = savezonecut(&fzonecut, nextname);
 				if (OPTOUT(nsec3flags) &&
-				    !secure(nextname, nextnode)) {
+				    !secure(nextname, nextnode))
+				{
 					dns_db_detachnode(gdb, &nextnode);
 					result = dns_dbiterator_next(dbiter);
 					continue;
@@ -2691,7 +2776,8 @@ loadexplicitkeys(char *keyfiles[], int n, bool setksk) {
 
 		/* Skip any duplicates */
 		for (key = ISC_LIST_HEAD(keylist); key != NULL;
-		     key = ISC_LIST_NEXT(key, link)) {
+		     key = ISC_LIST_NEXT(key, link))
+		{
 			if (dst_key_id(key->key) == dst_key_id(newkey) &&
 			    dst_key_alg(key->key) == dst_key_alg(newkey))
 			{
@@ -2722,10 +2808,13 @@ static void
 report(const char *format, ...) {
 	if (!quiet) {
 		FILE *out = output_stdout ? stderr : stdout;
+		char buf[4096];
 		va_list args;
+
 		va_start(args, format);
-		vfprintf(out, format, args);
+		vsnprintf(buf, sizeof(buf), format, args);
 		va_end(args);
+		fprintf(out, "%s\n", buf);
 	}
 }
 
@@ -2999,7 +3088,7 @@ writeset(const char *prefix, dns_rdatatype_t type) {
 	isc_buffer_t namebuf;
 	isc_region_t r;
 	isc_result_t result;
-	dns_dnsseckey_t *key, *tmpkey;
+	dns_dnsseckey_t *key, *curr;
 	unsigned char dsbuf[DNS_DS_BUFFERSIZE];
 	unsigned char keybuf[DST_KEY_MAXSIZE];
 	unsigned int filenamelen;
@@ -3029,7 +3118,8 @@ writeset(const char *prefix, dns_rdatatype_t type) {
 	name = gorigin;
 
 	for (key = ISC_LIST_HEAD(keylist); key != NULL;
-	     key = ISC_LIST_NEXT(key, link)) {
+	     key = ISC_LIST_NEXT(key, link))
+	{
 		if (REVOKE(key->key)) {
 			continue;
 		}
@@ -3040,16 +3130,16 @@ writeset(const char *prefix, dns_rdatatype_t type) {
 			have_ksk = false;
 			have_non_ksk = true;
 		}
-		for (tmpkey = ISC_LIST_HEAD(keylist); tmpkey != NULL;
-		     tmpkey = ISC_LIST_NEXT(tmpkey, link))
+		for (curr = ISC_LIST_HEAD(keylist); curr != NULL;
+		     curr = ISC_LIST_NEXT(curr, link))
 		{
-			if (dst_key_alg(key->key) != dst_key_alg(tmpkey->key)) {
+			if (dst_key_alg(key->key) != dst_key_alg(curr->key)) {
 				continue;
 			}
-			if (REVOKE(tmpkey->key)) {
+			if (REVOKE(curr->key)) {
 				continue;
 			}
-			if (isksk(tmpkey)) {
+			if (isksk(curr)) {
 				have_ksk = true;
 			} else {
 				have_non_ksk = true;
@@ -3105,14 +3195,18 @@ writeset(const char *prefix, dns_rdatatype_t type) {
 
 static void
 print_time(FILE *fp) {
-	time_t currenttime;
+	time_t currenttime = time(NULL);
+	struct tm t, *tm = localtime_r(&currenttime, &t);
+	unsigned int flen;
+	char timebuf[80];
 
-	if (outputformat != dns_masterformat_text) {
+	if (tm == NULL || outputformat != dns_masterformat_text) {
 		return;
 	}
 
-	currenttime = time(NULL);
-	fprintf(fp, "; File written on %s", ctime(&currenttime));
+	flen = strftime(timebuf, sizeof(timebuf), "%a %b %e %H:%M:%S %Y", tm);
+	INSIST(flen > 0U && flen < sizeof(timebuf));
+	fprintf(fp, "; File written on %s\n", timebuf);
 }
 
 static void
@@ -3425,6 +3519,12 @@ main(int argc, char *argv[]) {
 
 		case 'H':
 			set_iter = true;
+			/* too-many is NOT DOCUMENTED */
+			if (strcmp(isc_commandline_argument, "too-many") == 0) {
+				nsec3iter = 151;
+				no_max_check = true;
+				break;
+			}
 			nsec3iter = strtoul(isc_commandline_argument, &endp, 0);
 			if (*endp != '\0') {
 				fatal("iterations must be numeric");
@@ -3586,14 +3686,14 @@ main(int argc, char *argv[]) {
 			break;
 
 		case 'F':
-		/* Reserved for FIPS mode */
-		/* FALLTHROUGH */
+			/* Reserved for FIPS mode */
+			FALLTHROUGH;
 		case '?':
 			if (isc_commandline_option != '?') {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			/* Does not return. */
 			usage();
@@ -3718,7 +3818,8 @@ main(int argc, char *argv[]) {
 			outputformat = dns_masterformat_raw;
 			rawversion = strtol(outputformatstr + 4, &end, 10);
 			if (end == outputformatstr + 4 || *end != '\0' ||
-			    rawversion > 1U) {
+			    rawversion > 1U)
+			{
 				fprintf(stderr, "unknown raw format version\n");
 				exit(1);
 			}
@@ -3793,11 +3894,7 @@ main(int argc, char *argv[]) {
 	 * of keys rather early.
 	 */
 	ISC_LIST_INIT(keylist);
-	result = isc_rwlock_init(&keylist_lock, 0, 0);
-	if (result != ISC_R_SUCCESS) {
-		fatal("could not initialize keylist_lock: %s",
-		      isc_result_totext(result));
-	}
+	isc_rwlock_init(&keylist_lock, 0, 0);
 
 	/*
 	 * Fill keylist with:
@@ -3828,7 +3925,8 @@ main(int argc, char *argv[]) {
 
 	/* Now enumerate the key list */
 	for (key = ISC_LIST_HEAD(keylist); key != NULL;
-	     key = ISC_LIST_NEXT(key, link)) {
+	     key = ISC_LIST_NEXT(key, link))
+	{
 		key->index = keycount++;
 	}
 
@@ -3847,7 +3945,6 @@ main(int argc, char *argv[]) {
 	warnifallksk(gdb);
 
 	if (IS_NSEC3) {
-		unsigned int max;
 		bool answer;
 
 		hash_length = dns_nsec3_hashlength(dns_hash_sha1);
@@ -3866,12 +3963,15 @@ main(int argc, char *argv[]) {
 			      "NSEC-only DNSKEY");
 		}
 
-		result = dns_nsec3_maxiterations(gdb, NULL, mctx, &max);
-		check_result(result, "dns_nsec3_maxiterations()");
-		if (nsec3iter > max) {
-			fatal("NSEC3 iterations too big for weakest DNSKEY "
-			      "strength. Maximum iterations allowed %u.",
-			      max);
+		if (nsec3iter > dns_nsec3_maxiterations()) {
+			if (no_max_check) {
+				fprintf(stderr,
+					"Ignoring max iterations check.\n");
+			} else {
+				fatal("NSEC3 iterations too big. Maximum "
+				      "iterations allowed %u.",
+				      dns_nsec3_maxiterations());
+			}
 		}
 	} else {
 		hashlist_init(&hashlist, 0, 0); /* silence clang */
@@ -3944,7 +4044,7 @@ main(int argc, char *argv[]) {
 	print_time(outfp);
 	print_version(outfp);
 
-	result = isc_taskmgr_create(mctx, ntasks, 0, NULL, &taskmgr);
+	result = isc_managers_create(mctx, ntasks, 0, &netmgr, &taskmgr);
 	if (result != ISC_R_SUCCESS) {
 		fatal("failed to create task manager: %s",
 		      isc_result_totext(result));
@@ -3999,7 +4099,7 @@ main(int argc, char *argv[]) {
 	for (i = 0; i < (int)ntasks; i++) {
 		isc_task_detach(&tasks[i]);
 	}
-	isc_taskmgr_destroy(&taskmgr);
+	isc_managers_destroy(&netmgr, &taskmgr);
 	isc_mem_put(mctx, tasks, ntasks * sizeof(isc_task_t *));
 	postsign();
 	TIME_NOW(&sign_finish);

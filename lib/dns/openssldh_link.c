@@ -1,14 +1,18 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
- *
- * Portions Copyright (C) Network Associates, Inc.
+ */
+
+/*
+ * Copyright (C) Network Associates, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -67,9 +71,6 @@
 	"C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F" \
 	"83655D23DCA3AD961C62F356208552BB9ED529077096966D" \
 	"670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF"
-
-static isc_result_t
-openssldh_todns(const dst_key_t *key, isc_buffer_t *data);
 
 static BIGNUM *bn2 = NULL, *bn768 = NULL, *bn1024 = NULL, *bn1536 = NULL;
 
@@ -262,10 +263,9 @@ static isc_result_t
 openssldh_generate(dst_key_t *key, int generator, void (*callback)(int)) {
 	DH *dh = NULL;
 	BN_GENCB *cb;
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if !HAVE_BN_GENCB_NEW
 	BN_GENCB _cb;
-#endif /* if OPENSSL_VERSION_NUMBER < 0x10100000L || \
-	* defined(LIBRESSL_VERSION_NUMBER) */
+#endif /* !HAVE_BN_GENCB_NEW */
 	union {
 		void *dptr;
 		void (*fptr)(int);
@@ -273,7 +273,8 @@ openssldh_generate(dst_key_t *key, int generator, void (*callback)(int)) {
 
 	if (generator == 0) {
 		if (key->key_size == 768 || key->key_size == 1024 ||
-		    key->key_size == 1536) {
+		    key->key_size == 1536)
+		{
 			BIGNUM *p, *g;
 			dh = DH_new();
 			if (key->key_size == 768) {
@@ -323,7 +324,8 @@ openssldh_generate(dst_key_t *key, int generator, void (*callback)(int)) {
 		}
 
 		if (!DH_generate_parameters_ex(dh, key->key_size, generator,
-					       cb)) {
+					       cb))
+		{
 			DH_free(dh);
 			BN_GENCB_free(cb);
 			return (dst__openssl_toresult2("DH_generate_parameters_"

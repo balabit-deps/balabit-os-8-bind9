@@ -1,9 +1,11 @@
 /*
  * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -264,12 +266,13 @@ kasp_from_conf(cfg_obj_t *config, isc_mem_t *mctx, const char *name,
 		cfg_obj_t *kconfig = cfg_listelt_value(element);
 		kasp = NULL;
 		if (strcmp(cfg_obj_asstring(cfg_tuple_get(kconfig, "name")),
-			   name) != 0) {
+			   name) != 0)
+		{
 			continue;
 		}
 
-		result = cfg_kasp_fromconfig(kconfig, mctx, lctx, &kasplist,
-					     &kasp);
+		result = cfg_kasp_fromconfig(kconfig, NULL, mctx, lctx,
+					     &kasplist, &kasp);
 		if (result != ISC_R_SUCCESS) {
 			fatal("failed to configure dnssec-policy '%s': %s",
 			      cfg_obj_asstring(cfg_tuple_get(kconfig, "name")),
@@ -283,7 +286,7 @@ kasp_from_conf(cfg_obj_t *config, isc_mem_t *mctx, const char *name,
 	*kaspp = kasp;
 
 	/*
-	 * Same cleanup for kasp list.
+	 * Cleanup kasp list.
 	 */
 	for (kasp = ISC_LIST_HEAD(kasplist); kasp != NULL; kasp = kasp_next) {
 		kasp_next = ISC_LIST_NEXT(kasp, link);
@@ -401,7 +404,8 @@ keygen(keygen_ctx_t *ctx, isc_mem_t *mctx, int argc, char **argv) {
 
 		if (!ctx->oldstyle && ctx->prepub > 0) {
 			if (ctx->setpub && ctx->setact &&
-			    (ctx->activate - ctx->prepub) < ctx->publish) {
+			    (ctx->activate - ctx->prepub) < ctx->publish)
+			{
 				fatal("Activation and publication dates "
 				      "are closer together than the\n\t"
 				      "prepublication interval.");
@@ -737,7 +741,8 @@ keygen(keygen_ctx_t *ctx, isc_mem_t *mctx, int argc, char **argv) {
 
 			if (ctx->setdel) {
 				if (ctx->setinact &&
-				    ctx->deltime < ctx->inactive) {
+				    ctx->deltime < ctx->inactive)
+				{
 					fprintf(stderr,
 						"%s: warning: Key is "
 						"scheduled to be deleted "
@@ -781,7 +786,7 @@ keygen(keygen_ctx_t *ctx, isc_mem_t *mctx, int argc, char **argv) {
 		}
 
 		/* Set dnssec-policy related metadata */
-		if (ctx->policy) {
+		if (ctx->policy != NULL) {
 			dst_key_setnum(key, DST_NUM_LIFETIME, ctx->lifetime);
 			dst_key_setbool(key, DST_BOOL_KSK, ctx->ksk);
 			dst_key_setbool(key, DST_BOOL_ZSK, ctx->zsk);
@@ -815,7 +820,7 @@ keygen(keygen_ctx_t *ctx, isc_mem_t *mctx, int argc, char **argv) {
 
 			dst_key_free(&key);
 		}
-	} while (conflict == true);
+	} while (conflict);
 
 	if (conflict) {
 		fatal("cannot generate a null key due to possible key ID "
@@ -1002,7 +1007,8 @@ main(int argc, char **argv) {
 			ctx.protocol = strtol(isc_commandline_argument, &endp,
 					      10);
 			if (*endp != '\0' || ctx.protocol < 0 ||
-			    ctx.protocol > 255) {
+			    ctx.protocol > 255)
+			{
 				fatal("-p must be followed by a number "
 				      "[0..255]");
 			}
@@ -1018,7 +1024,8 @@ main(int argc, char **argv) {
 			ctx.signatory = strtol(isc_commandline_argument, &endp,
 					       10);
 			if (*endp != '\0' || ctx.signatory < 0 ||
-			    ctx.signatory > 15) {
+			    ctx.signatory > 15)
+			{
 				fatal("-s must be followed by a number "
 				      "[0..15]");
 			}
@@ -1129,14 +1136,14 @@ main(int argc, char **argv) {
 			ctx.prepub = strtottl(isc_commandline_argument);
 			break;
 		case 'F':
-		/* Reserved for FIPS mode */
-		/* FALLTHROUGH */
+			/* Reserved for FIPS mode */
+			FALLTHROUGH;
 		case '?':
 			if (isc_commandline_option != '?') {
 				fprintf(stderr, "%s: invalid argument -%c\n",
 					program, isc_commandline_option);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			/* Does not return. */
 			usage();
@@ -1222,18 +1229,7 @@ main(int argc, char **argv) {
 			fatal("-k and -3 cannot be used together");
 		}
 
-		if (ctx.setpub || ctx.setact || ctx.setrev || ctx.setinact ||
-		    ctx.setdel || ctx.unsetpub || ctx.unsetact ||
-		    ctx.unsetrev || ctx.unsetinact || ctx.unsetdel ||
-		    ctx.setsyncadd || ctx.setsyncdel)
-		{
-			fatal("cannot use -k together with "
-			      "-P, -A, -R, -I, or -D options "
-			      "(use dnssec-settime on keys afterwards)");
-		}
-
 		ctx.options |= DST_TYPE_STATE;
-		ctx.genonly = true;
 
 		if (strcmp(ctx.policy, "default") == 0) {
 			ctx.use_nsec3 = false;

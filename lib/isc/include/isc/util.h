@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -27,6 +29,22 @@
  */
 
 /***
+ *** Clang Compatibility Macros
+ ***/
+
+#if !defined(__has_attribute)
+#define __has_attribute(x) 0
+#endif /* if !defined(__has_attribute) */
+
+#if !defined(__has_c_attribute)
+#define __has_c_attribute(x) 0
+#endif /* if !defined(__has_c_attribute) */
+
+#if !defined(__has_feature)
+#define __has_feature(x) 0
+#endif /* if !defined(__has_feature) */
+
+/***
  *** General Macros.
  ***/
 
@@ -47,6 +65,24 @@
 #else /* if __GNUC__ >= 8 && !defined(__clang__) */
 #define ISC_NONSTRING
 #endif /* __GNUC__ */
+
+#if __has_c_attribute(fallthrough)
+#define FALLTHROUGH [[fallthrough]]
+#elif __GNUC__ >= 7 && !defined(__clang__)
+#define FALLTHROUGH __attribute__((fallthrough))
+#else
+/* clang-format off */
+#define FALLTHROUGH do {} while (0) /* FALLTHROUGH */
+/* clang-format on */
+#endif
+
+#if HAVE_FUNC_ATTRIBUTE_CONSTRUCTOR && HAVE_FUNC_ATTRIBUTE_DESTRUCTOR
+#define ISC_CONSTRUCTOR __attribute__((constructor))
+#define ISC_DESTRUCTOR	__attribute__((destructor))
+#elif WIN32
+#define ISC_CONSTRUCTOR
+#define ISC_DESTRUCTOR
+#endif
 
 /*%
  * The opposite: silent warnings about stored values which are never read.
@@ -70,11 +106,13 @@
 	do {                           \
 		union {                \
 			const void *k; \
-			void *	    v; \
+			void	   *v; \
 		} _u;                  \
 		_u.k = konst;          \
 		var = _u.v;            \
 	} while (0)
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 /*%
  * Use this in translation units that would otherwise be empty, to
@@ -188,16 +226,6 @@
  */
 #include <isc/likely.h>
 
-#ifdef HAVE_BUILTIN_UNREACHABLE
-#define ISC_UNREACHABLE() __builtin_unreachable();
-#else /* ifdef HAVE_BUILTIN_UNREACHABLE */
-#define ISC_UNREACHABLE()
-#endif /* ifdef HAVE_BUILTIN_UNREACHABLE */
-
-#if !defined(__has_feature)
-#define __has_feature(x) 0
-#endif /* if !defined(__has_feature) */
-
 /* GCC defines __SANITIZE_ADDRESS__, so reuse the macro for clang */
 #if __has_feature(address_sanitizer)
 #define __SANITIZE_ADDRESS__ 1
@@ -208,9 +236,9 @@
 #endif /* if __has_feature(thread_sanitizer) */
 
 #if __SANITIZE_THREAD__
-#define ISC_NO_SANITIZE __attribute__((no_sanitize("thread")))
+#define ISC_NO_SANITIZE_THREAD __attribute__((no_sanitize("thread")))
 #else /* if __SANITIZE_THREAD__ */
-#define ISC_NO_SANITIZE
+#define ISC_NO_SANITIZE_THREAD
 #endif /* if __SANITIZE_THREAD__ */
 
 #if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR >= 6)
@@ -247,6 +275,8 @@ mock_assert(const int result, const char *const expression,
 	((!(expression))                                                      \
 		 ? (mock_assert(0, #expression, __FILE__, __LINE__), abort()) \
 		 : (void)0)
+#define UNREACHABLE() \
+	(mock_assert(0, "unreachable", __FILE__, __LINE__), abort())
 #define _assert_true(c, e, f, l) \
 	((c) ? (void)0 : (_assert_true(0, e, f, l), abort()))
 #define _assert_int_equal(a, b, f, l) \
@@ -271,6 +301,8 @@ mock_assert(const int result, const char *const expression,
 /*% Invariant Assertion */
 #define INVARIANT(e) ISC_INVARIANT(e)
 
+#define UNREACHABLE() ISC_UNREACHABLE()
+
 #else /* CPPCHECK */
 
 /*% Require Assertion */
@@ -289,6 +321,8 @@ mock_assert(const int result, const char *const expression,
 #define INVARIANT(e) \
 	if (!(e))    \
 	abort()
+
+#define UNREACHABLE() abort()
 
 #endif /* CPPCHECK */
 
@@ -328,6 +362,8 @@ mock_assert(const int result, const char *const expression,
  * Time
  */
 #define TIME_NOW(tp) RUNTIME_CHECK(isc_time_now((tp)) == ISC_R_SUCCESS)
+#define TIME_NOW_HIRES(tp) \
+	RUNTIME_CHECK(isc_time_now_hires((tp)) == ISC_R_SUCCESS)
 
 /*%
  * Alignment
@@ -337,6 +373,69 @@ mock_assert(const int result, const char *const expression,
 #else /* ifdef __GNUC__ */
 #define ISC_ALIGN(x, a) (((x) + (a)-1) & ~((uintmax_t)(a)-1))
 #endif /* ifdef __GNUC__ */
+
+#if HAVE_FUNC_ATTRIBUTE_RETURNS_NONNULL
+#define ISC_ATTR_RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#define ISC_ATTR_RETURNS_NONNULL
+#endif
+
+/*
+ * Support for malloc attributes.
+ */
+#ifdef HAVE_FUNC_ATTRIBUTE_MALLOC
+/*
+ * Indicates that a function is malloc-like, i.e., that the
+ * pointer P returned by the function cannot alias any other
+ * pointer valid when the function returns.
+ */
+#define ISC_ATTR_MALLOC __attribute__((malloc))
+#if HAVE_MALLOC_EXT_ATTR
+/*
+ * Associates deallocator as a suitable deallocation function
+ * for pointers returned from the function marked with the attribute.
+ */
+#define ISC_ATTR_DEALLOCATOR(deallocator) __attribute__((malloc(deallocator)))
+/*
+ * Similar to ISC_ATTR_DEALLOCATOR, but allows to speficy an index "idx",
+ * which denotes the positional argument to which when the pointer is passed
+ * in calls to deallocator has the effect of deallocating it.
+ */
+#define ISC_ATTR_DEALLOCATOR_IDX(deallocator, idx) \
+	__attribute__((malloc(deallocator, idx)))
+/*
+ * Combines both ISC_ATTR_MALLOC and ISC_ATTR_DEALLOCATOR attributes.
+ */
+#define ISC_ATTR_MALLOC_DEALLOCATOR(deallocator) \
+	__attribute__((malloc, malloc(deallocator)))
+/*
+ * Similar to ISC_ATTR_MALLOC_DEALLOCATOR, but allows to speficy an index "idx",
+ * which denotes the positional argument to which when the pointer is passed
+ * in calls to deallocator has the effect of deallocating it.
+ */
+#define ISC_ATTR_MALLOC_DEALLOCATOR_IDX(deallocator, idx) \
+	__attribute__((malloc, malloc(deallocator, idx)))
+#else /* #ifdef HAVE_MALLOC_EXT_ATTR */
+/*
+ * There is support for malloc attribute but not for
+ * extended attributes, so macros that combine attribute malloc
+ * with a deallocator will only expand to malloc attribute.
+ */
+#define ISC_ATTR_DEALLOCATOR(deallocator)
+#define ISC_ATTR_DEALLOCATOR_IDX(deallocator, idx)
+#define ISC_ATTR_MALLOC_DEALLOCATOR(deallocator)	  ISC_ATTR_MALLOC
+#define ISC_ATTR_MALLOC_DEALLOCATOR_IDX(deallocator, idx) ISC_ATTR_MALLOC
+#endif
+#else /* #ifdef HAVE_FUNC_ATTRIBUTE_MALLOC */
+/*
+ * There is no support for malloc attribute.
+ */
+#define ISC_ATTR_MALLOC
+#define ISC_ATTR_DEALLOCATOR(deallocator)
+#define ISC_ATTR_DEALLOCATOR_IDX(deallocator, idx)
+#define ISC_ATTR_MALLOC_DEALLOCATOR(deallocator)
+#define ISC_ATTR_MALLOC_DEALLOCATOR_IDX(deallocator, idx)
+#endif /* HAVE_FUNC_ATTRIBUTE_MALLOC */
 
 /*%
  * Misc

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -43,7 +45,7 @@ isc_astack_new(isc_mem_t *mctx, size_t size) {
 
 bool
 isc_astack_trypush(isc_astack_t *stack, void *obj) {
-	if (isc_mutex_trylock(&stack->lock) == false) {
+	if (!isc_mutex_trylock(&stack->lock)) {
 		if (stack->pos >= stack->size) {
 			UNLOCK(&stack->lock);
 			return (false);

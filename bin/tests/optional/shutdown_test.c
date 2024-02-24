@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -14,6 +16,7 @@
 #include <string.h>
 
 #include <isc/app.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/string.h>
@@ -39,7 +42,8 @@ typedef struct {
 
 static t_info tasks[MAX_TASKS];
 static unsigned int task_count;
-static isc_taskmgr_t *task_manager;
+static isc_nm_t *netmgr = NULL;
+static isc_taskmgr_t *taskmgr = NULL;
 static isc_timermgr_t *timer_manager;
 
 static void
@@ -69,7 +73,7 @@ shutdown_action(isc_task_t *task, isc_event_t *event) {
 
 	printf("task %s (%p) shutdown\n", info->name, task);
 	if (strcmp(info->name, "0") == 0) {
-		isc_timer_detach(&info->timer);
+		isc_timer_destroy(&info->timer);
 		nevent = isc_event_allocate(info->mctx, info, T2_SHUTDOWNOK,
 					    t2_shutdown, &tasks[1],
 					    sizeof(*event));
@@ -100,7 +104,7 @@ tick(isc_task_t *task, isc_event_t *event) {
 		if (info->ticks == 10) {
 			isc_app_shutdown();
 		} else if (info->ticks >= 15 && info->exiting) {
-			isc_timer_detach(&info->timer);
+			isc_timer_destroy(&info->timer);
 			isc_task_detach(&info->task);
 			nevent = isc_event_allocate(
 				info->mctx, info, T2_SHUTDOWNDONE, t1_shutdown,
@@ -110,7 +114,7 @@ tick(isc_task_t *task, isc_event_t *event) {
 			isc_task_detach(&info->peer);
 		}
 	} else if (strcmp(info->name, "foo") == 0) {
-		isc_timer_detach(&info->timer);
+		isc_timer_destroy(&info->timer);
 		nevent = isc_event_allocate(info->mctx, info, FOO_EVENT,
 					    foo_event, task, sizeof(*event));
 		RUNTIME_CHECK(nevent != NULL);
@@ -138,8 +142,7 @@ new_task(isc_mem_t *mctx, const char *name) {
 	} else {
 		snprintf(ti->name, sizeof(ti->name), "%u", task_count);
 	}
-	RUNTIME_CHECK(isc_task_create(task_manager, 0, &ti->task) ==
-		      ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &ti->task) == ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_task_onshutdown(ti->task, shutdown_action, ti) ==
 		      ISC_R_SUCCESS);
 
@@ -157,9 +160,9 @@ new_task(isc_mem_t *mctx, const char *name) {
 int
 main(int argc, char *argv[]) {
 	unsigned int workers;
-	t_info *t1, *t2;
-	isc_task_t *task;
-	isc_mem_t *mctx, *mctx2;
+	t_info *t1, *t2 = NULL;
+	isc_task_t *task = NULL;
+	isc_mem_t *mctx = NULL, *mctx2 = NULL;
 
 	RUNTIME_CHECK(isc_app_start() == ISC_R_SUCCESS);
 
@@ -176,12 +179,10 @@ main(int argc, char *argv[]) {
 	}
 	printf("%u workers\n", workers);
 
-	mctx = NULL;
 	isc_mem_create(&mctx);
-	mctx2 = NULL;
 	isc_mem_create(&mctx2);
-	RUNTIME_CHECK(isc_taskmgr_create(mctx, workers, 0, NULL,
-					 &task_manager) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_managers_create(mctx, workers, 0, &netmgr,
+					  &taskmgr) == ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_timermgr_create(mctx, &timer_manager) ==
 		      ISC_R_SUCCESS);
 
@@ -198,19 +199,18 @@ main(int argc, char *argv[]) {
 	/*
 	 * Test implicit shutdown.
 	 */
-	task = NULL;
-	RUNTIME_CHECK(isc_task_create(task_manager, 0, &task) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &task) == ISC_R_SUCCESS);
 	isc_task_detach(&task);
 
 	/*
 	 * Test anti-zombie code.
 	 */
-	RUNTIME_CHECK(isc_task_create(task_manager, 0, &task) == ISC_R_SUCCESS);
+	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &task) == ISC_R_SUCCESS);
 	isc_task_detach(&task);
 
 	RUNTIME_CHECK(isc_app_run() == ISC_R_SUCCESS);
 
-	isc_taskmgr_destroy(&task_manager);
+	isc_managers_destroy(&netmgr, &taskmgr);
 	isc_timermgr_destroy(&timer_manager);
 
 	printf("Statistics for mctx:\n");

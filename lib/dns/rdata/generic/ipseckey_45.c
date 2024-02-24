@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,7 +20,7 @@
 
 #define RRTYPE_IPSECKEY_ATTRIBUTES (0)
 
-static inline isc_result_t
+static isc_result_t
 fromtext_ipseckey(ARGS_FROMTEXT) {
 	isc_token_t token;
 	dns_name_t name;
@@ -119,7 +121,7 @@ fromtext_ipseckey(ARGS_FROMTEXT) {
 	return (isc_base64_tobuffer(lexer, target, -2));
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_ipseckey(ARGS_TOTEXT) {
 	isc_region_t region;
 	dns_name_t name;
@@ -174,12 +176,12 @@ totext_ipseckey(ARGS_TOTEXT) {
 		break;
 
 	case 1:
-		RETERR(inet_totext(AF_INET, &region, target));
+		RETERR(inet_totext(AF_INET, tctx->flags, &region, target));
 		isc_region_consume(&region, 4);
 		break;
 
 	case 2:
-		RETERR(inet_totext(AF_INET6, &region, target));
+		RETERR(inet_totext(AF_INET6, tctx->flags, &region, target));
 		isc_region_consume(&region, 16);
 		break;
 
@@ -209,7 +211,7 @@ totext_ipseckey(ARGS_TOTEXT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_ipseckey(ARGS_FROMWIRE) {
 	dns_name_t name;
 	isc_region_t region;
@@ -230,18 +232,21 @@ fromwire_ipseckey(ARGS_FROMWIRE) {
 
 	switch (region.base[1]) {
 	case 0:
+		if (region.length < 4) {
+			return (ISC_R_UNEXPECTEDEND);
+		}
 		isc_buffer_forward(source, region.length);
 		return (mem_tobuffer(target, region.base, region.length));
 
 	case 1:
-		if (region.length < 7) {
+		if (region.length < 8) {
 			return (ISC_R_UNEXPECTEDEND);
 		}
 		isc_buffer_forward(source, region.length);
 		return (mem_tobuffer(target, region.base, region.length));
 
 	case 2:
-		if (region.length < 19) {
+		if (region.length < 20) {
 			return (ISC_R_UNEXPECTEDEND);
 		}
 		isc_buffer_forward(source, region.length);
@@ -253,6 +258,9 @@ fromwire_ipseckey(ARGS_FROMWIRE) {
 		RETERR(dns_name_fromwire(&name, source, dctx, options, target));
 		isc_buffer_activeregion(source, &region);
 		isc_buffer_forward(source, region.length);
+		if (region.length < 1) {
+			return (ISC_R_UNEXPECTEDEND);
+		}
 		return (mem_tobuffer(target, region.base, region.length));
 
 	default:
@@ -260,7 +268,7 @@ fromwire_ipseckey(ARGS_FROMWIRE) {
 	}
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_ipseckey(ARGS_TOWIRE) {
 	isc_region_t region;
 
@@ -273,7 +281,7 @@ towire_ipseckey(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, region.base, region.length));
 }
 
-static inline int
+static int
 compare_ipseckey(ARGS_COMPARE) {
 	isc_region_t region1;
 	isc_region_t region2;
@@ -290,7 +298,7 @@ compare_ipseckey(ARGS_COMPARE) {
 	return (isc_region_compare(&region1, &region2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_ipseckey(ARGS_FROMSTRUCT) {
 	dns_rdata_ipseckey_t *ipseckey = source;
 	isc_region_t region;
@@ -334,7 +342,7 @@ fromstruct_ipseckey(ARGS_FROMSTRUCT) {
 	return (mem_tobuffer(target, ipseckey->key, ipseckey->keylength));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_ipseckey(ARGS_TOSTRUCT) {
 	isc_region_t region;
 	dns_rdata_ipseckey_t *ipseckey = target;
@@ -407,7 +415,7 @@ tostruct_ipseckey(ARGS_TOSTRUCT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline void
+static void
 freestruct_ipseckey(ARGS_FREESTRUCT) {
 	dns_rdata_ipseckey_t *ipseckey = source;
 
@@ -429,7 +437,7 @@ freestruct_ipseckey(ARGS_FREESTRUCT) {
 	ipseckey->mctx = NULL;
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_ipseckey(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_ipseckey);
 
@@ -440,7 +448,7 @@ additionaldata_ipseckey(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_ipseckey(ARGS_DIGEST) {
 	isc_region_t region;
 
@@ -450,7 +458,7 @@ digest_ipseckey(ARGS_DIGEST) {
 	return ((digest)(arg, &region));
 }
 
-static inline bool
+static bool
 checkowner_ipseckey(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_ipseckey);
 
@@ -462,7 +470,7 @@ checkowner_ipseckey(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_ipseckey(ARGS_CHECKNAMES) {
 	REQUIRE(rdata->type == dns_rdatatype_ipseckey);
 
@@ -473,7 +481,7 @@ checknames_ipseckey(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_ipseckey(ARGS_COMPARE) {
 	isc_region_t region1;
 	isc_region_t region2;

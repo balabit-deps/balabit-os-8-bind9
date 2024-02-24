@@ -1,15 +1,18 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
  */
 
 #include <isc/app.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/ratelimiter.h>
@@ -19,6 +22,7 @@
 #include <isc/util.h>
 
 isc_ratelimiter_t *rlim = NULL;
+isc_nm_t *netmgr = NULL;
 isc_taskmgr_t *taskmgr = NULL;
 isc_timermgr_t *timermgr = NULL;
 isc_task_t *g_task = NULL;
@@ -82,7 +86,7 @@ shutdown_all(isc_task_t *task, isc_event_t *event) {
 	UNUSED(event);
 	printf("shutdown all\n");
 	for (i = 0; i < NEVENTS; i++) {
-		isc_timer_detach(&timers[i]);
+		isc_timer_destroy(&timers[i]);
 	}
 
 	isc_app_shutdown();
@@ -100,7 +104,7 @@ main(int argc, char *argv[]) {
 	isc_interval_set(&linterval, 1, 0);
 
 	isc_mem_create(&mctx);
-	RUNTIME_CHECK(isc_taskmgr_create(mctx, 3, 0, NULL, &taskmgr) ==
+	RUNTIME_CHECK(isc_managers_create(mctx, 3, 0, &netmgr, &taskmgr) ==
 		      ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_timermgr_create(mctx, &timermgr) == ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &g_task) == ISC_R_SUCCESS);
@@ -129,7 +133,7 @@ main(int argc, char *argv[]) {
 	isc_ratelimiter_detach(&rlim);
 
 	isc_timermgr_destroy(&timermgr);
-	isc_taskmgr_destroy(&taskmgr);
+	isc_managers_destroy(&netmgr, &taskmgr);
 
 	isc_mem_stats(mctx, stdout);
 

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -61,7 +63,7 @@ struct isc_lex {
 	LIST(struct inputsource) sources;
 };
 
-static inline isc_result_t
+static isc_result_t
 grow_data(isc_lex_t *lex, size_t *remainingp, char **currp, char **prevp) {
 	char *tmp;
 
@@ -178,7 +180,7 @@ isc_lex_setspecials(isc_lex_t *lex, isc_lexspecials_t specials) {
 	memmove(lex->specials, specials, 256);
 }
 
-static inline isc_result_t
+static isc_result_t
 new_source(isc_lex_t *lex, bool is_file, bool need_close, void *input,
 	   const char *name) {
 	inputsource *source;
@@ -293,7 +295,10 @@ typedef enum {
 	lexstate_ccommentend,
 	lexstate_eatline,
 	lexstate_qstring,
-	lexstate_btext
+	lexstate_btext,
+	lexstate_vpair,
+	lexstate_vpairstart,
+	lexstate_qvpair,
 } lexstate;
 
 #define IWSEOL (ISC_LEXOPT_INITIALWS | ISC_LEXOPT_EOL)
@@ -375,7 +380,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 	if (isc_buffer_remaininglength(source->pushback) == 0 && source->at_eof)
 	{
 		if ((options & ISC_LEXOPT_DNSMULTILINE) != 0 &&
-		    lex->paren_count != 0) {
+		    lex->paren_count != 0)
+		{
 			lex->paren_count = 0;
 			return (ISC_R_UNBALANCED);
 		}
@@ -483,7 +489,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 				no_comments = true;
 				continue;
 			} else if (c == '#' && ((lex->comments &
-						 ISC_LEXCOMMENT_SHELL) != 0)) {
+						 ISC_LEXCOMMENT_SHELL) != 0))
+			{
 				saved_state = state;
 				state = lexstate_eatline;
 				no_comments = true;
@@ -498,13 +505,15 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 			if (c == EOF) {
 				lex->last_was_eol = false;
 				if ((options & ISC_LEXOPT_DNSMULTILINE) != 0 &&
-				    lex->paren_count != 0) {
+				    lex->paren_count != 0)
+				{
 					lex->paren_count = 0;
 					result = ISC_R_UNBALANCED;
 					goto done;
 				}
 				if ((options & ISC_LEXOPT_BTEXT) != 0 &&
-				    lex->brace_count != 0) {
+				    lex->brace_count != 0)
+				{
 					lex->brace_count = 0;
 					result = ISC_R_UNBALANCED;
 					goto done;
@@ -517,7 +526,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 				done = true;
 			} else if (c == ' ' || c == '\t') {
 				if (lex->last_was_eol &&
-				    (options & ISC_LEXOPT_INITIALWS) != 0) {
+				    (options & ISC_LEXOPT_INITIALWS) != 0)
+				{
 					lex->last_was_eol = false;
 					tokenp->type = isc_tokentype_initialws;
 					tokenp->value.as_char = c;
@@ -534,14 +544,16 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					state = lexstate_crlf;
 				}
 			} else if (c == '"' &&
-				   (options & ISC_LEXOPT_QSTRING) != 0) {
+				   (options & ISC_LEXOPT_QSTRING) != 0)
+			{
 				lex->last_was_eol = false;
 				no_comments = true;
 				state = lexstate_qstring;
 			} else if (lex->specials[c]) {
 				lex->last_was_eol = false;
 				if ((c == '(' || c == ')') &&
-				    (options & ISC_LEXOPT_DNSMULTILINE) != 0) {
+				    (options & ISC_LEXOPT_DNSMULTILINE) != 0)
+				{
 					if (c == '(') {
 						if (lex->paren_count == 0) {
 							options &= ~IWSEOL;
@@ -560,7 +572,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					}
 					continue;
 				} else if (c == '{' &&
-					   (options & ISC_LEXOPT_BTEXT) != 0) {
+					   (options & ISC_LEXOPT_BTEXT) != 0)
+				{
 					if (lex->brace_count != 0) {
 						result = ISC_R_UNBALANCED;
 						goto done;
@@ -575,10 +588,12 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 				tokenp->value.as_char = c;
 				done = true;
 			} else if (isdigit((unsigned char)c) &&
-				   (options & ISC_LEXOPT_NUMBER) != 0) {
+				   (options & ISC_LEXOPT_NUMBER) != 0)
+			{
 				lex->last_was_eol = false;
 				if ((options & ISC_LEXOPT_OCTAL) != 0 &&
-				    (c == '8' || c == '9')) {
+				    (c == '8' || c == '9'))
+				{
 					state = lexstate_string;
 				} else {
 					state = lexstate_number;
@@ -607,7 +622,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					if ((options & ISC_LEXOPT_OCTAL) != 0) {
 						base = 8;
 					} else if ((options &
-						    ISC_LEXOPT_CNUMBER) != 0) {
+						    ISC_LEXOPT_CNUMBER) != 0)
+					{
 						base = 0;
 					} else {
 						base = 10;
@@ -647,7 +663,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					state = lexstate_string;
 				}
 			} else if ((options & ISC_LEXOPT_OCTAL) != 0 &&
-				   (c == '8' || c == '9')) {
+				   (c == '8' || c == '9'))
+			{
 				state = lexstate_string;
 			}
 			if (remaining == 0U) {
@@ -663,6 +680,37 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 			remaining--;
 			break;
 		case lexstate_string:
+			if (!escaped && c == '=' &&
+			    (options & ISC_LEXOPT_VPAIR) != 0)
+			{
+				if (remaining == 0U) {
+					result = grow_data(lex, &remaining,
+							   &curr, &prev);
+					if (result != ISC_R_SUCCESS) {
+						goto done;
+					}
+				}
+				INSIST(remaining > 0U);
+				*curr++ = c;
+				*curr = '\0';
+				remaining--;
+				state = lexstate_vpairstart;
+				break;
+			}
+			FALLTHROUGH;
+		case lexstate_vpairstart:
+			if (state == lexstate_vpairstart) {
+				if (c == '"' &&
+				    (options & ISC_LEXOPT_QVPAIR) != 0)
+				{
+					no_comments = true;
+					state = lexstate_qvpair;
+					break;
+				}
+				state = lexstate_vpair;
+			}
+			FALLTHROUGH;
+		case lexstate_vpair:
 			/*
 			 * EOF needs to be checked before lex->specials[c]
 			 * as lex->specials[EOF] is not a good idea.
@@ -676,7 +724,13 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					result = source->result;
 					goto done;
 				}
-				tokenp->type = isc_tokentype_string;
+				if (escaped && c == EOF) {
+					result = ISC_R_UNEXPECTEDEND;
+					goto done;
+				}
+				tokenp->type = (state == lexstate_string)
+						       ? isc_tokentype_string
+						       : isc_tokentype_vpair;
 				tokenp->value.as_textregion.base = lex->data;
 				tokenp->value.as_textregion.length =
 					(unsigned int)(lex->max_token -
@@ -753,6 +807,7 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 			}
 			break;
 		case lexstate_qstring:
+		case lexstate_qvpair:
 			if (c == EOF) {
 				result = ISC_R_UNEXPECTEDEND;
 				goto done;
@@ -766,7 +821,10 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 					INSIST(prev != NULL);
 					*prev = '"';
 				} else {
-					tokenp->type = isc_tokentype_qstring;
+					tokenp->type =
+						(state == lexstate_qstring)
+							? isc_tokentype_qstring
+							: isc_tokentype_qvpair;
 					tokenp->value.as_textregion.base =
 						lex->data;
 					tokenp->value.as_textregion.length =
@@ -778,7 +836,8 @@ isc_lex_gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *tokenp) {
 			} else {
 				if (c == '\n' && !escaped &&
 				    (options & ISC_LEXOPT_QSTRINGMULTILINE) ==
-					    0) {
+					    0)
+				{
 					pushback(source, c);
 					result = ISC_R_UNBALANCEDQUOTES;
 					goto done;
@@ -876,7 +935,12 @@ isc_lex_getmastertoken(isc_lex_t *lex, isc_token_t *token,
 			       ISC_LEXOPT_DNSMULTILINE | ISC_LEXOPT_ESCAPE;
 	isc_result_t result;
 
-	if (expect == isc_tokentype_qstring) {
+	if (expect == isc_tokentype_vpair) {
+		options |= ISC_LEXOPT_VPAIR;
+	} else if (expect == isc_tokentype_qvpair) {
+		options |= ISC_LEXOPT_VPAIR;
+		options |= ISC_LEXOPT_QVPAIR;
+	} else if (expect == isc_tokentype_qstring) {
 		options |= ISC_LEXOPT_QSTRING;
 	} else if (expect == isc_tokentype_number) {
 		options |= ISC_LEXOPT_NUMBER;
@@ -895,13 +959,20 @@ isc_lex_getmastertoken(isc_lex_t *lex, isc_token_t *token,
 		return (ISC_R_SUCCESS);
 	}
 	if (token->type == isc_tokentype_string &&
-	    expect == isc_tokentype_qstring) {
+	    (expect == isc_tokentype_qstring || expect == isc_tokentype_qvpair))
+	{
+		return (ISC_R_SUCCESS);
+	}
+	if (token->type == isc_tokentype_vpair &&
+	    expect == isc_tokentype_qvpair)
+	{
 		return (ISC_R_SUCCESS);
 	}
 	if (token->type != expect) {
 		isc_lex_ungettoken(lex, token);
 		if (token->type == isc_tokentype_eol ||
-		    token->type == isc_tokentype_eof) {
+		    token->type == isc_tokentype_eof)
+		{
 			return (ISC_R_UNEXPECTEDEND);
 		}
 		if (expect == isc_tokentype_number) {
@@ -935,7 +1006,8 @@ isc_lex_getoctaltoken(isc_lex_t *lex, isc_token_t *token, bool eol) {
 	if (token->type != isc_tokentype_number) {
 		isc_lex_ungettoken(lex, token);
 		if (token->type == isc_tokentype_eol ||
-		    token->type == isc_tokentype_eof) {
+		    token->type == isc_tokentype_eof)
+		{
 			return (ISC_R_UNEXPECTEDEND);
 		}
 		return (ISC_R_BADNUMBER);

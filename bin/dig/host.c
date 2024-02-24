@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -13,12 +15,9 @@
 
 #include <inttypes.h>
 #include <limits.h>
+#include <locale.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-#ifdef HAVE_LOCALE_H
-#include <locale.h>
-#endif /* ifdef HAVE_LOCALE_H */
 
 #include <isc/app.h>
 #include <isc/commandline.h>
@@ -108,7 +107,7 @@ static void
 show_usage(void) {
 	fputs("Usage: host [-aCdilrTvVw] [-c class] [-N ndots] [-t type] [-W "
 	      "time]\n"
-	      "            [-R number] [-m flag] hostname [server]\n"
+	      "            [-R number] [-m flag] [-p port] hostname [server]\n"
 	      "       -a is equivalent to -v -t ANY\n"
 	      "       -A is like -a but omits RRSIG, NSEC, NSEC3\n"
 	      "       -c specifies query class for non-IN data\n"
@@ -118,6 +117,7 @@ show_usage(void) {
 	      "       -m set memory debugging flag (trace|record|usage)\n"
 	      "       -N changes the number of dots allowed before root lookup "
 	      "is done\n"
+	      "       -p specifies the port on the server to query\n"
 	      "       -r disables recursive processing\n"
 	      "       -R specifies number of retries for UDP packets\n"
 	      "       -s a SERVFAIL response should stop query\n"
@@ -147,7 +147,11 @@ received(unsigned int bytes, isc_sockaddr_t *from, dig_query_t *query) {
 	if (!short_form) {
 		char fromtext[ISC_SOCKADDR_FORMATSIZE];
 		isc_sockaddr_format(from, fromtext, sizeof(fromtext));
-		TIME_NOW(&now);
+		if (query->lookup->use_usec) {
+			TIME_NOW_HIRES(&now);
+		} else {
+			TIME_NOW(&now);
+		}
 		diff = (int)isc_time_microdiff(&now, &query->time_sent);
 		printf("Received %u bytes from %s in %d ms\n", bytes, fromtext,
 		       diff / 1000);
@@ -204,15 +208,9 @@ printsection(dns_message_t *msg, dns_section_t sectionid,
 	isc_result_t result, loopresult;
 	isc_region_t r;
 	dns_name_t empty_name;
-	char tbuf[4096];
+	char tbuf[4096] = { 0 };
 	bool first;
-	bool no_rdata;
-
-	if (sectionid == DNS_SECTION_QUESTION) {
-		no_rdata = true;
-	} else {
-		no_rdata = false;
-	}
+	bool no_rdata = (sectionid == DNS_SECTION_QUESTION);
 
 	if (headers) {
 		printf(";; %s SECTION:\n", section_name);
@@ -532,7 +530,8 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 	}
 
 	if (!ISC_LIST_EMPTY(msg->sections[DNS_SECTION_AUTHORITY]) &&
-	    !short_form) {
+	    !short_form)
+	{
 		printf("\n");
 		result = printsection(msg, DNS_SECTION_AUTHORITY, "AUTHORITY",
 				      true, query);
@@ -541,7 +540,8 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 		}
 	}
 	if (!ISC_LIST_EMPTY(msg->sections[DNS_SECTION_ADDITIONAL]) &&
-	    !short_form) {
+	    !short_form)
+	{
 		printf("\n");
 		result = printsection(msg, DNS_SECTION_ADDITIONAL, "ADDITIONAL",
 				      true, query);
@@ -575,7 +575,7 @@ printmessage(dig_query_t *query, const isc_buffer_t *msgbuf, dns_message_t *msg,
 	return (result);
 }
 
-static const char *optstring = "46aAc:dilnm:rst:vVwCDN:R:TUW:";
+static const char *optstring = "46aAc:dilnm:p:rst:vVwCDN:R:TUW:";
 
 /*% version */
 static void
@@ -595,10 +595,12 @@ pre_parse_args(int argc, char **argv) {
 			{
 				isc_mem_debugging |= ISC_MEM_DEBUGTRACE;
 			} else if (strcasecmp("record",
-					      isc_commandline_argument) == 0) {
+					      isc_commandline_argument) == 0)
+			{
 				isc_mem_debugging |= ISC_MEM_DEBUGRECORD;
 			} else if (strcasecmp("usage",
-					      isc_commandline_argument) == 0) {
+					      isc_commandline_argument) == 0)
+			{
 				isc_mem_debugging |= ISC_MEM_DEBUGUSAGE;
 			}
 			break;
@@ -638,6 +640,8 @@ pre_parse_args(int argc, char **argv) {
 		case 'n':
 			break;
 		case 'N':
+			break;
+		case 'p':
 			break;
 		case 'r':
 			break;
@@ -686,6 +690,7 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 	lookup = make_empty_lookup();
 
 	lookup->servfail_stops = false;
+	lookup->besteffort = false;
 	lookup->comments = false;
 	short_form = !verbose;
 
@@ -706,7 +711,8 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 			break;
 		case 't':
 			if (strncasecmp(isc_commandline_argument, "ixfr=", 5) ==
-			    0) {
+			    0)
+			{
 				rdtype = dns_rdatatype_ixfr;
 				/* XXXMPA add error checking */
 				serial = strtoul(isc_commandline_argument + 5,
@@ -725,7 +731,8 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 				      isc_commandline_argument);
 			}
 			if (!lookup->rdtypeset ||
-			    lookup->rdtype != dns_rdatatype_axfr) {
+			    lookup->rdtype != dns_rdatatype_axfr)
+			{
 				lookup->rdtype = rdtype;
 			}
 			lookup->rdtypeset = true;
@@ -766,10 +773,11 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 			break;
 		case 'A':
 			list_almost_all = true;
-		/* FALL THROUGH */
+			FALLTHROUGH;
 		case 'a':
 			if (!lookup->rdtypeset ||
-			    lookup->rdtype != dns_rdatatype_axfr) {
+			    lookup->rdtype != dns_rdatatype_axfr)
+			{
 				lookup->rdtype = dns_rdatatype_any;
 			}
 			list_type = dns_rdatatype_any;
@@ -840,6 +848,9 @@ parse_args(bool is_batchfile, int argc, char **argv) {
 			break;
 		case 's':
 			lookup->servfail_stops = true;
+			break;
+		case 'p':
+			port = atoi(isc_commandline_argument);
 			break;
 		}
 	}

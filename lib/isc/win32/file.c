@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -84,7 +86,8 @@ gettemp(char *path, bool binary, int *doopen) {
 	for (;;) {
 		if (doopen) {
 			if ((*doopen = open(path, flags,
-					    _S_IREAD | _S_IWRITE)) >= 0) {
+					    _S_IREAD | _S_IWRITE)) >= 0)
+			{
 				return (1);
 			}
 			if (errno != EEXIST) {
@@ -102,7 +105,7 @@ gettemp(char *path, bool binary, int *doopen) {
 			if (*trv == 'z') {
 				*trv++ = 'a';
 			} else {
-				if (isdigit(*trv)) {
+				if (isdigit((unsigned char)*trv)) {
 					*trv = 'a';
 				} else {
 					++*trv;
@@ -264,7 +267,8 @@ isc_file_getmodtime(const char *file, isc_time_t *time) {
 	}
 
 	if (!GetFileTime((HANDLE)_get_osfhandle(fh), NULL, NULL,
-			 &time->absolute)) {
+			 &time->absolute))
+	{
 		close(fh);
 		errno = EINVAL;
 		return (isc__errno2result(errno));
@@ -565,10 +569,14 @@ isc_file_isabsolute(const char *filename) {
 	if ((filename[0] == '\\') && (filename[1] == '\\')) {
 		return (true);
 	}
-	if (isalpha(filename[0]) && filename[1] == ':' && filename[2] == '\\') {
+	if (isalpha((unsigned char)filename[0]) && filename[1] == ':' &&
+	    filename[2] == '\\')
+	{
 		return (true);
 	}
-	if (isalpha(filename[0]) && filename[1] == ':' && filename[2] == '/') {
+	if (isalpha((unsigned char)filename[0]) && filename[1] == ':' &&
+	    filename[2] == '/')
+	{
 		return (true);
 	}
 	return (false);
@@ -968,7 +976,8 @@ isc_file_isdirwritable(const char *path) {
 		HANDLE hImpersonatedToken = NULL;
 
 		if (DuplicateToken(hToken, SecurityImpersonation,
-				   &hImpersonatedToken)) {
+				   &hImpersonatedToken))
+		{
 			GENERIC_MAPPING mapping;
 			PRIVILEGE_SET privileges = { 0 };
 			DWORD grantedAccess = 0;

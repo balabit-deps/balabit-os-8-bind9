@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -31,7 +33,6 @@
 #include <pk11/pk11.h>
 #include <pk11/result.h>
 #include <pk11/site.h>
-#include <pkcs11/eddsa.h>
 #include <pkcs11/pkcs11.h>
 
 #include <dst/result.h>
@@ -79,7 +80,6 @@ struct pk11_token {
 static ISC_LIST(pk11_token_t) tokens;
 
 static pk11_token_t *best_rsa_token;
-static pk11_token_t *best_dh_token;
 static pk11_token_t *best_ecdsa_token;
 static pk11_token_t *best_eddsa_token;
 
@@ -247,9 +247,6 @@ pk11_finalize(void) {
 		ISC_LIST_UNLINK(tokens, token, link);
 		if (token == best_rsa_token) {
 			best_rsa_token = NULL;
-		}
-		if (token == best_dh_token) {
-			best_dh_token = NULL;
 		}
 		if (token == best_ecdsa_token) {
 			best_ecdsa_token = NULL;
@@ -535,7 +532,8 @@ scan_slots(void) {
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_RSA_PKCS_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+		{
 			bad = true;
 			PK11_TRACEM(CKM_RSA_PKCS_KEY_PAIR_GEN);
 		}
@@ -589,7 +587,8 @@ scan_slots(void) {
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_EC_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+		{
 			bad = true;
 			PK11_TRACEM(CKM_EC_KEY_PAIR_GEN);
 		}
@@ -607,16 +606,15 @@ scan_slots(void) {
 			}
 		}
 
-#if defined(CKM_EDDSA_KEY_PAIR_GEN) && defined(CKM_EDDSA) && defined(CKK_EDDSA)
 		/* Check for EDDSA support */
-		/* XXXOND: This was already broken */
 		bad = false;
-		rv = pkcs_C_GetMechanismInfo(slot, CKM_EDDSA_KEY_PAIR_GEN,
+		rv = pkcs_C_GetMechanismInfo(slot, CKM_EC_EDWARDS_KEY_PAIR_GEN,
 					     &mechInfo);
 		if ((rv != CKR_OK) ||
-		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0)) {
+		    ((mechInfo.flags & CKF_GENERATE_KEY_PAIR) == 0))
+		{
 			bad = true;
-			PK11_TRACEM(CKM_EDDSA_KEY_PAIR_GEN);
+			PK11_TRACEM(CKM_EC_EDWARDS_KEY_PAIR_GEN);
 		}
 		rv = pkcs_C_GetMechanismInfo(slot, CKM_EDDSA, &mechInfo);
 		if ((rv != CKR_OK) || ((mechInfo.flags & CKF_SIGN) == 0) ||
@@ -631,8 +629,6 @@ scan_slots(void) {
 				best_eddsa_token = token;
 			}
 		}
-#endif /* if defined(CKM_EDDSA_KEY_PAIR_GEN) && defined(CKM_EDDSA) && \
-	* defined(CKK_EDDSA) */
 	}
 
 	if (slotList != NULL) {
@@ -655,18 +651,22 @@ pk11_get_best_token(pk11_optype_t optype) {
 		token = best_eddsa_token;
 		break;
 	default:
+		break;
+	}
+	if (token == NULL) {
 		return (0);
 	}
 	return (token->slotid);
 }
 
-unsigned int
-pk11_numbits(CK_BYTE_PTR data, unsigned int bytecnt) {
+isc_result_t
+pk11_numbits(CK_BYTE_PTR data, unsigned int bytecnt, unsigned int *bits) {
 	unsigned int bitcnt, i;
 	CK_BYTE top;
 
 	if (bytecnt == 0) {
-		return (0);
+		*bits = 0;
+		return (ISC_R_SUCCESS);
 	}
 	bitcnt = bytecnt * 8;
 	for (i = 0; i < bytecnt; i++) {
@@ -676,33 +676,40 @@ pk11_numbits(CK_BYTE_PTR data, unsigned int bytecnt) {
 			continue;
 		}
 		if (top & 0x80) {
-			return (bitcnt);
+			*bits = bitcnt;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x40) {
-			return (bitcnt - 1);
+			*bits = bitcnt - 1;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x20) {
-			return (bitcnt - 2);
+			*bits = bitcnt - 2;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x10) {
-			return (bitcnt - 3);
+			*bits = bitcnt - 3;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x08) {
-			return (bitcnt - 4);
+			*bits = bitcnt - 4;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x04) {
-			return (bitcnt - 5);
+			*bits = bitcnt - 5;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x02) {
-			return (bitcnt - 6);
+			*bits = bitcnt - 6;
+			return (ISC_R_SUCCESS);
 		}
 		if (top & 0x01) {
-			return (bitcnt - 7);
+			*bits = bitcnt - 7;
+			return (ISC_R_SUCCESS);
 		}
 		break;
 	}
-	INSIST(0);
-	ISC_UNREACHABLE();
+	return (ISC_R_RANGE);
 }
 
 CK_ATTRIBUTE *
@@ -1075,7 +1082,6 @@ pk11_dump_tokens(void) {
 
 	printf("DEFAULTS\n");
 	printf("\tbest_rsa_token=%p\n", best_rsa_token);
-	printf("\tbest_dh_token=%p\n", best_dh_token);
 	printf("\tbest_ecdsa_token=%p\n", best_ecdsa_token);
 	printf("\tbest_eddsa_token=%p\n", best_eddsa_token);
 

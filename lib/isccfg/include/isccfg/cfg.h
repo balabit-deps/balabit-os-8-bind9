@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -70,7 +72,7 @@ typedef struct cfg_listelt cfg_listelt_t;
  * that needs to be interpreted at parsing time, like
  * "directory".
  */
-typedef isc_result_t (*cfg_parsecallback_t)(const char *     clausename,
+typedef isc_result_t (*cfg_parsecallback_t)(const char	    *clausename,
 					    const cfg_obj_t *obj, void *arg);
 
 /***
@@ -579,9 +581,9 @@ cfg_map_nextclause(const cfg_type_t *map, const void **clauses,
 
 typedef isc_result_t(pluginlist_cb_t)(const cfg_obj_t *config,
 				      const cfg_obj_t *obj,
-				      const char *     plugin_path,
-				      const char *     parameters,
-				      void *	       callback_data);
+				      const char      *plugin_path,
+				      const char      *parameters,
+				      void	      *callback_data);
 /*%<
  * Function prototype for the callback used with cfg_pluginlist_foreach().
  * Called once for each element of the list passed to cfg_pluginlist_foreach().
@@ -597,7 +599,7 @@ typedef isc_result_t(pluginlist_cb_t)(const cfg_obj_t *config,
 
 isc_result_t
 cfg_pluginlist_foreach(const cfg_obj_t *config, const cfg_obj_t *list,
-		       isc_log_t *lctx, pluginlist_cb_t callback,
+		       isc_log_t *lctx, pluginlist_cb_t *callback,
 		       void *callback_data);
 /*%<
  * For every "plugin" stanza present in 'list' (which in turn is a part of

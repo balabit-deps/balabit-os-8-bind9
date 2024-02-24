@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -106,7 +108,7 @@ struct dns_byaddr {
 
 #define MAX_RESTARTS 16
 
-static inline isc_result_t
+static isc_result_t
 copy_ptr_targets(dns_byaddr_t *byaddr, dns_rdataset_t *rdataset) {
 	isc_result_t result;
 	dns_name_t *name;
@@ -174,7 +176,8 @@ bevent_destroy(isc_event_t *event) {
 	bevent = (dns_byaddrevent_t *)event;
 
 	for (name = ISC_LIST_HEAD(bevent->names); name != NULL;
-	     name = next_name) {
+	     name = next_name)
+	{
 		next_name = ISC_LIST_NEXT(name, link);
 		ISC_LIST_UNLINK(bevent->names, name, link);
 		dns_name_free(name, mctx);

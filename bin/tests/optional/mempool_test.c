@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,14 +23,11 @@ main(int argc, char *argv[]) {
 	void *tmp;
 	isc_mempool_t *mp1, *mp2;
 	unsigned int i, j;
-	isc_mutex_t lock;
 
 	UNUSED(argc);
 	UNUSED(argv);
 
 	isc_mem_debugging = ISC_MEM_DEBUGRECORD;
-
-	isc_mutex_init(&lock);
 
 	mctx = NULL;
 	isc_mem_create(&mctx);
@@ -38,9 +37,6 @@ main(int argc, char *argv[]) {
 
 	mp2 = NULL;
 	isc_mempool_create(mctx, 31, &mp2);
-
-	isc_mempool_associatelock(mp1, &lock);
-	isc_mempool_associatelock(mp2, &lock);
 
 	isc_mem_stats(mctx, stderr);
 
@@ -111,8 +107,6 @@ main(int argc, char *argv[]) {
 	isc_mem_stats(mctx, stderr);
 
 	isc_mem_destroy(&mctx);
-
-	isc_mutex_destroy(&lock);
 
 	return (0);
 }

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -19,6 +21,7 @@
 #include <isc/commandline.h>
 #include <isc/error.h>
 #include <isc/log.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/mutex.h>
 #include <isc/net.h>
@@ -52,15 +55,16 @@
 	}
 
 isc_mutex_t lock;
-dst_key_t *key;
-isc_mem_t *mctx;
+dst_key_t *key = NULL;
+isc_mem_t *mctx = NULL;
 unsigned char qdata[1024], rdata[1024];
 isc_buffer_t qbuffer, rbuffer;
-isc_taskmgr_t *taskmgr;
-isc_task_t *task1;
+isc_nm_t *netmgr = NULL;
+isc_taskmgr_t *taskmgr = NULL;
+isc_task_t *task1 = NULL;
 isc_log_t *lctx = NULL;
 isc_logconfig_t *logconfig = NULL;
-isc_socket_t *s;
+isc_socket_t *s = NULL;
 isc_sockaddr_t address;
 char output[10 * 1024];
 isc_buffer_t outbuf;
@@ -84,7 +88,7 @@ recvdone(isc_task_t *task, isc_event_t *event) {
 	isc_socketevent_t *sevent = (isc_socketevent_t *)event;
 	isc_buffer_t source;
 	isc_result_t result;
-	dns_message_t *response;
+	dns_message_t *response = NULL;
 
 	REQUIRE(sevent != NULL);
 	REQUIRE(sevent->ev_type == ISC_SOCKEVENT_RECVDONE);
@@ -99,9 +103,7 @@ recvdone(isc_task_t *task, isc_event_t *event) {
 	isc_buffer_init(&source, sevent->region.base, sevent->region.length);
 	isc_buffer_add(&source, sevent->n);
 
-	response = NULL;
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &response);
-	CHECK("dns_message_create", result);
+	dns_message_create(mctx, DNS_MESSAGE_INTENTPARSE, &response);
 	result = dns_message_parse(response, &source, 0);
 	CHECK("dns_message_parse", result);
 
@@ -111,7 +113,7 @@ recvdone(isc_task_t *task, isc_event_t *event) {
 	printf("%.*s\n", (int)isc_buffer_usedlength(&outbuf),
 	       (char *)isc_buffer_base(&outbuf));
 
-	dns_message_destroy(&response);
+	dns_message_detach(&response);
 	isc_event_free(&event);
 
 	isc_app_shutdown();
@@ -123,16 +125,14 @@ buildquery(void) {
 	dns_rdataset_t *question = NULL;
 	dns_name_t *qname = NULL;
 	isc_region_t r, inr;
-	dns_message_t *query;
+	dns_message_t *query = NULL;
 	char nametext[] = "host.example";
 	isc_buffer_t namesrc, namedst;
 	unsigned char namedata[256];
 	isc_sockaddr_t sa;
 	dns_compress_t cctx;
 
-	query = NULL;
-	result = dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &query);
-	CHECK("dns_message_create", result);
+	dns_message_create(mctx, DNS_MESSAGE_INTENTRENDER, &query);
 	result = dns_message_setsig0key(query, key);
 	CHECK("dns_message_setsig0key", result);
 
@@ -186,17 +186,17 @@ buildquery(void) {
 	inr.length = sizeof(rdata);
 	result = isc_socket_recv(s, &inr, 1, task1, recvdone, NULL);
 	CHECK("isc_socket_recv", result);
-	dns_message_destroy(&query);
+	dns_message_detach(&query);
 }
 
 int
 main(int argc, char *argv[]) {
 	bool verbose = false;
-	isc_socketmgr_t *socketmgr;
-	isc_timermgr_t *timermgr;
+	isc_socketmgr_t *socketmgr = NULL;
+	isc_timermgr_t *timermgr = NULL;
 	struct in_addr inaddr;
 	dns_fixedname_t fname;
-	dns_name_t *name;
+	dns_name_t *name = NULL;
 	isc_buffer_t b;
 	int ch;
 	isc_result_t result;
@@ -225,20 +225,15 @@ main(int argc, char *argv[]) {
 	dns_result_register();
 	dst_result_register();
 
-	taskmgr = NULL;
-	RUNTIME_CHECK(isc_taskmgr_create(mctx, 2, 0, NULL, &taskmgr) ==
+	RUNTIME_CHECK(isc_managers_create(mctx, 2, 0, &netmgr, &taskmgr) ==
 		      ISC_R_SUCCESS);
-	task1 = NULL;
 	RUNTIME_CHECK(isc_task_create(taskmgr, 0, &task1) == ISC_R_SUCCESS);
 
-	timermgr = NULL;
 	RUNTIME_CHECK(isc_timermgr_create(mctx, &timermgr) == ISC_R_SUCCESS);
-	socketmgr = NULL;
 	RUNTIME_CHECK(isc_socketmgr_create(mctx, &socketmgr) == ISC_R_SUCCESS);
 
-	RUNTIME_CHECK(isc_log_create(mctx, &lctx, &logconfig) == ISC_R_SUCCESS);
+	isc_log_create(mctx, &lctx, &logconfig);
 
-	s = NULL;
 	RUNTIME_CHECK(isc_socket_create(socketmgr, PF_INET, isc_sockettype_udp,
 					&s) == ISC_R_SUCCESS);
 
@@ -251,7 +246,6 @@ main(int argc, char *argv[]) {
 	result = dns_name_fromtext(name, &b, dns_rootname, 0, NULL);
 	CHECK("dns_name_fromtext", result);
 
-	key = NULL;
 	result = dst_key_fromfile(name, 33180, DNS_KEYALG_RSASHA1,
 				  DST_TYPE_PUBLIC | DST_TYPE_PRIVATE, NULL,
 				  mctx, &key);
@@ -263,7 +257,7 @@ main(int argc, char *argv[]) {
 
 	isc_task_shutdown(task1);
 	isc_task_detach(&task1);
-	isc_taskmgr_destroy(&taskmgr);
+	isc_managers_destroy(&netmgr, &taskmgr);
 
 	isc_socket_detach(&s);
 	isc_socketmgr_destroy(&socketmgr);

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -92,6 +94,8 @@ isc_ratelimiter_create(isc_mem_t *mctx, isc_timermgr_t *timermgr,
 	return (ISC_R_SUCCESS);
 
 free_mutex:
+	isc_refcount_decrementz(&rl->references);
+	isc_refcount_destroy(&rl->references);
 	isc_mutex_destroy(&rl->lock);
 	isc_mem_put(mctx, rl, sizeof(*rl));
 	return (result);
@@ -237,6 +241,8 @@ ratelimiter_tick(isc_task_t *task, isc_event_t *event) {
 void
 isc_ratelimiter_shutdown(isc_ratelimiter_t *rl) {
 	isc_event_t *ev;
+	isc_task_t *task;
+	isc_result_t result;
 
 	REQUIRE(rl != NULL);
 
@@ -245,12 +251,18 @@ isc_ratelimiter_shutdown(isc_ratelimiter_t *rl) {
 	(void)isc_timer_reset(rl->timer, isc_timertype_inactive, NULL, NULL,
 			      false);
 	while ((ev = ISC_LIST_HEAD(rl->pending)) != NULL) {
-		isc_task_t *task = ev->ev_sender;
+		task = ev->ev_sender;
 		ISC_LIST_UNLINK(rl->pending, ev, ev_ratelink);
 		ev->ev_attributes |= ISC_EVENTATTR_CANCELED;
 		isc_task_send(task, &ev);
 	}
-	isc_timer_detach(&rl->timer);
+	task = NULL;
+	isc_task_attach(rl->task, &task);
+
+	result = isc_timer_reset(rl->timer, isc_timertype_inactive, NULL, NULL,
+				 false);
+	RUNTIME_CHECK(result == ISC_R_SUCCESS);
+	isc_timer_destroy(&rl->timer);
 
 	/*
 	 * Send an event to our task.  The delivery of this event
@@ -269,10 +281,12 @@ ratelimiter_shutdowncomplete(isc_task_t *task, isc_event_t *event) {
 	UNUSED(task);
 
 	isc_ratelimiter_detach(&rl);
+	isc_task_detach(&task);
 }
 
 static void
 ratelimiter_free(isc_ratelimiter_t *rl) {
+	isc_refcount_destroy(&rl->references);
 	isc_mutex_destroy(&rl->lock);
 	isc_mem_put(rl->mctx, rl, sizeof(*rl));
 }
@@ -316,7 +330,7 @@ isc_ratelimiter_stall(isc_ratelimiter_t *rl) {
 		result = isc_timer_reset(rl->timer, isc_timertype_inactive,
 					 NULL, NULL, false);
 		RUNTIME_CHECK(result == ISC_R_SUCCESS);
-	/* FALLTHROUGH */
+		FALLTHROUGH;
 	case isc_ratelimiter_idle:
 	case isc_ratelimiter_stalled:
 		rl->state = isc_ratelimiter_stalled;

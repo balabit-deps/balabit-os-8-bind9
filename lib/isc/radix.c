@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -121,7 +123,8 @@ _comp_with_mask(void *addr, void *dest, u_int mask) {
 		u_int m = ((~0U) << (8 - (mask % 8)));
 
 		if ((mask % 8) == 0 ||
-		    (((u_char *)addr)[n] & m) == (((u_char *)dest)[n] & m)) {
+		    (((u_char *)addr)[n] & m) == (((u_char *)dest)[n] & m))
+		{
 			return (1);
 		}
 	}
@@ -232,15 +235,16 @@ isc_radix_search(isc_radix_tree_t *radix, isc_radix_node_t **target,
 
 	*target = NULL;
 
-	if (radix->head == NULL) {
+	node = radix->head;
+
+	if (node == NULL) {
 		return (ISC_R_NOTFOUND);
 	}
 
-	node = radix->head;
 	addr = isc_prefix_touchar(prefix);
 	bitlen = prefix->bitlen;
 
-	while (node->bit < bitlen) {
+	while (node != NULL && node->bit < bitlen) {
 		if (node->prefix) {
 			stack[cnt++] = node;
 		}
@@ -251,13 +255,9 @@ isc_radix_search(isc_radix_tree_t *radix, isc_radix_node_t **target,
 		} else {
 			node = node->l;
 		}
-
-		if (node == NULL) {
-			break;
-		}
 	}
 
-	if (node && node->prefix) {
+	if (node != NULL && node->prefix) {
 		stack[cnt++] = node;
 	}
 
@@ -425,7 +425,8 @@ isc_radix_insert(isc_radix_tree_t *radix, isc_radix_node_t **target,
 				/* Merging nodes */
 				for (i = 0; i < RADIX_FAMILIES; i++) {
 					if (node->node_num[i] == -1 &&
-					    source->node_num[i] != -1) {
+					    source->node_num[i] != -1)
+					{
 						node->node_num[i] =
 							radix->num_added_node +
 							source->node_num[i];

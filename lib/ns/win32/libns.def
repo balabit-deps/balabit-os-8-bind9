@@ -42,6 +42,7 @@ ns_client_shuttingdown
 ns_client_sourceip
 ns_clientmgr_create
 ns_clientmgr_destroy
+ns_clientmgr_shutdown
 ns_hook_add
 ns_hooktable_create
 ns_hooktable_free
@@ -49,12 +50,12 @@ ns_hooktable_init
 ns_interface_attach
 ns_interface_detach
 ns_interface_shutdown
-ns_interfacemgr_adjust
 ns_interfacemgr_attach
 ns_interfacemgr_create
 ns_interfacemgr_detach
 ns_interfacemgr_dumprecursing
 ns_interfacemgr_getaclenv
+ns_interfacemgr_getserver
 ns_interfacemgr_islistening
 ns_interfacemgr_listeningon
 ns_interfacemgr_scan

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -30,6 +32,8 @@
 #include <isc/thread.h>
 #include <isc/util.h>
 
+#include "trampoline_p.h"
+
 #ifndef THREAD_MINSTACKSIZE
 #define THREAD_MINSTACKSIZE (1024U * 1024)
 #endif /* ifndef THREAD_MINSTACKSIZE */
@@ -45,6 +49,10 @@ void
 isc_thread_create(isc_threadfunc_t func, isc_threadarg_t arg,
 		  isc_thread_t *thread) {
 	pthread_attr_t attr;
+	isc__trampoline_t *trampoline_arg;
+
+	trampoline_arg = isc__trampoline_get(func, arg);
+
 #if defined(HAVE_PTHREAD_ATTR_GETSTACKSIZE) && \
 	defined(HAVE_PTHREAD_ATTR_SETSTACKSIZE)
 	size_t stacksize;
@@ -70,7 +78,8 @@ isc_thread_create(isc_threadfunc_t func, isc_threadarg_t arg,
 #endif /* if defined(HAVE_PTHREAD_ATTR_GETSTACKSIZE) && \
 	* defined(HAVE_PTHREAD_ATTR_SETSTACKSIZE) */
 
-	ret = pthread_create(thread, &attr, func, arg);
+	ret = pthread_create(thread, &attr, isc__trampoline_run,
+			     trampoline_arg);
 	if (ret != 0) {
 		_FATAL(ret, "pthread_create()");
 	}
@@ -86,15 +95,6 @@ isc_thread_join(isc_thread_t thread, isc_threadresult_t *result) {
 	if (ret != 0) {
 		_FATAL(ret, "pthread_join()");
 	}
-}
-
-#ifdef __NetBSD__
-#define pthread_setconcurrency(a) (void)a /* nothing */
-#endif					  /* ifdef __NetBSD__ */
-
-void
-isc_thread_setconcurrency(unsigned int level) {
-	(void)pthread_setconcurrency(level);
 }
 
 void
@@ -126,48 +126,4 @@ isc_thread_yield(void) {
 #elif defined(HAVE_PTHREAD_YIELD_NP)
 	pthread_yield_np();
 #endif /* if defined(HAVE_SCHED_YIELD) */
-}
-
-isc_result_t
-isc_thread_setaffinity(int cpu) {
-#if defined(HAVE_CPUSET_SETAFFINITY)
-	cpuset_t cpuset;
-	CPU_ZERO(&cpuset);
-	CPU_SET(cpu, &cpuset);
-	if (cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_TID, -1,
-			       sizeof(cpuset), &cpuset) != 0)
-	{
-		return (ISC_R_FAILURE);
-	}
-#elif defined(HAVE_PTHREAD_SETAFFINITY_NP)
-#if defined(__NetBSD__)
-	cpuset_t *cset;
-	cset = cpuset_create();
-	if (cset == NULL) {
-		return (ISC_R_FAILURE);
-	}
-	cpuset_set(cpu, cset);
-	if (pthread_setaffinity_np(pthread_self(), cpuset_size(cset), cset) !=
-	    0) {
-		cpuset_destroy(cset);
-		return (ISC_R_FAILURE);
-	}
-	cpuset_destroy(cset);
-#else  /* linux? */
-	cpu_set_t set;
-	CPU_ZERO(&set);
-	CPU_SET(cpu, &set);
-	if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &set) !=
-	    0) {
-		return (ISC_R_FAILURE);
-	}
-#endif /* __NetBSD__ */
-#elif defined(HAVE_PROCESSOR_BIND)
-	if (processor_bind(P_LWPID, P_MYID, cpu, NULL) != 0) {
-		return (ISC_R_FAILURE);
-	}
-#else  /* if defined(HAVE_CPUSET_SETAFFINITY) */
-	UNUSED(cpu);
-#endif /* if defined(HAVE_CPUSET_SETAFFINITY) */
-	return (ISC_R_SUCCESS);
 }

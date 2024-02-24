@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,6 +23,7 @@
 #include <isc/commandline.h>
 #include <isc/file.h>
 #include <isc/log.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/net.h>
 #include <isc/print.h>
@@ -75,9 +78,9 @@ static isccc_region_t secret;
 static bool failed = false;
 static bool c_flag = false;
 static isc_mem_t *rndc_mctx;
-static atomic_uint_fast32_t sends = ATOMIC_VAR_INIT(0);
-static atomic_uint_fast32_t recvs = ATOMIC_VAR_INIT(0);
-static atomic_uint_fast32_t connects = ATOMIC_VAR_INIT(0);
+static atomic_uint_fast32_t sends = 0;
+static atomic_uint_fast32_t recvs = 0;
+static atomic_uint_fast32_t connects = 0;
 static char *command;
 static char *args;
 static char program[256];
@@ -104,11 +107,23 @@ command is one of the following:\n\
 		Add zone to given view. Requires allow-new-zones option.\n\
   delzone [-clean] zone [class [view]]\n\
 		Removes zone from given view.\n\
+  dnssec -checkds [-key id [-alg algorithm]] [-when time] (published|withdrawn) zone [class [view]]\n\
+		Mark the DS record for the KSK of the given zone as seen\n\
+		in the parent.  If the zone has multiple KSKs, select a\n\
+		specific key by providing the keytag with -key id and\n\
+		optionally the key's algorithm with -alg algorithm.\n\
+		Requires the zone to have a dnssec-policy.\n\
+  dnssec -rollover -key id [-alg algorithm] [-when time] zone [class [view]]\n\
+		Rollover key with id of the given zone. Requires the zone\n\
+		to have a dnssec-policy.\n\
+  dnssec -status zone [class [view]]\n\
+		Show the DNSSEC signing state for the specified zone.\n\
+		Requires the zone to have a dnssec-policy.\n\
   dnstap -reopen\n\
 		Close, truncate and re-open the DNSTAP output file.\n\
-  dnstap -roll count\n\
+  dnstap -roll [count]\n\
 		Close, rename and re-open the DNSTAP output file(s).\n\
-  dumpdb [-all|-cache|-zones|-adb|-bad|-fail] [view ...]\n\
+  dumpdb [-all|-cache|-zones|-adb|-bad|-expired|-fail] [view ...]\n\
 		Dump cache(s) to the dump file (named_dump.db).\n\
   flush 	Flushes all of the server's caches.\n\
   flush [view]	Flushes the server's cache for a view.\n\
@@ -252,6 +267,8 @@ get_addresses(const char *host, in_port_t port) {
 	isc_result_t result;
 	int found = 0, count;
 
+	REQUIRE(host != NULL);
+
 	if (*host == '/') {
 		result = isc_sockaddr_frompath(&serveraddrs[nserveraddrs],
 					       host);
@@ -275,8 +292,6 @@ static void
 rndc_senddone(isc_task_t *task, isc_event_t *event) {
 	isc_socketevent_t *sevent = (isc_socketevent_t *)event;
 
-	UNUSED(task);
-
 	if (sevent->result != ISC_R_SUCCESS) {
 		fatal("send failed: %s", isc_result_totext(sevent->result));
 	}
@@ -285,7 +300,7 @@ rndc_senddone(isc_task_t *task, isc_event_t *event) {
 	    atomic_load_acquire(&recvs) == 0)
 	{
 		isc_socket_detach(&sock);
-		isc_task_shutdown(task);
+		isc_task_detach(&task);
 		isc_app_shutdown();
 	}
 }
@@ -359,9 +374,10 @@ rndc_recvdone(isc_task_t *task, isc_event_t *event) {
 	isc_event_free(&event);
 	isccc_sexpr_free(&response);
 	if (atomic_load_acquire(&sends) == 0 &&
-	    atomic_load_acquire(&recvs) == 0) {
+	    atomic_load_acquire(&recvs) == 0)
+	{
 		isc_socket_detach(&sock);
-		isc_task_shutdown(task);
+		isc_task_detach(&task);
 		isc_app_shutdown();
 	}
 }
@@ -476,7 +492,8 @@ rndc_connected(isc_task_t *task, isc_event_t *event) {
 		isc_sockaddr_format(&serveraddrs[currentaddr], socktext,
 				    sizeof(socktext));
 		if (sevent->result != ISC_R_CANCELED &&
-		    ++currentaddr < nserveraddrs) {
+		    ++currentaddr < nserveraddrs)
+		{
 			notify("connection failed: %s: %s", socktext,
 			       isc_result_totext(sevent->result));
 			isc_socket_detach(&sock);
@@ -645,7 +662,8 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
 		(void)cfg_map_get(config, "server", &servers);
 		if (servers != NULL) {
 			for (elt = cfg_list_first(servers); elt != NULL;
-			     elt = cfg_list_next(elt)) {
+			     elt = cfg_list_next(elt))
+			{
 				const char *name;
 				server = cfg_listelt_value(elt);
 				name = cfg_obj_asstring(
@@ -682,10 +700,12 @@ parse_config(isc_mem_t *mctx, isc_log_t *log, const char *keyname,
 	} else {
 		DO("get config key list", cfg_map_get(config, "key", &keys));
 		for (elt = cfg_list_first(keys); elt != NULL;
-		     elt = cfg_list_next(elt)) {
+		     elt = cfg_list_next(elt))
+		{
 			key = cfg_listelt_value(elt);
 			if (strcasecmp(cfg_obj_asstring(cfg_map_getname(key)),
-				       keyname) == 0) {
+				       keyname) == 0)
+			{
 				break;
 			}
 		}
@@ -845,6 +865,7 @@ int
 main(int argc, char **argv) {
 	isc_result_t result = ISC_R_SUCCESS;
 	bool show_final_mem = false;
+	isc_nm_t *netmgr = NULL;
 	isc_taskmgr_t *taskmgr = NULL;
 	isc_task_t *task = NULL;
 	isc_log_t *log = NULL;
@@ -897,11 +918,13 @@ main(int argc, char **argv) {
 			break;
 		case 'b':
 			if (inet_pton(AF_INET, isc_commandline_argument, &in) ==
-			    1) {
+			    1)
+			{
 				isc_sockaddr_fromin(&local4, &in, 0);
 				local4set = true;
 			} else if (inet_pton(AF_INET6, isc_commandline_argument,
-					     &in6) == 1) {
+					     &in6) == 1)
+			{
 				isc_sockaddr_fromin6(&local6, &in6, 0);
 				local6set = true;
 			}
@@ -958,7 +981,7 @@ main(int argc, char **argv) {
 					program, isc_commandline_option);
 				usage(1);
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		case 'h':
 			usage(0);
 			break;
@@ -982,21 +1005,19 @@ main(int argc, char **argv) {
 	DO("create socket manager",
 	   isc_socketmgr_create(rndc_mctx, &socketmgr));
 	DO("create task manager",
-	   isc_taskmgr_create(rndc_mctx, 1, 0, NULL, &taskmgr));
+	   isc_managers_create(rndc_mctx, 1, 0, &netmgr, &taskmgr));
 	DO("create task", isc_task_create(taskmgr, 0, &task));
 
-	DO("create logging context",
-	   isc_log_create(rndc_mctx, &log, &logconfig));
+	isc_log_create(rndc_mctx, &log, &logconfig);
 	isc_log_setcontext(log);
-	DO("setting log tag", isc_log_settag(logconfig, progname));
+	isc_log_settag(logconfig, progname);
 	logdest.file.stream = stderr;
 	logdest.file.name = NULL;
 	logdest.file.versions = ISC_LOG_ROLLNEVER;
 	logdest.file.maximum_size = 0;
-	DO("creating log channel",
-	   isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
-				 ISC_LOG_INFO, &logdest,
-				 ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL));
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_INFO, &logdest,
+			      ISC_LOG_PRINTTAG | ISC_LOG_PRINTLEVEL);
 	DO("enabling log channel",
 	   isc_log_usechannel(logconfig, "stderr", NULL, NULL));
 
@@ -1038,10 +1059,11 @@ main(int argc, char **argv) {
 		fatal("'%s' is not implemented", command);
 	}
 
-	if (nserveraddrs == 0) {
+	if (nserveraddrs == 0 && servername != NULL) {
 		get_addresses(servername, (in_port_t)remoteport);
 	}
 
+	isc_task_attach(task, &(isc_task_t *){ NULL });
 	DO("post event", isc_app_onrun(rndc_mctx, task, rndc_start, NULL));
 
 	result = isc_app_run();
@@ -1056,7 +1078,7 @@ main(int argc, char **argv) {
 	}
 
 	isc_task_detach(&task);
-	isc_taskmgr_destroy(&taskmgr);
+	isc_managers_destroy(&netmgr, &taskmgr);
 	isc_socketmgr_destroy(&socketmgr);
 	isc_log_destroy(&log);
 	isc_log_setcontext(NULL);

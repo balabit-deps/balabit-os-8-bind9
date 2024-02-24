@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -88,7 +90,7 @@ struct dns__rrl_key {
 	dns_rdatatype_t qtype;
 	uint8_t		qclass;
 	unsigned int	rtype : 4; /* dns_rrl_rtype_t */
-	unsigned int	ipv6 : 1;
+	unsigned int	ipv6  : 1;
 };
 union dns_rrl_key {
 	struct dns__rrl_key s;
@@ -197,7 +199,7 @@ struct dns_rrl_rate {
 typedef struct dns_rrl dns_rrl_t;
 struct dns_rrl {
 	isc_mutex_t lock;
-	isc_mem_t * mctx;
+	isc_mem_t  *mctx;
 
 	bool	       log_only;
 	dns_rrl_rate_t responses_per_second;
@@ -254,8 +256,8 @@ typedef enum {
 } dns_rrl_result_t;
 
 dns_rrl_result_t
-dns_rrl(dns_view_t *view, const isc_sockaddr_t *client_addr, bool is_tcp,
-	dns_rdataclass_t rdclass, dns_rdatatype_t qtype,
+dns_rrl(dns_view_t *view, dns_zone_t *zone, const isc_sockaddr_t *client_addr,
+	bool is_tcp, dns_rdataclass_t rdclass, dns_rdatatype_t qtype,
 	const dns_name_t *qname, isc_result_t resp_result, isc_stdtime_t now,
 	bool wouldlog, char *log_buf, unsigned int log_buf_len);
 

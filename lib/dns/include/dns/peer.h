@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -74,12 +76,12 @@ struct dns_peer {
 	bool		      request_expire;
 	bool		      force_tcp;
 	bool		      tcp_keepalive;
-	dns_name_t *	      key;
-	isc_sockaddr_t *      transfer_source;
+	dns_name_t	     *key;
+	isc_sockaddr_t	     *transfer_source;
 	isc_dscp_t	      transfer_dscp;
-	isc_sockaddr_t *      notify_source;
+	isc_sockaddr_t	     *notify_source;
 	isc_dscp_t	      notify_dscp;
-	isc_sockaddr_t *      query_source;
+	isc_sockaddr_t	     *query_source;
 	isc_dscp_t	      query_dscp;
 	uint16_t	      udpsize;	   /* receive size */
 	uint16_t	      maxudp;	   /* transmit size */
@@ -213,7 +215,7 @@ isc_result_t
 dns_peer_setkey(dns_peer_t *peer, dns_name_t **keyval);
 
 isc_result_t
-dns_peer_settransfersource(dns_peer_t *		 peer,
+dns_peer_settransfersource(dns_peer_t		*peer,
 			   const isc_sockaddr_t *transfer_source);
 
 isc_result_t

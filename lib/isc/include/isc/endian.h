@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -108,29 +110,29 @@
 #include <inttypes.h>
 
 #ifndef bswap_16
-#define bswap_16(x)                                 \
-	((uint16_t)((((uint16_t)(x)&0xff00) >> 8) | \
-		    (((uint16_t)(x)&0x00ff) << 8)))
+#define bswap_16(x)                                   \
+	((uint16_t)((((uint16_t)(x) & 0xff00) >> 8) | \
+		    (((uint16_t)(x) & 0x00ff) << 8)))
 #endif /* !bswap_16 */
 
 #ifndef bswap_32
-#define bswap_32(x)                                      \
-	((uint32_t)((((uint32_t)(x)&0xff000000) >> 24) | \
-		    (((uint32_t)(x)&0x00ff0000) >> 8) |  \
-		    (((uint32_t)(x)&0x0000ff00) << 8) |  \
-		    (((uint32_t)(x)&0x000000ff) << 24)))
+#define bswap_32(x)                                        \
+	((uint32_t)((((uint32_t)(x) & 0xff000000) >> 24) | \
+		    (((uint32_t)(x) & 0x00ff0000) >> 8) |  \
+		    (((uint32_t)(x) & 0x0000ff00) << 8) |  \
+		    (((uint32_t)(x) & 0x000000ff) << 24)))
 #endif /* !bswap_32 */
 
 #ifndef bswap_64
-#define bswap_64(x)                                                 \
-	((uint64_t)((((uint64_t)(x)&0xff00000000000000ULL) >> 56) | \
-		    (((uint64_t)(x)&0x00ff000000000000ULL) >> 40) | \
-		    (((uint64_t)(x)&0x0000ff0000000000ULL) >> 24) | \
-		    (((uint64_t)(x)&0x000000ff00000000ULL) >> 8) |  \
-		    (((uint64_t)(x)&0x00000000ff000000ULL) << 8) |  \
-		    (((uint64_t)(x)&0x0000000000ff0000ULL) << 24) | \
-		    (((uint64_t)(x)&0x000000000000ff00ULL) << 40) | \
-		    (((uint64_t)(x)&0x00000000000000ffULL) << 56)))
+#define bswap_64(x)                                                   \
+	((uint64_t)((((uint64_t)(x) & 0xff00000000000000ULL) >> 56) | \
+		    (((uint64_t)(x) & 0x00ff000000000000ULL) >> 40) | \
+		    (((uint64_t)(x) & 0x0000ff0000000000ULL) >> 24) | \
+		    (((uint64_t)(x) & 0x000000ff00000000ULL) >> 8) |  \
+		    (((uint64_t)(x) & 0x00000000ff000000ULL) << 8) |  \
+		    (((uint64_t)(x) & 0x0000000000ff0000ULL) << 24) | \
+		    (((uint64_t)(x) & 0x000000000000ff00ULL) << 40) | \
+		    (((uint64_t)(x) & 0x00000000000000ffULL) << 56)))
 #endif /* !bswap_64 */
 
 #ifndef htobe16

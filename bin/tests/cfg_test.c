@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -72,8 +74,7 @@ main(int argc, char **argv) {
 
 	isc_mem_create(&mctx);
 
-	result = isc_log_create(mctx, &lctx, &lcfg);
-	check_result(result, "isc_log_create()");
+	isc_log_create(mctx, &lctx, &lcfg);
 	isc_log_setcontext(lctx);
 
 	/*
@@ -83,10 +84,9 @@ main(int argc, char **argv) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	result = isc_log_createchannel(lcfg, "_default", ISC_LOG_TOFILEDESC,
-				       ISC_LOG_DYNAMIC, &destination,
-				       ISC_LOG_PRINTTIME);
-	check_result(result, "isc_log_createchannel()");
+	isc_log_createchannel(lcfg, "_default", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination, ISC_LOG_PRINTTIME);
+
 	result = isc_log_usechannel(lcfg, "_default", NULL, NULL);
 	check_result(result, "isc_log_usechannel()");
 
@@ -110,11 +110,13 @@ main(int argc, char **argv) {
 				usage();
 			}
 			if (strcmp(argv[1], "master") == 0 ||
-			    strcmp(argv[1], "primary") == 0) {
-				zonetype = CFG_ZONE_MASTER;
+			    strcmp(argv[1], "primary") == 0)
+			{
+				zonetype = CFG_ZONE_PRIMARY;
 			} else if (strcmp(argv[1], "slave") == 0 ||
-				   strcmp(argv[1], "seconary") == 0) {
-				zonetype = CFG_ZONE_SLAVE;
+				   strcmp(argv[1], "seconary") == 0)
+			{
+				zonetype = CFG_ZONE_SECONDARY;
 			} else if (strcmp(argv[1], "mirror") == 0) {
 				zonetype = CFG_ZONE_MIRROR;
 			} else if (strcmp(argv[1], "stub") == 0) {

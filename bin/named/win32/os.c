@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -393,7 +395,7 @@ named_os_started(void) {
 }
 
 static char unamebuf[BUFSIZ];
-static char *unamep = NULL;
+static const char *unamep = NULL;
 
 static void
 getuname(void) {
@@ -462,7 +464,7 @@ err:
  * GetVersionEx() returns 6.2 (aka Windows 8.1) since it was obsoleted
  * so we had to switch to the recommended way to get the Windows version.
  */
-char *
+const char *
 named_os_uname(void) {
 	if (unamep == NULL) {
 		getuname();

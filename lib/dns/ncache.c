@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -46,7 +48,7 @@ addoptout(dns_message_t *message, dns_db_t *cache, dns_dbnode_t *node,
 	  dns_ttl_t maxttl, bool optout, bool secure,
 	  dns_rdataset_t *addedrdataset);
 
-static inline isc_result_t
+static isc_result_t
 copy_rdataset(dns_rdataset_t *rdataset, isc_buffer_t *buffer) {
 	isc_result_t result;
 	unsigned int count;
@@ -170,7 +172,8 @@ addoptout(dns_message_t *message, dns_db_t *cache, dns_dbnode_t *node,
 			     rdataset = ISC_LIST_NEXT(rdataset, link))
 			{
 				if ((rdataset->attributes &
-				     DNS_RDATASETATTR_NCACHE) == 0) {
+				     DNS_RDATASETATTR_NCACHE) == 0)
+				{
 					continue;
 				}
 				type = rdataset->type;
@@ -502,6 +505,7 @@ rdataset_settrust(dns_rdataset_t *rdataset, dns_trust_t trust) {
 	unsigned char *raw = rdataset->private3;
 
 	raw[-1] = (unsigned char)trust;
+	rdataset->trust = trust;
 }
 
 static dns_rdatasetmethods_t rdataset_methods = {
@@ -638,7 +642,8 @@ dns_ncache_getsigrdataset(dns_rdataset_t *ncacherdataset, dns_name_t *name,
 		isc_region_consume(&remaining, 2);
 
 		if (type != dns_rdatatype_rrsig ||
-		    !dns_name_equal(&tname, name)) {
+		    !dns_name_equal(&tname, name))
+		{
 			result = dns_rdataset_next(&rclone);
 			dns_rdata_reset(&rdata);
 			continue;
@@ -749,7 +754,7 @@ dns_ncache_current(dns_rdataset_t *ncacherdataset, dns_name_t *found,
 		raw += 2;
 		sigregion.base = raw;
 		dns_rdata_reset(&rdata);
-		dns_rdata_fromregion(&rdata, rdataset->rdclass, rdataset->type,
+		dns_rdata_fromregion(&rdata, ncacherdataset->rdclass, type,
 				     &sigregion);
 		(void)dns_rdata_tostruct(&rdata, &rrsig, NULL);
 		rdataset->covers = rrsig.covered;

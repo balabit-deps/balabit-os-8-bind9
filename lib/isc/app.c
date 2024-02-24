@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -50,7 +52,7 @@
  */
 
 static isc_thread_t blockedthread;
-static atomic_bool is_running;
+static atomic_bool is_running = 0;
 
 #ifdef WIN32
 /*
@@ -233,15 +235,16 @@ isc_app_ctxrun(isc_appctx_t *ctx) {
 	REQUIRE(main_thread == GetCurrentThread());
 #endif /* ifdef WIN32 */
 
-	if (atomic_compare_exchange_strong_acq_rel(
-		    &ctx->running, &(bool){ false }, true) == true)
+	if (atomic_compare_exchange_strong_acq_rel(&ctx->running,
+						   &(bool){ false }, true))
 	{
 		/*
 		 * Post any on-run events (in FIFO order).
 		 */
 		LOCK(&ctx->lock);
 		for (event = ISC_LIST_HEAD(ctx->on_run); event != NULL;
-		     event = next_event) {
+		     event = next_event)
+		{
 			next_event = ISC_LIST_NEXT(event, ev_link);
 			ISC_LIST_UNLINK(ctx->on_run, event, ev_link);
 			task = event->ev_sender;
@@ -266,7 +269,7 @@ isc_app_ctxrun(isc_appctx_t *ctx) {
 	 * simply be made pending and we will get it when we call
 	 * sigwait().
 	 */
-	while (atomic_load_acquire(&ctx->want_shutdown) == false) {
+	while (!atomic_load_acquire(&ctx->want_shutdown)) {
 #ifdef WIN32
 		DWORD dwWaitResult = WaitForMultipleObjects(
 			NUM_EVENTS, ctx->hEvents, FALSE, INFINITE);
@@ -321,8 +324,7 @@ isc_app_ctxrun(isc_appctx_t *ctx) {
 							     true);
 					break;
 				default:
-					INSIST(0);
-					ISC_UNREACHABLE();
+					UNREACHABLE();
 				}
 			}
 		} else {
@@ -360,8 +362,8 @@ isc_result_t
 isc_app_run(void) {
 	isc_result_t result;
 
-	REQUIRE(atomic_compare_exchange_strong_acq_rel(
-			&is_running, &(bool){ false }, true) == true);
+	REQUIRE(atomic_compare_exchange_strong_acq_rel(&is_running,
+						       &(bool){ false }, true));
 	result = isc_app_ctxrun(&isc_g_appctx);
 	atomic_store_release(&is_running, false);
 
@@ -424,7 +426,7 @@ isc_app_ctxsuspend(isc_appctx_t *ctx) {
 	/*
 	 * Don't send the reload signal if we're shutting down.
 	 */
-	if (atomic_load_acquire(&ctx->shutdown_requested) == false) {
+	if (!atomic_load_acquire(&ctx->shutdown_requested)) {
 #ifdef WIN32
 		SetEvent(ctx->hEvents[RELOAD_EVENT]);
 #else  /* WIN32 */

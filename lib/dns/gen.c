@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -123,8 +125,8 @@ static const char copyright[] = "/*\n"
 				"terms of the Mozilla Public\n"
 				" * License, v. 2.0. If a copy of the MPL was "
 				"not distributed with this\n"
-				" * file, You can obtain one at "
-				"http://mozilla.org/MPL/2.0/.\n"
+				" * file, you can obtain one at "
+				"https://mozilla.org/MPL/2.0/.\n"
 				" */\n"
 				"\n"
 				"/***************\n"
@@ -151,7 +153,7 @@ static struct cc {
 	struct cc *next;
 	int rdclass;
 	char classbuf[TYPECLASSBUF];
-} * classes;
+} *classes;
 
 static struct tt {
 	struct tt *next;
@@ -160,7 +162,7 @@ static struct tt {
 	char classbuf[TYPECLASSBUF];
 	char typebuf[TYPECLASSBUF];
 	char dirbuf[PATH_MAX - 30];
-} * types;
+} *types;
 
 static struct ttnam {
 	char typebuf[TYPECLASSBUF];
@@ -700,7 +702,8 @@ main(int argc, char **argv) {
 	}
 
 	if (now != -1) {
-		struct tm *tm = gmtime(&now);
+		struct tm t, *tm = gmtime_r(&now, &t);
+
 		if (tm != NULL && tm->tm_year > 104) {
 			n = snprintf(year, sizeof(year), "-%d",
 				     tm->tm_year + 1900);
@@ -779,7 +782,6 @@ main(int argc, char **argv) {
 		 * Add in reserved/special types.  This will let us
 		 * sort them without special cases.
 		 */
-		insert_into_typenames(0, "reserved0", RESERVED);
 		insert_into_typenames(100, "uinfo", RESERVEDNAME);
 		insert_into_typenames(101, "uid", RESERVEDNAME);
 		insert_into_typenames(102, "gid", RESERVEDNAME);

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -247,7 +249,8 @@ isc_netaddr_prefixok(const isc_netaddr_t *na, unsigned int prefixlen) {
 		nbytes++;
 	}
 	if (nbytes < ipbytes &&
-	    memcmp(p + nbytes, zeros, ipbytes - nbytes) != 0) {
+	    memcmp(p + nbytes, zeros, ipbytes - nbytes) != 0)
+	{
 		return (ISC_R_FAILURE);
 	}
 	return (ISC_R_SUCCESS);
@@ -362,8 +365,7 @@ isc_netaddr_fromsockaddr(isc_netaddr_t *t, const isc_sockaddr_t *s) {
 		break;
 #endif /* ifdef ISC_PLATFORM_HAVESYSUNH */
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 }
 
@@ -434,7 +436,7 @@ isc_netaddr_issitelocal(const isc_netaddr_t *na) {
 }
 
 #define ISC_IPADDR_ISNETZERO(i) \
-	(((uint32_t)(i)&ISC__IPADDR(0xff000000)) == ISC__IPADDR(0x00000000))
+	(((uint32_t)(i) & ISC__IPADDR(0xff000000)) == ISC__IPADDR(0x00000000))
 
 bool
 isc_netaddr_isnetzero(const isc_netaddr_t *na) {

@@ -1,15 +1,26 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
  */
 
 // NS4
+
+key rndc_key {
+	secret "1234abcd8765";
+	algorithm hmac-sha256;
+};
+
+controls {
+	inet 10.53.0.4 port @CONTROLPORT@ allow { any; } keys { rndc_key; };
+};
 
 key "sha1" {
 	algorithm "hmac-sha1";
@@ -27,13 +38,18 @@ key "sha256" {
 };
 
 key "keyforview1" {
-	algorithm "hmac-sha1";
+	algorithm @DEFAULT_HMAC@;
 	secret "YPfMoAk6h+3iN8MDRQC004iSNHY=";
 };
 
 key "keyforview2" {
-	algorithm "hmac-sha1";
+	algorithm @DEFAULT_HMAC@;
 	secret "4xILSZQnuO1UKubXHkYUsvBRPu8=";
+};
+
+key "keyforview3" {
+	algorithm @DEFAULT_HMAC@;
+	secret "C1Azf+gGPMmxrUg/WQINP6eV9Y0=";
 };
 
 dnssec-policy "test" {
@@ -57,22 +73,24 @@ view "inherit" {
 
 	/* Inherit dnssec-policy 'test' */
 	zone "inherit.inherit.signed" {
-		type master;
+		type primary;
 		file "inherit.inherit.signed.db";
+		inline-signing yes;
 	};
 
 	/* Override dnssec-policy */
 	zone "override.inherit.signed" {
-		type master;
-		dnssec-policy "default";
+		type primary;
 		file "override.inherit.signed.db";
+		inline-signing yes;
+		dnssec-policy "default";
 	};
 
 	/* Unset dnssec-policy */
 	zone "none.inherit.signed" {
-		type master;
-		dnssec-policy "none";
+		type primary;
 		file "none.inherit.signed.db";
+		dnssec-policy "none";
 	};
 };
 
@@ -82,22 +100,24 @@ view "override" {
 
 	/* Inherit dnssec-policy 'test' */
 	zone "inherit.override.signed" {
-		type master;
+		type primary;
 		file "inherit.override.signed.db";
+		inline-signing yes;
 	};
 
 	/* Override dnssec-policy */
 	zone "override.override.signed" {
-		type master;
-		dnssec-policy "test";
+		type primary;
 		file "override.override.signed.db";
+		inline-signing yes;
+		dnssec-policy "test";
 	};
 
 	/* Unset dnssec-policy */
 	zone "none.override.signed" {
-		type master;
-		dnssec-policy "none";
+		type primary;
 		file "none.override.signed.db";
+		dnssec-policy "none";
 	};
 };
 
@@ -107,30 +127,33 @@ view "none" {
 
 	/* Inherit dnssec-policy 'none' */
 	zone "inherit.none.signed" {
-		type master;
+		type primary;
 		file "inherit.none.signed.db";
 	};
 
 	/* Override dnssec-policy */
 	zone "override.none.signed" {
-		type master;
-		dnssec-policy "test";
+		type primary;
 		file "override.none.signed.db";
+		inline-signing yes;
+		dnssec-policy "test";
 	};
 
 	/* Unset dnssec-policy */
 	zone "none.none.signed" {
-		type master;
-		dnssec-policy "none";
+		type primary;
 		file "none.none.signed.db";
+		dnssec-policy "none";
 	};
 };
 
 view "example1" {
 	match-clients { key "keyforview1"; };
 
+	allow-update { any; };
+
 	zone "example.net" {
-		type master;
+		type primary;
 		file "example1.db";
 	};
 };
@@ -139,7 +162,15 @@ view "example2" {
 	match-clients { key "keyforview2"; };
 
 	zone "example.net" {
-		type master;
+		type primary;
 		file "example2.db";
+		inline-signing yes;
+	};
+};
+
+view "example3" {
+	match-clients { key "keyforview3"; };
+	zone "example.net" {
+		in-view example2;
 	};
 };

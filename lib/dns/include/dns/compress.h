@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -76,7 +78,7 @@ struct dns_compress {
 	/*% Preallocated nodes for the table. */
 	dns_compressnode_t initialnodes[DNS_COMPRESS_INITIALNODES];
 	uint16_t	   count; /*%< Number of nodes. */
-	isc_mem_t *	   mctx;  /*%< Memory context. */
+	isc_mem_t	  *mctx;  /*%< Memory context. */
 };
 
 typedef enum {

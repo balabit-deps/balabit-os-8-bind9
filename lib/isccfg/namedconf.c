@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -92,13 +94,14 @@ static cfg_type_t cfg_type_dnstapoutput;
 static cfg_type_t cfg_type_dyndb;
 static cfg_type_t cfg_type_plugin;
 static cfg_type_t cfg_type_ixfrdifftype;
+static cfg_type_t cfg_type_ixfrratio;
 static cfg_type_t cfg_type_key;
 static cfg_type_t cfg_type_logfile;
 static cfg_type_t cfg_type_logging;
 static cfg_type_t cfg_type_logseverity;
 static cfg_type_t cfg_type_logsuffix;
 static cfg_type_t cfg_type_logversions;
-static cfg_type_t cfg_type_masterselement;
+static cfg_type_t cfg_type_remoteselement;
 static cfg_type_t cfg_type_maxduration;
 static cfg_type_t cfg_type_minimal;
 static cfg_type_t cfg_type_nameportiplist;
@@ -146,7 +149,7 @@ static cfg_type_t cfg_type_tkey_dhkey = { "tkey-dhkey",	   cfg_parse_tuple,
 
 static cfg_tuplefielddef_t listenon_fields[] = {
 	{ "port", &cfg_type_optional_port, 0 },
-	{ "dscp", &cfg_type_optional_dscp, 0 },
+	{ "dscp", &cfg_type_optional_dscp, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "acl", &cfg_type_bracketed_aml, 0 },
 	{ NULL, NULL, 0 }
 };
@@ -166,28 +169,28 @@ static cfg_type_t cfg_type_acl = { "acl",	    cfg_parse_tuple,
 				   cfg_print_tuple, cfg_doc_tuple,
 				   &cfg_rep_tuple,  acl_fields };
 
-/*% masters */
-static cfg_tuplefielddef_t masters_fields[] = {
+/*% remote servers, used for primaries and parental agents */
+static cfg_tuplefielddef_t remotes_fields[] = {
 	{ "name", &cfg_type_astring, 0 },
 	{ "port", &cfg_type_optional_port, 0 },
-	{ "dscp", &cfg_type_optional_dscp, 0 },
+	{ "dscp", &cfg_type_optional_dscp, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "addresses", &cfg_type_bracketed_namesockaddrkeylist, 0 },
 	{ NULL, NULL, 0 }
 };
 
-static cfg_type_t cfg_type_masters = { "masters",	cfg_parse_tuple,
-				       cfg_print_tuple, cfg_doc_tuple,
-				       &cfg_rep_tuple,	masters_fields };
+static cfg_type_t cfg_type_remoteservers = { "remote-servers", cfg_parse_tuple,
+					     cfg_print_tuple,  cfg_doc_tuple,
+					     &cfg_rep_tuple,   remotes_fields };
 
 /*%
  * "sockaddrkeylist", a list of socket addresses with optional keys
- * and an optional default port, as used in the masters option.
+ * and an optional default port, as used in the remote-servers option.
  * E.g.,
- *   "port 1234 { mymasters; 10.0.0.1 key foo; 1::2 port 69; }"
+ *   "port 1234 { myservers; 10.0.0.1 key foo; 1::2 port 69; }"
  */
 
 static cfg_tuplefielddef_t namesockaddrkey_fields[] = {
-	{ "masterselement", &cfg_type_masterselement, 0 },
+	{ "remoteselement", &cfg_type_remoteselement, 0 },
 	{ "key", &cfg_type_optional_keyref, 0 },
 	{ NULL, NULL, 0 },
 };
@@ -208,7 +211,7 @@ static cfg_type_t cfg_type_bracketed_namesockaddrkeylist = {
 
 static cfg_tuplefielddef_t namesockaddrkeylist_fields[] = {
 	{ "port", &cfg_type_optional_port, 0 },
-	{ "dscp", &cfg_type_optional_dscp, 0 },
+	{ "dscp", &cfg_type_optional_dscp, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "addresses", &cfg_type_bracketed_namesockaddrkeylist, 0 },
 	{ NULL, NULL, 0 }
 };
@@ -223,7 +226,7 @@ static cfg_type_t cfg_type_namesockaddrkeylist = {
  */
 static cfg_tuplefielddef_t portiplist_fields[] = {
 	{ "port", &cfg_type_optional_port, 0 },
-	{ "dscp", &cfg_type_optional_dscp, 0 },
+	{ "dscp", &cfg_type_optional_dscp, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "addresses", &cfg_type_bracketed_dscpsockaddrlist, 0 },
 	{ NULL, NULL, 0 }
 };
@@ -393,7 +396,7 @@ static void
 doc_updatepolicy(cfg_printer_t *pctx, const cfg_type_t *type) {
 	cfg_print_cstr(pctx, "( local | { ");
 	cfg_doc_obj(pctx, type->of);
-	cfg_print_cstr(pctx, "; ... }");
+	cfg_print_cstr(pctx, "; ... } )");
 }
 
 /*%
@@ -566,6 +569,39 @@ static cfg_tuplefielddef_t kaspkey_fields[] = {
 static cfg_type_t cfg_type_kaspkey = { "kaspkey",	cfg_parse_tuple,
 				       cfg_print_tuple, cfg_doc_tuple,
 				       &cfg_rep_tuple,	kaspkey_fields };
+
+/*%
+ * NSEC3 parameters.
+ */
+static keyword_type_t nsec3iter_kw = { "iterations", &cfg_type_uint32 };
+static cfg_type_t cfg_type_nsec3iter = {
+	"iterations",	       parse_optional_keyvalue, print_keyvalue,
+	doc_optional_keyvalue, &cfg_rep_uint32,		&nsec3iter_kw
+};
+
+static keyword_type_t nsec3optout_kw = { "optout", &cfg_type_boolean };
+static cfg_type_t cfg_type_nsec3optout = {
+	"optout",	  parse_optional_keyvalue,
+	print_keyvalue,	  doc_optional_keyvalue,
+	&cfg_rep_boolean, &nsec3optout_kw
+};
+
+static keyword_type_t nsec3salt_kw = { "salt-length", &cfg_type_uint32 };
+static cfg_type_t cfg_type_nsec3salt = {
+	"salt-length",	       parse_optional_keyvalue, print_keyvalue,
+	doc_optional_keyvalue, &cfg_rep_uint32,		&nsec3salt_kw
+};
+
+static cfg_tuplefielddef_t nsec3param_fields[] = {
+	{ "iterations", &cfg_type_nsec3iter, 0 },
+	{ "optout", &cfg_type_nsec3optout, 0 },
+	{ "salt-length", &cfg_type_nsec3salt, 0 },
+	{ NULL, NULL, 0 }
+};
+
+static cfg_type_t cfg_type_nsec3 = { "nsec3param",    cfg_parse_tuple,
+				     cfg_print_tuple, cfg_doc_tuple,
+				     &cfg_rep_tuple,  nsec3param_fields };
 
 /*%
  * Wild class, type, name.
@@ -984,7 +1020,8 @@ parse_portrange(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 		CHECK(parse_port(pctx, &obj->value.tuple[0]));
 		CHECK(parse_port(pctx, &obj->value.tuple[1]));
 		if (obj->value.tuple[0]->value.uint32 >
-		    obj->value.tuple[1]->value.uint32) {
+		    obj->value.tuple[1]->value.uint32)
+		{
 			cfg_parser_error(pctx, CFG_LOG_NOPREP,
 					 "low port '%u' must not be larger "
 					 "than high port",
@@ -1067,8 +1104,10 @@ static cfg_clausedef_t namedconf_clauses[] = {
 	{ "logging", &cfg_type_logging, 0 },
 	{ "lwres", &cfg_type_bracketed_text,
 	  CFG_CLAUSEFLAG_MULTI | CFG_CLAUSEFLAG_OBSOLETE },
-	{ "masters", &cfg_type_masters, CFG_CLAUSEFLAG_MULTI },
+	{ "masters", &cfg_type_remoteservers, CFG_CLAUSEFLAG_MULTI },
 	{ "options", &cfg_type_options, 0 },
+	{ "parental-agents", &cfg_type_remoteservers, CFG_CLAUSEFLAG_MULTI },
+	{ "primaries", &cfg_type_remoteservers, CFG_CLAUSEFLAG_MULTI },
 	{ "statistics-channels", &cfg_type_statschannels,
 	  CFG_CLAUSEFLAG_MULTI },
 	{ "view", &cfg_type_view, CFG_CLAUSEFLAG_MULTI },
@@ -1139,7 +1178,7 @@ static cfg_clausedef_t options_clauses[] = {
 	{ "dnstap-version", &cfg_type_qstringornone,
 	  CFG_CLAUSEFLAG_NOTCONFIGURED },
 #endif /* ifdef HAVE_DNSTAP */
-	{ "dscp", &cfg_type_uint32, 0 },
+	{ "dscp", &cfg_type_uint32, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "dump-file", &cfg_type_qstring, 0 },
 	{ "fake-iquery", &cfg_type_boolean, CFG_CLAUSEFLAG_ANCIENT },
 	{ "files", &cfg_type_size, 0 },
@@ -1199,6 +1238,7 @@ static cfg_clausedef_t options_clauses[] = {
 	{ "random-device", &cfg_type_qstringornone, 0 },
 	{ "recursing-file", &cfg_type_qstring, 0 },
 	{ "recursive-clients", &cfg_type_uint32, 0 },
+	{ "reuseport", &cfg_type_boolean, 0 },
 	{ "reserved-sockets", &cfg_type_uint32, 0 },
 	{ "secroots-file", &cfg_type_qstring, 0 },
 	{ "serial-queries", &cfg_type_uint32, CFG_CLAUSEFLAG_ANCIENT },
@@ -1227,6 +1267,7 @@ static cfg_clausedef_t options_clauses[] = {
 	{ "transfers-out", &cfg_type_uint32, 0 },
 	{ "transfers-per-ns", &cfg_type_uint32, 0 },
 	{ "treat-cr-as-space", &cfg_type_boolean, CFG_CLAUSEFLAG_ANCIENT },
+	{ "update-quota", &cfg_type_uint32, 0 },
 	{ "use-id-pool", &cfg_type_boolean, CFG_CLAUSEFLAG_ANCIENT },
 	{ "use-ixfr", &cfg_type_boolean, CFG_CLAUSEFLAG_OBSOLETE },
 	{ "use-v4-udp-ports", &cfg_type_bracketed_portlist, 0 },
@@ -1416,7 +1457,8 @@ parse_dtout(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 		if (pctx->token.type == isc_tokentype_string) {
 			CHECK(cfg_gettoken(pctx, 0));
 			if (strcasecmp(TOKEN_STRING(pctx), "size") == 0 &&
-			    obj->value.tuple[2] == NULL) {
+			    obj->value.tuple[2] == NULL)
+			{
 				CHECK(cfg_parse_obj(pctx, fields[2].type,
 						    &obj->value.tuple[2]));
 			} else if (strcasecmp(TOKEN_STRING(pctx), "versions") ==
@@ -1913,6 +1955,28 @@ static cfg_type_t cfg_type_dns64 = { "dns64",	    cfg_parse_netprefix_map,
 				     cfg_print_map, cfg_doc_map,
 				     &cfg_rep_map,  dns64_clausesets };
 
+static const char *staleanswerclienttimeout_enums[] = { "disabled", "off",
+							NULL };
+static isc_result_t
+parse_staleanswerclienttimeout(cfg_parser_t *pctx, const cfg_type_t *type,
+			       cfg_obj_t **ret) {
+	return (cfg_parse_enum_or_other(pctx, type, &cfg_type_uint32, ret));
+}
+
+static void
+doc_staleanswerclienttimeout(cfg_printer_t *pctx, const cfg_type_t *type) {
+	cfg_doc_enum_or_other(pctx, type, &cfg_type_uint32);
+}
+
+static cfg_type_t cfg_type_staleanswerclienttimeout = {
+	"staleanswerclienttimeout",
+	parse_staleanswerclienttimeout,
+	cfg_print_ustring,
+	doc_staleanswerclienttimeout,
+	&cfg_rep_string,
+	staleanswerclienttimeout_enums
+};
+
 /*%
  * Clauses that can be found within the 'view' statement,
  * with defaults in the 'options' statement.
@@ -1933,7 +1997,7 @@ static cfg_clausedef_t view_clauses[] = {
 	  CFG_CLAUSEFLAG_OBSOLETE },
 	{ "attach-cache", &cfg_type_astring, 0 },
 	{ "auth-nxdomain", &cfg_type_boolean, CFG_CLAUSEFLAG_NEWDEFAULT },
-	{ "cache-file", &cfg_type_qstring, 0 },
+	{ "cache-file", &cfg_type_qstring, CFG_CLAUSEFLAG_DEPRECATED },
 	{ "catalog-zones", &cfg_type_catz, 0 },
 	{ "check-names", &cfg_type_checknames, CFG_CLAUSEFLAG_MULTI },
 	{ "cleaning-interval", &cfg_type_uint32, CFG_CLAUSEFLAG_OBSOLETE },
@@ -2041,7 +2105,11 @@ static cfg_clausedef_t view_clauses[] = {
 	{ "servfail-ttl", &cfg_type_duration, 0 },
 	{ "sortlist", &cfg_type_bracketed_aml, 0 },
 	{ "stale-answer-enable", &cfg_type_boolean, 0 },
+	{ "stale-answer-client-timeout", &cfg_type_staleanswerclienttimeout,
+	  0 },
 	{ "stale-answer-ttl", &cfg_type_duration, 0 },
+	{ "stale-cache-enable", &cfg_type_boolean, 0 },
+	{ "stale-refresh-time", &cfg_type_duration, 0 },
 	{ "suppress-initial-notify", &cfg_type_boolean, CFG_CLAUSEFLAG_NYI },
 	{ "synth-from-dnssec", &cfg_type_boolean, 0 },
 	{ "topology", &cfg_type_bracketed_aml, CFG_CLAUSEFLAG_ANCIENT },
@@ -2087,10 +2155,13 @@ static cfg_clausedef_t dnssecpolicy_clauses[] = {
 	{ "dnskey-ttl", &cfg_type_duration, 0 },
 	{ "keys", &cfg_type_kaspkeys, 0 },
 	{ "max-zone-ttl", &cfg_type_duration, 0 },
+	{ "nsec3param", &cfg_type_nsec3, 0 },
 	{ "parent-ds-ttl", &cfg_type_duration, 0 },
 	{ "parent-propagation-delay", &cfg_type_duration, 0 },
-	{ "parent-registration-delay", &cfg_type_duration, 0 },
+	{ "parent-registration-delay", &cfg_type_duration,
+	  CFG_CLAUSEFLAG_OBSOLETE },
 	{ "publish-safety", &cfg_type_duration, 0 },
+	{ "purge-keys", &cfg_type_duration, 0 },
 	{ "retire-safety", &cfg_type_duration, 0 },
 	{ "signatures-refresh", &cfg_type_duration, 0 },
 	{ "signatures-validity", &cfg_type_duration, 0 },
@@ -2108,129 +2179,134 @@ static cfg_clausedef_t dnssecpolicy_clauses[] = {
  */
 static cfg_clausedef_t zone_clauses[] = {
 	{ "allow-notify", &cfg_type_bracketed_aml,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "allow-query", &cfg_type_bracketed_aml,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_REDIRECT | CFG_ZONE_STATICSTUB },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_REDIRECT | CFG_ZONE_STATICSTUB },
 	{ "allow-query-on", &cfg_type_bracketed_aml,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_REDIRECT | CFG_ZONE_STATICSTUB },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_REDIRECT | CFG_ZONE_STATICSTUB },
 	{ "allow-transfer", &cfg_type_bracketed_aml,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
-	{ "allow-update", &cfg_type_bracketed_aml, CFG_ZONE_MASTER },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
+	{ "allow-update", &cfg_type_bracketed_aml, CFG_ZONE_PRIMARY },
 	{ "allow-update-forwarding", &cfg_type_bracketed_aml,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "also-notify", &cfg_type_namesockaddrkeylist,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "alt-transfer-source", &cfg_type_sockaddr4wild,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "alt-transfer-source-v6", &cfg_type_sockaddr6wild,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "auto-dnssec", &cfg_type_autodnssec,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
-	{ "check-dup-records", &cfg_type_checkmode, CFG_ZONE_MASTER },
-	{ "check-integrity", &cfg_type_boolean, CFG_ZONE_MASTER },
-	{ "check-mx", &cfg_type_checkmode, CFG_ZONE_MASTER },
-	{ "check-mx-cname", &cfg_type_checkmode, CFG_ZONE_MASTER },
-	{ "check-sibling", &cfg_type_boolean, CFG_ZONE_MASTER },
-	{ "check-spf", &cfg_type_warn, CFG_ZONE_MASTER },
-	{ "check-srv-cname", &cfg_type_checkmode, CFG_ZONE_MASTER },
-	{ "check-wildcard", &cfg_type_boolean, CFG_ZONE_MASTER },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_CLAUSEFLAG_DEPRECATED },
+	{ "check-dup-records", &cfg_type_checkmode, CFG_ZONE_PRIMARY },
+	{ "check-integrity", &cfg_type_boolean, CFG_ZONE_PRIMARY },
+	{ "check-mx", &cfg_type_checkmode, CFG_ZONE_PRIMARY },
+	{ "check-mx-cname", &cfg_type_checkmode, CFG_ZONE_PRIMARY },
+	{ "check-sibling", &cfg_type_boolean, CFG_ZONE_PRIMARY },
+	{ "check-spf", &cfg_type_warn, CFG_ZONE_PRIMARY },
+	{ "check-srv-cname", &cfg_type_checkmode, CFG_ZONE_PRIMARY },
+	{ "check-wildcard", &cfg_type_boolean, CFG_ZONE_PRIMARY },
 	{ "dialup", &cfg_type_dialuptype,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_STUB },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_STUB },
 	{ "dnssec-dnskey-kskonly", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "dnssec-loadkeys-interval", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "dnssec-policy", &cfg_type_astring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
-	{ "dnssec-secure-to-insecure", &cfg_type_boolean, CFG_ZONE_MASTER },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
+	{ "dnssec-secure-to-insecure", &cfg_type_boolean, CFG_ZONE_PRIMARY },
 	{ "dnssec-update-mode", &cfg_type_dnssecupdatemode,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "forward", &cfg_type_forwardtype,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_STUB |
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_STUB |
 		  CFG_ZONE_STATICSTUB | CFG_ZONE_FORWARD },
 	{ "forwarders", &cfg_type_portiplist,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_STUB |
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_STUB |
 		  CFG_ZONE_STATICSTUB | CFG_ZONE_FORWARD },
-	{ "inline-signing", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
 	{ "key-directory", &cfg_type_qstring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "maintain-ixfr-base", &cfg_type_boolean, CFG_CLAUSEFLAG_ANCIENT },
 	{ "masterfile-format", &cfg_type_masterformat,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_REDIRECT },
 	{ "masterfile-style", &cfg_type_masterstyle,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_REDIRECT },
 	{ "max-ixfr-log-size", &cfg_type_size, CFG_CLAUSEFLAG_ANCIENT },
+	{ "max-ixfr-ratio", &cfg_type_ixfrratio,
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "max-journal-size", &cfg_type_size,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "max-records", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_STATICSTUB | CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_STATICSTUB | CFG_ZONE_REDIRECT },
 	{ "max-refresh-time", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "max-retry-time", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "max-transfer-idle-in", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "max-transfer-idle-out", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_MIRROR | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_MIRROR | CFG_ZONE_SECONDARY },
 	{ "max-transfer-time-in", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "max-transfer-time-out", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_MIRROR | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_MIRROR | CFG_ZONE_SECONDARY },
 	{ "max-zone-ttl", &cfg_type_maxduration,
-	  CFG_ZONE_MASTER | CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_REDIRECT },
 	{ "min-refresh-time", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "min-retry-time", &cfg_type_uint32,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "multi-master", &cfg_type_boolean,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "notify", &cfg_type_notifytype,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "notify-delay", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "notify-source", &cfg_type_sockaddr4wild,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "notify-source-v6", &cfg_type_sockaddr6wild,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "notify-to-soa", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "nsec3-test-zone", &cfg_type_boolean,
-	  CFG_CLAUSEFLAG_TESTONLY | CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_CLAUSEFLAG_TESTONLY | CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
+	{ "parental-source", &cfg_type_sockaddr4wild,
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
+	{ "parental-source-v6", &cfg_type_sockaddr6wild,
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "request-expire", &cfg_type_boolean,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
-	{ "request-ixfr", &cfg_type_boolean, CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
-	{ "serial-update-method", &cfg_type_updatemethod, CFG_ZONE_MASTER },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
+	{ "request-ixfr", &cfg_type_boolean,
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
+	{ "serial-update-method", &cfg_type_updatemethod, CFG_ZONE_PRIMARY },
 	{ "sig-signing-nodes", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "sig-signing-signatures", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "sig-signing-type", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "sig-validity-interval", &cfg_type_validityinterval,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "dnskey-sig-validity", &cfg_type_uint32,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "transfer-source", &cfg_type_sockaddr4wild,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "transfer-source-v6", &cfg_type_sockaddr6wild,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "try-tcp-refresh", &cfg_type_boolean,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "update-check-ksk", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "use-alt-transfer-source", &cfg_type_boolean,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
 	{ "zero-no-soa-ttl", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "zone-statistics", &cfg_type_zonestat,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_STATICSTUB | CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_STATICSTUB | CFG_ZONE_REDIRECT },
 	{ NULL, NULL, 0 }
 };
 
@@ -2246,36 +2322,44 @@ static cfg_clausedef_t zone_only_clauses[] = {
 	 * the zone options and the global/view options.  Ugh.
 	 */
 	{ "type", &cfg_type_zonetype,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_STATICSTUB | CFG_ZONE_DELEGATION | CFG_ZONE_HINT |
-		  CFG_ZONE_REDIRECT | CFG_ZONE_FORWARD },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_STATICSTUB | CFG_ZONE_DELEGATION |
+		  CFG_ZONE_HINT | CFG_ZONE_REDIRECT | CFG_ZONE_FORWARD },
 	{ "check-names", &cfg_type_checkmode,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_HINT |
-		  CFG_ZONE_STUB },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_HINT | CFG_ZONE_STUB },
 	{ "database", &cfg_type_astring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB },
 	{ "delegation-only", &cfg_type_boolean,
 	  CFG_ZONE_HINT | CFG_ZONE_STUB | CFG_ZONE_FORWARD },
 	{ "dlz", &cfg_type_astring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_REDIRECT },
 	{ "file", &cfg_type_qstring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
-		  CFG_ZONE_HINT | CFG_ZONE_REDIRECT },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR |
+		  CFG_ZONE_STUB | CFG_ZONE_HINT | CFG_ZONE_REDIRECT },
 	{ "in-view", &cfg_type_astring, CFG_ZONE_INVIEW },
+	{ "inline-signing", &cfg_type_boolean,
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
 	{ "ixfr-base", &cfg_type_qstring, CFG_CLAUSEFLAG_ANCIENT },
 	{ "ixfr-from-differences", &cfg_type_boolean,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "ixfr-tmp-file", &cfg_type_qstring, CFG_CLAUSEFLAG_ANCIENT },
 	{ "journal", &cfg_type_qstring,
-	  CFG_ZONE_MASTER | CFG_ZONE_SLAVE | CFG_ZONE_MIRROR },
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR },
 	{ "masters", &cfg_type_namesockaddrkeylist,
-	  CFG_ZONE_SLAVE | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
+		  CFG_ZONE_REDIRECT },
+	{ "parental-agents", &cfg_type_namesockaddrkeylist,
+	  CFG_ZONE_PRIMARY | CFG_ZONE_SECONDARY },
+	{ "primaries", &cfg_type_namesockaddrkeylist,
+	  CFG_ZONE_SECONDARY | CFG_ZONE_MIRROR | CFG_ZONE_STUB |
 		  CFG_ZONE_REDIRECT },
 	{ "pubkey", &cfg_type_pubkey, CFG_CLAUSEFLAG_ANCIENT },
 	{ "server-addresses", &cfg_type_bracketed_netaddrlist,
 	  CFG_ZONE_STATICSTUB },
 	{ "server-names", &cfg_type_namelist, CFG_ZONE_STATICSTUB },
-	{ "update-policy", &cfg_type_updatepolicy, CFG_ZONE_MASTER },
+	{ "update-policy", &cfg_type_updatepolicy, CFG_ZONE_PRIMARY },
 	{ NULL, NULL, 0 }
 };
 
@@ -2700,6 +2784,28 @@ static cfg_type_t cfg_type_sizeorpercent = {
 };
 
 /*%
+ * An IXFR size ratio: percentage, or "unlimited".
+ */
+
+static isc_result_t
+parse_ixfrratio(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
+	return (cfg_parse_enum_or_other(pctx, type, &cfg_type_percentage, ret));
+}
+
+static void
+doc_ixfrratio(cfg_printer_t *pctx, const cfg_type_t *type) {
+	UNUSED(type);
+	cfg_print_cstr(pctx, "( unlimited | ");
+	cfg_doc_terminal(pctx, &cfg_type_percentage);
+	cfg_print_cstr(pctx, " )");
+}
+
+static const char *ixfrratio_enums[] = { "unlimited", NULL };
+static cfg_type_t cfg_type_ixfrratio = { "ixfr_ratio", parse_ixfrratio,
+					 NULL,	       doc_ixfrratio,
+					 NULL,	       ixfrratio_enums };
+
+/*%
  * optional_keyvalue
  */
 static isc_result_t
@@ -2782,7 +2888,8 @@ static cfg_type_t cfg_type_dialuptype = { "dialuptype",	     parse_dialup_type,
 					  cfg_print_ustring, doc_dialup_type,
 					  &cfg_rep_string,   dialup_enums };
 
-static const char *notify_enums[] = { "explicit", "master-only", NULL };
+static const char *notify_enums[] = { "explicit", "master-only", "primary-only",
+				      NULL };
 static isc_result_t
 parse_notify_type(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 	return (cfg_parse_enum_or_other(pctx, type, &cfg_type_boolean, ret));
@@ -3023,8 +3130,7 @@ parse_querysource(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 	} else if ((*flagp & CFG_ADDR_V6OK) != 0) {
 		isc_netaddr_any6(&netaddr);
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	for (;;) {
@@ -3045,12 +3151,19 @@ parse_querysource(cfg_parser_t *pctx, const cfg_type_t *type, cfg_obj_t **ret) {
 				have_port++;
 			} else if (strcasecmp(TOKEN_STRING(pctx), "dscp") == 0)
 			{
+				if ((pctx->flags & CFG_PCTX_NODEPRECATED) == 0)
+				{
+					cfg_parser_warning(
+						pctx, 0,
+						"token 'dscp' is deprecated");
+				}
 				/* read "dscp" */
 				CHECK(cfg_gettoken(pctx, 0));
 				CHECK(cfg_parse_dscp(pctx, &dscp));
 				have_dscp++;
 			} else if (have_port == 0 && have_dscp == 0 &&
-				   have_address == 0) {
+				   have_address == 0)
+			{
 				return (cfg_parse_sockaddr(pctx, type, ret));
 			} else {
 				cfg_parser_error(pctx, CFG_LOG_NEAR,
@@ -3109,8 +3222,7 @@ doc_querysource(cfg_printer_t *pctx, const cfg_type_t *type) {
 	} else if ((*flagp & CFG_ADDR_V6OK) != 0) {
 		cfg_print_cstr(pctx, "<ipv6_address>");
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	cfg_print_cstr(pctx, " | * ) [ port ( <integer> | * ) ] ) | "
 			     "( [ [ address ] ( ");
@@ -3119,8 +3231,7 @@ doc_querysource(cfg_printer_t *pctx, const cfg_type_t *type) {
 	} else if ((*flagp & CFG_ADDR_V6OK) != 0) {
 		cfg_print_cstr(pctx, "<ipv6_address>");
 	} else {
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 	cfg_print_cstr(pctx, " | * ) ] port ( <integer> | * ) ) )"
 			     " [ dscp <integer> ]");
@@ -3492,7 +3603,7 @@ LIBISCCFG_EXTERNAL_DATA cfg_type_t cfg_type_sessionkey = {
 static cfg_tuplefielddef_t nameport_fields[] = {
 	{ "name", &cfg_type_astring, 0 },
 	{ "port", &cfg_type_optional_port, 0 },
-	{ "dscp", &cfg_type_optional_dscp, 0 },
+	{ "dscp", &cfg_type_optional_dscp, CFG_CLAUSEFLAG_DEPRECATED },
 	{ NULL, NULL, 0 }
 };
 
@@ -3595,14 +3706,14 @@ static cfg_type_t cfg_type_nameportiplist = {
 };
 
 /*%
- * masters element.
+ * primaries element.
  */
 
 static void
-doc_masterselement(cfg_printer_t *pctx, const cfg_type_t *type) {
+doc_remoteselement(cfg_printer_t *pctx, const cfg_type_t *type) {
 	UNUSED(type);
 	cfg_print_cstr(pctx, "( ");
-	cfg_print_cstr(pctx, "<masters>");
+	cfg_print_cstr(pctx, "<remote-servers>");
 	cfg_print_cstr(pctx, " | ");
 	cfg_print_cstr(pctx, "<ipv4_address>");
 	cfg_print_cstr(pctx, " ");
@@ -3615,7 +3726,7 @@ doc_masterselement(cfg_printer_t *pctx, const cfg_type_t *type) {
 }
 
 static isc_result_t
-parse_masterselement(cfg_parser_t *pctx, const cfg_type_t *type,
+parse_remoteselement(cfg_parser_t *pctx, const cfg_type_t *type,
 		     cfg_obj_t **ret) {
 	isc_result_t result;
 	cfg_obj_t *obj = NULL;
@@ -3634,7 +3745,8 @@ parse_masterselement(cfg_parser_t *pctx, const cfg_type_t *type,
 		}
 	} else {
 		cfg_parser_error(pctx, CFG_LOG_NEAR,
-				 "expected IP address or masters name");
+				 "expected IP address or remote servers list "
+				 "name");
 		return (ISC_R_UNEXPECTEDTOKEN);
 	}
 cleanup:
@@ -3642,10 +3754,10 @@ cleanup:
 	return (result);
 }
 
-static cfg_type_t cfg_type_masterselement = { "masters_element",
-					      parse_masterselement,
+static cfg_type_t cfg_type_remoteselement = { "remotes_element",
+					      parse_remoteselement,
 					      NULL,
-					      doc_masterselement,
+					      doc_remoteselement,
 					      NULL,
 					      NULL };
 
@@ -3663,14 +3775,16 @@ cfg_clause_validforzone(const char *name, unsigned int ztype) {
 
 	for (clause = zone_clauses; clause->name != NULL; clause++) {
 		if ((clause->flags & ztype) == 0 ||
-		    strcmp(clause->name, name) != 0) {
+		    strcmp(clause->name, name) != 0)
+		{
 			continue;
 		}
 		valid = true;
 	}
 	for (clause = zone_only_clauses; clause->name != NULL; clause++) {
 		if ((clause->flags & ztype) == 0 ||
-		    strcmp(clause->name, name) != 0) {
+		    strcmp(clause->name, name) != 0)
+		{
 			continue;
 		}
 		valid = true;
@@ -3706,11 +3820,11 @@ cfg_print_zonegrammar(const unsigned int zonetype, unsigned int flags,
 	pctx.indent++;
 
 	switch (zonetype) {
-	case CFG_ZONE_MASTER:
+	case CFG_ZONE_PRIMARY:
 		cfg_print_indent(&pctx);
 		cfg_print_cstr(&pctx, "type ( master | primary );\n");
 		break;
-	case CFG_ZONE_SLAVE:
+	case CFG_ZONE_SECONDARY:
 		cfg_print_indent(&pctx);
 		cfg_print_cstr(&pctx, "type ( slave | secondary );\n");
 		break;
@@ -3746,8 +3860,7 @@ cfg_print_zonegrammar(const unsigned int zonetype, unsigned int flags,
 		/* no zone type is specified for these */
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	for (clause = clauses; clause->name != NULL; clause++) {
@@ -3760,7 +3873,8 @@ cfg_print_zonegrammar(const unsigned int zonetype, unsigned int flags,
 			continue;
 		}
 		if ((clause->flags & zonetype) == 0 ||
-		    strcasecmp(clause->name, "type") == 0) {
+		    strcasecmp(clause->name, "type") == 0)
+		{
 			continue;
 		}
 		cfg_print_indent(&pctx);

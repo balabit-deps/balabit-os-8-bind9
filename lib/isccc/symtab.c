@@ -1,14 +1,18 @@
 /*
- * Portions Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
+ *
+ * SPDX-License-Identifier: MPL-2.0 AND ISC
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
- *
- * Portions Copyright (C) 2001 Nominum, Inc.
+ */
+
+/*
+ * Copyright (C) 2001 Nominum, Inc.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -92,7 +96,7 @@ isccc_symtab_create(unsigned int size,
 	return (ISC_R_SUCCESS);
 }
 
-static inline void
+static void
 free_elt(isccc_symtab_t *symtab, unsigned int bucket, elt_t *elt) {
 	ISC_LIST_UNLINK(symtab->table[bucket], elt, link);
 	if (symtab->undefine_action != NULL) {
@@ -115,7 +119,8 @@ isccc_symtab_destroy(isccc_symtab_t **symtabp) {
 
 	for (i = 0; i < symtab->size; i++) {
 		for (elt = ISC_LIST_HEAD(symtab->table[i]); elt != NULL;
-		     elt = nelt) {
+		     elt = nelt)
+		{
 			nelt = ISC_LIST_NEXT(elt, link);
 			free_elt(symtab, i, elt);
 		}
@@ -125,7 +130,7 @@ isccc_symtab_destroy(isccc_symtab_t **symtabp) {
 	free(symtab);
 }
 
-static inline unsigned int
+static unsigned int
 hash(const char *key, bool case_sensitive) {
 	const char *s;
 	unsigned int h = 0;
@@ -165,14 +170,16 @@ hash(const char *key, bool case_sensitive) {
 	b = hash((k), (s)->case_sensitive) % (s)->size;           \
 	if ((s)->case_sensitive) {                                \
 		for (e = ISC_LIST_HEAD((s)->table[b]); e != NULL; \
-		     e = ISC_LIST_NEXT(e, link)) {                \
+		     e = ISC_LIST_NEXT(e, link))                  \
+		{                                                 \
 			if (((t) == 0 || e->type == (t)) &&       \
 			    strcmp(e->key, (k)) == 0)             \
 				break;                            \
 		}                                                 \
 	} else {                                                  \
 		for (e = ISC_LIST_HEAD((s)->table[b]); e != NULL; \
-		     e = ISC_LIST_NEXT(e, link)) {                \
+		     e = ISC_LIST_NEXT(e, link))                  \
+		{                                                 \
 			if (((t) == 0 || e->type == (t)) &&       \
 			    strcasecmp(e->key, (k)) == 0)         \
 				break;                            \
@@ -275,7 +282,8 @@ isccc_symtab_foreach(isccc_symtab_t *symtab, isccc_symtabforeachaction_t action,
 
 	for (i = 0; i < symtab->size; i++) {
 		for (elt = ISC_LIST_HEAD(symtab->table[i]); elt != NULL;
-		     elt = nelt) {
+		     elt = nelt)
+		{
 			nelt = ISC_LIST_NEXT(elt, link);
 			if ((action)(elt->key, elt->type, elt->value, arg)) {
 				free_elt(symtab, i, elt);

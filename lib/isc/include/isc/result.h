@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -64,7 +66,7 @@
 #define ISC_R_MULTICAST	       43	    /*%< invalid use of multicast */
 #define ISC_R_NOTFILE	       44	    /*%< not a file */
 #define ISC_R_NOTDIRECTORY     45	    /*%< not a directory */
-#define ISC_R_QUEUEFULL	       46	    /*%< queue is full */
+#define ISC_R_EMPTY	       46	    /*%< queue is empty */
 #define ISC_R_FAMILYMISMATCH   47	    /*%< address family mismatch */
 #define ISC_R_FAMILYNOSUPPORT  48	    /*%< AF not supported */
 #define ISC_R_BADHEX	       49	    /*%< bad hex encoding */
@@ -88,9 +90,11 @@
 #define ISC_R_DISCFULL	       67	    /*%< disc full */
 #define ISC_R_DEFAULT	       68	    /*%< default */
 #define ISC_R_IPV4PREFIX       69	    /*%< IPv4 prefix */
+#define ISC_R_TLSERROR	       70	    /*%< TLS error */
+#define ISC_R_HTTP2ALPNERROR   71	    /*%< ALPN for HTTP/2 failed */
 
 /*% Not a result code: the number of results. */
-#define ISC_R_NRESULTS 70
+#define ISC_R_NRESULTS 72
 
 ISC_LANG_BEGINDECLS
 

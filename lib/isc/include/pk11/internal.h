@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -30,8 +32,8 @@ pk11_mem_put(void *ptr, size_t size);
 CK_SLOT_ID
 pk11_get_best_token(pk11_optype_t optype);
 
-unsigned int
-pk11_numbits(CK_BYTE_PTR data, unsigned int bytecnt);
+isc_result_t
+pk11_numbits(CK_BYTE_PTR data, unsigned int bytecnt, unsigned int *bits);
 
 CK_ATTRIBUTE *
 pk11_attribute_first(const pk11_object_t *obj);

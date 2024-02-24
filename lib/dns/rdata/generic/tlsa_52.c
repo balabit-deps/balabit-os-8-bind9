@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -16,7 +18,7 @@
 
 #define RRTYPE_TLSA_ATTRIBUTES 0
 
-static inline isc_result_t
+static isc_result_t
 generic_fromtext_tlsa(ARGS_FROMTEXT) {
 	isc_token_t token;
 
@@ -62,7 +64,7 @@ generic_fromtext_tlsa(ARGS_FROMTEXT) {
 	return (isc_hex_tobuffer(lexer, target, -2));
 }
 
-static inline isc_result_t
+static isc_result_t
 generic_totext_tlsa(ARGS_TOTEXT) {
 	isc_region_t sr;
 	char buf[sizeof("64000 ")];
@@ -117,7 +119,7 @@ generic_totext_tlsa(ARGS_TOTEXT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 generic_fromwire_tlsa(ARGS_FROMWIRE) {
 	isc_region_t sr;
 
@@ -128,7 +130,8 @@ generic_fromwire_tlsa(ARGS_FROMWIRE) {
 
 	isc_buffer_activeregion(source, &sr);
 
-	if (sr.length < 3) {
+	/* Usage(1), Selector(1), Type(1), Data(1+) */
+	if (sr.length < 4) {
 		return (ISC_R_UNEXPECTEDEND);
 	}
 
@@ -136,30 +139,28 @@ generic_fromwire_tlsa(ARGS_FROMWIRE) {
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromtext_tlsa(ARGS_FROMTEXT) {
 	REQUIRE(type == dns_rdatatype_tlsa);
 
-	return (generic_fromtext_tlsa(rdclass, type, lexer, origin, options,
-				      target, callbacks));
+	return (generic_fromtext_tlsa(CALL_FROMTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_tlsa(ARGS_TOTEXT) {
 	REQUIRE(rdata->type == dns_rdatatype_tlsa);
 
-	return (generic_totext_tlsa(rdata, tctx, target));
+	return (generic_totext_tlsa(CALL_TOTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_tlsa(ARGS_FROMWIRE) {
 	REQUIRE(type == dns_rdatatype_tlsa);
 
-	return (generic_fromwire_tlsa(rdclass, type, source, dctx, options,
-				      target));
+	return (generic_fromwire_tlsa(CALL_FROMWIRE));
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_tlsa(ARGS_TOWIRE) {
 	isc_region_t sr;
 
@@ -172,7 +173,7 @@ towire_tlsa(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
-static inline int
+static int
 compare_tlsa(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
@@ -188,7 +189,7 @@ compare_tlsa(ARGS_COMPARE) {
 	return (isc_region_compare(&r1, &r2));
 }
 
-static inline isc_result_t
+static isc_result_t
 generic_fromstruct_tlsa(ARGS_FROMSTRUCT) {
 	dns_rdata_tlsa_t *tlsa = source;
 
@@ -206,7 +207,7 @@ generic_fromstruct_tlsa(ARGS_FROMSTRUCT) {
 	return (mem_tobuffer(target, tlsa->data, tlsa->length));
 }
 
-static inline isc_result_t
+static isc_result_t
 generic_tostruct_tlsa(ARGS_TOSTRUCT) {
 	dns_rdata_tlsa_t *tlsa = target;
 	isc_region_t region;
@@ -238,7 +239,7 @@ generic_tostruct_tlsa(ARGS_TOSTRUCT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline void
+static void
 generic_freestruct_tlsa(ARGS_FREESTRUCT) {
 	dns_rdata_tlsa_t *tlsa = source;
 
@@ -254,14 +255,14 @@ generic_freestruct_tlsa(ARGS_FREESTRUCT) {
 	tlsa->mctx = NULL;
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_tlsa(ARGS_FROMSTRUCT) {
 	REQUIRE(type == dns_rdatatype_tlsa);
 
-	return (generic_fromstruct_tlsa(rdclass, type, source, target));
+	return (generic_fromstruct_tlsa(CALL_FROMSTRUCT));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_tlsa(ARGS_TOSTRUCT) {
 	dns_rdata_tlsa_t *tlsa = target;
 
@@ -272,10 +273,10 @@ tostruct_tlsa(ARGS_TOSTRUCT) {
 	tlsa->common.rdtype = rdata->type;
 	ISC_LINK_INIT(&tlsa->common, link);
 
-	return (generic_tostruct_tlsa(rdata, target, mctx));
+	return (generic_tostruct_tlsa(CALL_TOSTRUCT));
 }
 
-static inline void
+static void
 freestruct_tlsa(ARGS_FREESTRUCT) {
 	dns_rdata_tlsa_t *tlsa = source;
 
@@ -285,7 +286,7 @@ freestruct_tlsa(ARGS_FREESTRUCT) {
 	generic_freestruct_tlsa(source);
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_tlsa(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_tlsa);
 
@@ -296,7 +297,7 @@ additionaldata_tlsa(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_tlsa(ARGS_DIGEST) {
 	isc_region_t r;
 
@@ -307,7 +308,7 @@ digest_tlsa(ARGS_DIGEST) {
 	return ((digest)(arg, &r));
 }
 
-static inline bool
+static bool
 checkowner_tlsa(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_tlsa);
 
@@ -319,7 +320,7 @@ checkowner_tlsa(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_tlsa(ARGS_CHECKNAMES) {
 	REQUIRE(rdata->type == dns_rdatatype_tlsa);
 
@@ -330,7 +331,7 @@ checknames_tlsa(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_tlsa(ARGS_COMPARE) {
 	return (compare_tlsa(rdata1, rdata2));
 }

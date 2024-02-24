@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -100,7 +102,7 @@ main(int argc, char **argv) {
 	CHECK(dst_lib_init(mctx, NULL));
 	dst_active = true;
 
-	CHECK(isc_log_create(mctx, &lctx, &logconfig));
+	isc_log_create(mctx, &lctx, &logconfig);
 	isc_log_registercategories(lctx, categories);
 	isc_log_setcontext(lctx);
 	dns_log_init(lctx);
@@ -110,8 +112,9 @@ main(int argc, char **argv) {
 	destination.file.name = NULL;
 	destination.file.versions = ISC_LOG_ROLLNEVER;
 	destination.file.maximum_size = 0;
-	CHECK(isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
-				    ISC_LOG_DYNAMIC, &destination, 0));
+	isc_log_createchannel(logconfig, "stderr", ISC_LOG_TOFILEDESC,
+			      ISC_LOG_DYNAMIC, &destination, 0);
+
 	CHECK(isc_log_usechannel(logconfig, "stderr", NULL, NULL));
 
 	dns_result_register();

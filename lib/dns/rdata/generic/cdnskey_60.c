@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,31 +20,29 @@
 
 #define RRTYPE_CDNSKEY_ATTRIBUTES 0
 
-static inline isc_result_t
+static isc_result_t
 fromtext_cdnskey(ARGS_FROMTEXT) {
 	REQUIRE(type == dns_rdatatype_cdnskey);
 
-	return (generic_fromtext_key(rdclass, type, lexer, origin, options,
-				     target, callbacks));
+	return (generic_fromtext_key(CALL_FROMTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_cdnskey(ARGS_TOTEXT) {
 	REQUIRE(rdata != NULL);
 	REQUIRE(rdata->type == dns_rdatatype_cdnskey);
 
-	return (generic_totext_key(rdata, tctx, target));
+	return (generic_totext_key(CALL_TOTEXT));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_cdnskey(ARGS_FROMWIRE) {
 	REQUIRE(type == dns_rdatatype_cdnskey);
 
-	return (generic_fromwire_key(rdclass, type, source, dctx, options,
-				     target));
+	return (generic_fromwire_key(CALL_FROMWIRE));
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_cdnskey(ARGS_TOWIRE) {
 	isc_region_t sr;
 
@@ -55,7 +55,7 @@ towire_cdnskey(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, sr.base, sr.length));
 }
 
-static inline int
+static int
 compare_cdnskey(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;
@@ -73,14 +73,14 @@ compare_cdnskey(ARGS_COMPARE) {
 	return (isc_region_compare(&r1, &r2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_cdnskey(ARGS_FROMSTRUCT) {
 	REQUIRE(type == dns_rdatatype_cdnskey);
 
-	return (generic_fromstruct_key(rdclass, type, source, target));
+	return (generic_fromstruct_key(CALL_FROMSTRUCT));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_cdnskey(ARGS_TOSTRUCT) {
 	dns_rdata_cdnskey_t *dnskey = target;
 
@@ -92,10 +92,10 @@ tostruct_cdnskey(ARGS_TOSTRUCT) {
 	dnskey->common.rdtype = rdata->type;
 	ISC_LINK_INIT(&dnskey->common, link);
 
-	return (generic_tostruct_key(rdata, target, mctx));
+	return (generic_tostruct_key(CALL_TOSTRUCT));
 }
 
-static inline void
+static void
 freestruct_cdnskey(ARGS_FREESTRUCT) {
 	dns_rdata_cdnskey_t *dnskey = (dns_rdata_cdnskey_t *)source;
 
@@ -105,7 +105,7 @@ freestruct_cdnskey(ARGS_FREESTRUCT) {
 	generic_freestruct_key(source);
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_cdnskey(ARGS_ADDLDATA) {
 	REQUIRE(rdata->type == dns_rdatatype_cdnskey);
 
@@ -116,7 +116,7 @@ additionaldata_cdnskey(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_cdnskey(ARGS_DIGEST) {
 	isc_region_t r;
 
@@ -128,7 +128,7 @@ digest_cdnskey(ARGS_DIGEST) {
 	return ((digest)(arg, &r));
 }
 
-static inline bool
+static bool
 checkowner_cdnskey(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_cdnskey);
 
@@ -140,7 +140,7 @@ checkowner_cdnskey(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_cdnskey(ARGS_CHECKNAMES) {
 	REQUIRE(rdata != NULL);
 	REQUIRE(rdata->type == dns_rdatatype_cdnskey);
@@ -152,7 +152,7 @@ checknames_cdnskey(ARGS_CHECKNAMES) {
 	return (true);
 }
 
-static inline int
+static int
 casecompare_cdnskey(ARGS_COMPARE) {
 	/*
 	 * Treat ALG 253 (private DNS) subtype name case sensitively.

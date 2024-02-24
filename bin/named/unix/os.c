@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -39,6 +41,7 @@
 #include <isc/result.h>
 #include <isc/strerr.h>
 #include <isc/string.h>
+#include <isc/util.h>
 
 #include <named/globals.h>
 #include <named/main.h>
@@ -378,7 +381,7 @@ all_digits(const char *s) {
 		return (false);
 	}
 	while (*s != '\0') {
-		if (!isdigit((*s) & 0xff)) {
+		if (!isdigit((unsigned char)(*s))) {
 			return (false);
 		}
 		s++;
@@ -414,7 +417,6 @@ named_os_chroot(const char *root) {
 
 void
 named_os_inituserinfo(const char *username) {
-	char strbuf[ISC_STRERRORSIZE];
 	if (username == NULL) {
 		return;
 	}
@@ -431,6 +433,7 @@ named_os_inituserinfo(const char *username) {
 	}
 
 	if (getuid() == 0) {
+		char strbuf[ISC_STRERRORSIZE];
 		if (initgroups(runas_pw->pw_name, runas_pw->pw_gid) < 0) {
 			strerror_r(errno, strbuf, sizeof(strbuf));
 			named_main_earlyfatal("initgroups(): %s", strbuf);
@@ -482,13 +485,15 @@ ns_os_uid(void) {
 
 void
 named_os_adjustnofile(void) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__sun)
 	isc_result_t result;
 	isc_resourcevalue_t newvalue;
 
 	/*
 	 * Linux: max number of open files specified by one thread doesn't seem
 	 * to apply to other threads on Linux.
+	 * Sun: restriction needs to be removed sooner when hundreds of CPUs
+	 * are available.
 	 */
 	newvalue = ISC_RESOURCE_UNLIMITED;
 
@@ -496,7 +501,7 @@ named_os_adjustnofile(void) {
 	if (result != ISC_R_SUCCESS) {
 		named_main_earlywarning("couldn't adjust limit on open files");
 	}
-#endif /* if defined(__linux__) */
+#endif /* if defined(__linux__) || defined(__sun) */
 }
 
 void
@@ -625,6 +630,7 @@ error:
 	return (-1);
 }
 
+#if !HAVE_SYS_CAPABILITY_H
 static void
 setperms(uid_t uid, gid_t gid) {
 #if defined(HAVE_SETEGID) || defined(HAVE_SETRESGID)
@@ -672,6 +678,7 @@ setperms(uid_t uid, gid_t gid) {
 	}
 #endif /* if defined(HAVE_SETEUID) */
 }
+#endif /* HAVE_SYS_CAPABILITY_H */
 
 FILE *
 named_os_openfile(const char *filename, mode_t mode, bool switch_user) {
@@ -696,14 +703,21 @@ named_os_openfile(const char *filename, mode_t mode, bool switch_user) {
 	free(f);
 
 	if (switch_user && runas_pw != NULL) {
+		uid_t olduid = getuid();
 		gid_t oldgid = getgid();
+#if HAVE_SYS_CAPABILITY_H
+		REQUIRE(olduid == runas_pw->pw_uid);
+		REQUIRE(oldgid == runas_pw->pw_gid);
+#else /* HAVE_SYS_CAPABILITY_H */
 		/* Set UID/GID to the one we'll be running with eventually */
 		setperms(runas_pw->pw_uid, runas_pw->pw_gid);
-
+#endif
 		fd = safe_open(filename, mode, false);
 
-		/* Restore UID/GID to root */
-		setperms(0, oldgid);
+#if !HAVE_SYS_CAPABILITY_H
+		/* Restore UID/GID to previous uid/gid */
+		setperms(olduid, oldgid);
+#endif
 
 		if (fd == -1) {
 			fd = safe_open(filename, mode, false);
@@ -869,7 +883,7 @@ named_os_shutdownmsg(char *command, isc_buffer_t *text) {
 	pid_t pid;
 
 	/* Skip the command name. */
-	if ((ptr = strtok_r(command, " \t", &last)) == NULL) {
+	if (strtok_r(command, " \t", &last) == NULL) {
 		return;
 	}
 
@@ -893,8 +907,12 @@ named_os_tzset(void) {
 #endif /* ifdef HAVE_TZSET */
 }
 
-static char unamebuf[BUFSIZ];
-static char *unamep = NULL;
+#ifdef HAVE_UNAME
+static char unamebuf[sizeof(struct utsname)];
+#else
+static const char unamebuf[] = { "unknown architecture" };
+#endif
+static const char *unamep = NULL;
 
 static void
 getuname(void) {
@@ -909,13 +927,11 @@ getuname(void) {
 
 	snprintf(unamebuf, sizeof(unamebuf), "%s %s %s %s", uts.sysname,
 		 uts.machine, uts.release, uts.version);
-#else  /* ifdef HAVE_UNAME */
-	snprintf(unamebuf, sizeof(unamebuf), "unknown architecture");
 #endif /* ifdef HAVE_UNAME */
 	unamep = unamebuf;
 }
 
-char *
+const char *
 named_os_uname(void) {
 	if (unamep == NULL) {
 		getuname();

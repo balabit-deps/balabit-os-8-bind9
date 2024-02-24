@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -211,7 +213,7 @@ dns_dbfind_staleok_test(void **state) {
 		count = 0;
 		do {
 			count++;
-			assert_in_range(count, 0, 20); /* loop sanity */
+			assert_in_range(count, 1, 21); /* loop sanity */
 			assert_int_equal(rdataset.attributes &
 						 DNS_RDATASETATTR_STALE,
 					 0);
@@ -248,7 +250,6 @@ dns_dbfind_staleok_test(void **state) {
 				count++;
 				assert_in_range(count, 0, 49); /* loop sanity */
 				assert_int_equal(result, ISC_R_SUCCESS);
-				assert_int_equal(rdataset.ttl, 0);
 				assert_int_equal(rdataset.attributes &
 							 DNS_RDATASETATTR_STALE,
 						 DNS_RDATASETATTR_STALE);
@@ -262,7 +263,11 @@ dns_dbfind_staleok_test(void **state) {
 					DNS_DBFIND_STALEOK, 0, &node, found,
 					&rdataset, NULL);
 			} while (result == ISC_R_SUCCESS);
-			assert_in_range(count, 1, 10);
+			/*
+			 * usleep(100000) can be slightly less than 10ms so
+			 * allow the count to reach 11.
+			 */
+			assert_in_range(count, 1, 11);
 			assert_int_equal(result, ISC_R_NOTFOUND);
 			break;
 		case 2:
@@ -417,7 +422,7 @@ main(void) {
 int
 main(void) {
 	printf("1..0 # Skipped: cmocka not available\n");
-	return (0);
+	return (SKIPPED_TEST_EXIT_CODE);
 }
 
 #endif /* if HAVE_CMOCKA */

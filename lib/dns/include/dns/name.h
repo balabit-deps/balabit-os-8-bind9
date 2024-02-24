@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -67,6 +69,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+#include <isc/ht.h>
 #include <isc/lang.h>
 #include <isc/magic.h>
 #include <isc/region.h> /* Required for storage size of dns_label_t. */
@@ -107,9 +110,10 @@ struct dns_name {
 	unsigned int   labels;
 	unsigned int   attributes;
 	unsigned char *offsets;
-	isc_buffer_t * buffer;
+	isc_buffer_t  *buffer;
 	ISC_LINK(dns_name_t) link;
 	ISC_LIST(dns_rdataset_t) list;
+	isc_ht_t *ht;
 };
 
 #define DNS_NAME_MAGIC ISC_MAGIC('D', 'N', 'S', 'n')
@@ -165,30 +169,24 @@ LIBDNS_EXTERNAL_DATA extern const dns_name_t *dns_wildcardname;
  *	unsigned char offsets[] = { 0, 6 };
  *	dns_name_t value = DNS_NAME_INITABSOLUTE(data, offsets);
  */
-#define DNS_NAME_INITNONABSOLUTE(A, B)                         \
-	{                                                      \
-		DNS_NAME_MAGIC, A, (sizeof(A) - 1), sizeof(B), \
-			DNS_NAMEATTR_READONLY, B, NULL,        \
-			{ (void *)-1, (void *)-1 }, {          \
-			NULL, NULL                             \
-		}                                              \
+#define DNS_NAME_INITNONABSOLUTE(A, B)                                   \
+	{                                                                \
+		DNS_NAME_MAGIC, A, (sizeof(A) - 1), sizeof(B),           \
+			DNS_NAMEATTR_READONLY, B, NULL,                  \
+			{ (void *)-1, (void *)-1 }, { NULL, NULL }, NULL \
 	}
 
-#define DNS_NAME_INITABSOLUTE(A, B)                                       \
-	{                                                                 \
-		DNS_NAME_MAGIC, A, sizeof(A), sizeof(B),                  \
-			DNS_NAMEATTR_READONLY | DNS_NAMEATTR_ABSOLUTE, B, \
-			NULL, { (void *)-1, (void *)-1 }, {               \
-			NULL, NULL                                        \
-		}                                                         \
+#define DNS_NAME_INITABSOLUTE(A, B)                                            \
+	{                                                                      \
+		DNS_NAME_MAGIC, A, sizeof(A), sizeof(B),                       \
+			DNS_NAMEATTR_READONLY | DNS_NAMEATTR_ABSOLUTE, B,      \
+			NULL, { (void *)-1, (void *)-1 }, { NULL, NULL }, NULL \
 	}
 
-#define DNS_NAME_INITEMPTY                                 \
-	{                                                  \
-		DNS_NAME_MAGIC, NULL, 0, 0, 0, NULL, NULL, \
-			{ (void *)-1, (void *)-1 }, {      \
-			NULL, NULL                         \
-		}                                          \
+#define DNS_NAME_INITEMPTY                                               \
+	{                                                                \
+		DNS_NAME_MAGIC, NULL, 0, 0, 0, NULL, NULL,               \
+			{ (void *)-1, (void *)-1 }, { NULL, NULL }, NULL \
 	}
 
 /*%
@@ -638,7 +636,7 @@ dns_name_clone(const dns_name_t *source, dns_name_t *target);
  * Notes:
  *
  * \li	'target' refers to the same memory as 'source', so 'source'
- *	must not be changed while 'target' is still in use.
+ *	must not be changed or freed while 'target' is still in use.
  *
  * \li	This call is functionally equivalent to:
  *
@@ -1242,21 +1240,16 @@ dns_name_settotextfilter(dns_name_totextfilter_t *proc);
 
 isc_result_t
 dns_name_copy(const dns_name_t *source, dns_name_t *dest, isc_buffer_t *target);
-void
-dns_name_copynf(const dns_name_t *source, dns_name_t *dest);
 /*%<
- * Makes 'dest' refer to a copy of the name in 'source'.  The data are either
- * copied to 'target' or in case of dns_name_copynf the dedicated buffer in
- * 'dest'.
+ * Copies the name in 'source' into 'dest'.  The name data is copied to
+ * the 'target' buffer, which is then set as the buffer for 'dest'.
  *
  * Requires:
  * \li	'source' is a valid name.
  *
- * \li	'dest' is an initialized name with a dedicated buffer.
+ * \li	'dest' is an initialized name.
  *
  * \li	'target' is an initialized buffer.
- *
- * \li	Either dest has a dedicated buffer or target != NULL.
  *
  * Ensures:
  *
@@ -1265,6 +1258,18 @@ dns_name_copynf(const dns_name_t *source, dns_name_t *dest);
  * Returns:
  *\li	#ISC_R_SUCCESS
  *\li	#ISC_R_NOSPACE
+ */
+
+void
+dns_name_copynf(const dns_name_t *source, dns_name_t *dest);
+/*%<
+ * Copies the name in 'source' into 'dest'.  The name data is copied to
+ * the dedicated buffer for 'dest'.
+ *
+ * Requires:
+ * \li	'source' is a valid name.
+ *
+ * \li	'dest' is an initialized name with a dedicated buffer.
  */
 
 bool
@@ -1348,6 +1353,7 @@ ISC_LANG_ENDDECLS
 		_n->buffer = NULL;                \
 		ISC_LINK_INIT(_n, link);          \
 		ISC_LIST_INIT(_n->list);          \
+		_n->ht = NULL;                    \
 	} while (0)
 
 #define DNS_NAME_RESET(n)                                  \
@@ -1375,9 +1381,9 @@ ISC_LANG_ENDDECLS
 
 #define DNS_NAME_SPLIT(n, l, p, s)                                             \
 	do {                                                                   \
-		dns_name_t * _n = (n);                                         \
-		dns_name_t * _p = (p);                                         \
-		dns_name_t * _s = (s);                                         \
+		dns_name_t  *_n = (n);                                         \
+		dns_name_t  *_p = (p);                                         \
+		dns_name_t  *_s = (s);                                         \
 		unsigned int _l = (l);                                         \
 		if (_p != NULL)                                                \
 			dns_name_getlabelsequence(_n, 0, _n->labels - _l, _p); \

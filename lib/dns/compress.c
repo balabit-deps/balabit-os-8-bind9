@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -224,7 +226,7 @@ dns_compress_findglobal(dns_compress_t *cctx, const dns_name_t *name,
 	unsigned char *p;
 
 	REQUIRE(VALID_CCTX(cctx));
-	REQUIRE(dns_name_isabsolute(name) == true);
+	REQUIRE(dns_name_isabsolute(name));
 	REQUIRE(offset != NULL);
 
 	if (ISC_UNLIKELY((cctx->allowed & DNS_COMPRESS_ENABLED) == 0)) {
@@ -257,21 +259,25 @@ dns_compress_findglobal(dns_compress_t *cctx, const dns_name_t *name,
 		ch = p[1];
 		i = tableindex[ch];
 		if (ISC_LIKELY((cctx->allowed & DNS_COMPRESS_CASESENSITIVE) !=
-			       0)) {
+			       0))
+		{
 			for (node = cctx->table[i]; node != NULL;
-			     node = node->next) {
+			     node = node->next)
+			{
 				if (ISC_UNLIKELY(node->name.length != length)) {
 					continue;
 				}
 
 				if (ISC_LIKELY(memcmp(node->name.ndata, p,
-						      length) == 0)) {
+						      length) == 0))
+				{
 					goto found;
 				}
 			}
 		} else {
 			for (node = cctx->table[i]; node != NULL;
-			     node = node->next) {
+			     node = node->next)
+			{
 				unsigned int l, count;
 				unsigned char c;
 				unsigned char *label1, *label2;
@@ -362,7 +368,7 @@ found:
 	return (true);
 }
 
-static inline unsigned int
+static unsigned int
 name_length(const dns_name_t *name) {
 	isc_region_t r;
 	dns_name_toregion(name, &r);

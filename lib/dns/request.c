@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -145,7 +147,6 @@ dns_requestmgr_create(isc_mem_t *mctx, isc_timermgr_t *timermgr,
 		      dns_dispatch_t *dispatchv4, dns_dispatch_t *dispatchv6,
 		      dns_requestmgr_t **requestmgrp) {
 	dns_requestmgr_t *requestmgr;
-	isc_socket_t *sock;
 	int i;
 	unsigned int dispattr;
 
@@ -156,7 +157,7 @@ dns_requestmgr_create(isc_mem_t *mctx, isc_timermgr_t *timermgr,
 	REQUIRE(socketmgr != NULL);
 	REQUIRE(taskmgr != NULL);
 	REQUIRE(dispatchmgr != NULL);
-	UNUSED(sock);
+
 	if (dispatchv4 != NULL) {
 		dispattr = dns_dispatch_getattributes(dispatchv4);
 		REQUIRE((dispattr & DNS_DISPATCHATTR_UDP) != 0);
@@ -412,7 +413,7 @@ mgr_gethash(dns_requestmgr_t *requestmgr) {
 	return (requestmgr->hash % DNS_REQUEST_NLOCKS);
 }
 
-static inline isc_result_t
+static isc_result_t
 req_send(dns_request_t *request, isc_task_t *task,
 	 const isc_sockaddr_t *address) {
 	isc_region_t r;
@@ -899,7 +900,8 @@ dns_request_createvia(dns_requestmgr_t *requestmgr, dns_message_t *message,
 	req_log(ISC_LOG_DEBUG(3), "dns_request_createvia");
 
 	if (srcaddr != NULL &&
-	    isc_sockaddr_pf(srcaddr) != isc_sockaddr_pf(destaddr)) {
+	    isc_sockaddr_pf(srcaddr) != isc_sockaddr_pf(destaddr))
+	{
 		return (ISC_R_FAMILYMISMATCH);
 	}
 
@@ -1296,6 +1298,9 @@ req_connected(isc_task_t *task, isc_event_t *event) {
 
 	req_log(ISC_LOG_DEBUG(3), "req_connected: request %p", request);
 
+	result = sevent->result;
+	isc_event_free(&event);
+
 	LOCK(&request->requestmgr->locks[request->hash]);
 	request->flags &= ~DNS_REQUEST_F_CONNECTING;
 
@@ -1310,7 +1315,6 @@ req_connected(isc_task_t *task, isc_event_t *event) {
 		}
 	} else {
 		dns_dispatch_starttcp(request->dispatch);
-		result = sevent->result;
 		if (result == ISC_R_SUCCESS) {
 			result = req_send(request, task, NULL);
 		}
@@ -1321,13 +1325,13 @@ req_connected(isc_task_t *task, isc_event_t *event) {
 		}
 	}
 	UNLOCK(&request->requestmgr->locks[request->hash]);
-	isc_event_free(&event);
 }
 
 static void
 req_senddone(isc_task_t *task, isc_event_t *event) {
 	isc_socketevent_t *sevent = (isc_socketevent_t *)event;
 	dns_request_t *request = event->ev_arg;
+	isc_result_t result = sevent->result;
 
 	REQUIRE(event->ev_type == ISC_SOCKEVENT_SENDDONE);
 	REQUIRE(VALID_REQUEST(request));
@@ -1336,6 +1340,8 @@ req_senddone(isc_task_t *task, isc_event_t *event) {
 	req_log(ISC_LOG_DEBUG(3), "req_senddone: request %p", request);
 
 	UNUSED(task);
+
+	isc_event_free(&event);
 
 	LOCK(&request->requestmgr->locks[request->hash]);
 	request->flags &= ~DNS_REQUEST_F_SENDING;
@@ -1349,13 +1355,11 @@ req_senddone(isc_task_t *task, isc_event_t *event) {
 		} else {
 			send_if_done(request, ISC_R_CANCELED);
 		}
-	} else if (sevent->result != ISC_R_SUCCESS) {
+	} else if (result != ISC_R_SUCCESS) {
 		req_cancel(request);
 		send_if_done(request, ISC_R_CANCELED);
 	}
 	UNLOCK(&request->requestmgr->locks[request->hash]);
-
-	isc_event_free(&event);
 }
 
 static void
@@ -1405,14 +1409,18 @@ static void
 req_timeout(isc_task_t *task, isc_event_t *event) {
 	dns_request_t *request = event->ev_arg;
 	isc_result_t result;
+	isc_eventtype_t ev_type = event->ev_type;
 
 	REQUIRE(VALID_REQUEST(request));
 
 	req_log(ISC_LOG_DEBUG(3), "req_timeout: request %p", request);
 
 	UNUSED(task);
+
+	isc_event_free(&event);
+
 	LOCK(&request->requestmgr->locks[request->hash]);
-	if (event->ev_type == ISC_TIMEREVENT_TICK && request->udpcount-- != 0) {
+	if (ev_type == ISC_TIMEREVENT_TICK && request->udpcount-- != 0) {
 		if (!DNS_REQUEST_SENDING(request)) {
 			result = req_send(request, task, &request->destaddr);
 			if (result != ISC_R_SUCCESS) {
@@ -1426,7 +1434,6 @@ req_timeout(isc_task_t *task, isc_event_t *event) {
 		send_if_done(request, ISC_R_TIMEDOUT);
 	}
 	UNLOCK(&request->requestmgr->locks[request->hash]);
-	isc_event_free(&event);
 }
 
 static void
@@ -1469,7 +1476,7 @@ req_destroy(dns_request_t *request) {
 		dns_dispatch_detach(&request->dispatch);
 	}
 	if (request->timer != NULL) {
-		isc_timer_detach(&request->timer);
+		isc_timer_destroy(&request->timer);
 	}
 	if (request->tsig != NULL) {
 		isc_buffer_free(&request->tsig);
@@ -1501,7 +1508,7 @@ req_cancel(dns_request_t *request) {
 	request->flags |= DNS_REQUEST_F_CANCELED;
 
 	if (request->timer != NULL) {
-		isc_timer_detach(&request->timer);
+		isc_timer_destroy(&request->timer);
 	}
 	dispattr = dns_dispatch_getattributes(request->dispatch);
 	sock = NULL;

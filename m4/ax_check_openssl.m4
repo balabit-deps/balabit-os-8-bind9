@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: FSFAP
+#
 # ===========================================================================
 #     https://www.gnu.org/software/autoconf-archive/ax_check_openssl.html
 # ===========================================================================
@@ -68,7 +70,7 @@ AC_DEFUN([AX_CHECK_OPENSSL], [
 	    AS_IF([test -f "$ssldir/include/openssl/ssl.h"],
 	        [
 		    OPENSSL_CFLAGS="-I$ssldir/include"
-                    OPENSSL_LIBS="-L$ssldir/lib -lcrypto"
+                    OPENSSL_LIBS="-L$ssldir/lib -lssl -lcrypto"
                     found=true
                     AC_MSG_RESULT([yes])
                     break

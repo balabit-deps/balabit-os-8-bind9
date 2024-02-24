@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -201,7 +203,8 @@ isc__rdatalist_addnoqname(dns_rdataset_t *rdataset, const dns_name_t *name) {
 			continue;
 		}
 		if (rdset->type == dns_rdatatype_nsec ||
-		    rdset->type == dns_rdatatype_nsec3) {
+		    rdset->type == dns_rdatatype_nsec3)
+		{
 			neg = rdset;
 		}
 	}
@@ -213,7 +216,8 @@ isc__rdatalist_addnoqname(dns_rdataset_t *rdataset, const dns_name_t *name) {
 	     rdset = ISC_LIST_NEXT(rdset, link))
 	{
 		if (rdset->type == dns_rdatatype_rrsig &&
-		    rdset->covers == neg->type) {
+		    rdset->covers == neg->type)
+		{
 			negsig = rdset;
 		}
 	}
@@ -273,7 +277,8 @@ isc__rdatalist_getnoqname(dns_rdataset_t *rdataset, dns_name_t *name,
 	     rdataset = ISC_LIST_NEXT(rdataset, link))
 	{
 		if (rdataset->type == dns_rdatatype_rrsig &&
-		    rdataset->covers == tneg->type) {
+		    rdataset->covers == tneg->type)
+		{
 			tnegsig = rdataset;
 		}
 	}
@@ -303,7 +308,8 @@ isc__rdatalist_addclosest(dns_rdataset_t *rdataset, const dns_name_t *name) {
 			continue;
 		}
 		if (rdset->type == dns_rdatatype_nsec ||
-		    rdset->type == dns_rdatatype_nsec3) {
+		    rdset->type == dns_rdatatype_nsec3)
+		{
 			neg = rdset;
 		}
 	}
@@ -315,7 +321,8 @@ isc__rdatalist_addclosest(dns_rdataset_t *rdataset, const dns_name_t *name) {
 	     rdset = ISC_LIST_NEXT(rdset, link))
 	{
 		if (rdset->type == dns_rdatatype_rrsig &&
-		    rdset->covers == neg->type) {
+		    rdset->covers == neg->type)
+		{
 			negsig = rdset;
 		}
 	}
@@ -375,7 +382,8 @@ isc__rdatalist_getclosest(dns_rdataset_t *rdataset, dns_name_t *name,
 	     rdataset = ISC_LIST_NEXT(rdataset, link))
 	{
 		if (rdataset->type == dns_rdatatype_rrsig &&
-		    rdataset->covers == tneg->type) {
+		    rdataset->covers == tneg->type)
+		{
 			tnegsig = rdataset;
 		}
 	}

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -26,13 +28,13 @@ typedef void (*isc_eventdestructor_t)(isc_event_t *);
 #define ISC_EVENT_COMMON(ltype)               \
 	size_t		      ev_size;        \
 	unsigned int	      ev_attributes;  \
-	void *		      ev_tag;         \
+	void		     *ev_tag;         \
 	isc_eventtype_t	      ev_type;        \
 	isc_taskaction_t      ev_action;      \
-	void *		      ev_arg;         \
-	void *		      ev_sender;      \
+	void		     *ev_arg;         \
+	void		     *ev_sender;      \
 	isc_eventdestructor_t ev_destroy;     \
-	void *		      ev_destroy_arg; \
+	void		     *ev_destroy_arg; \
 	ISC_LINK(ltype) ev_link;              \
 	ISC_LINK(ltype) ev_ratelink
 

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -16,7 +18,7 @@
 
 #define RRTYPE_HIP_ATTRIBUTES (0)
 
-static inline isc_result_t
+static isc_result_t
 fromtext_hip(ARGS_FROMTEXT) {
 	isc_token_t token;
 	dns_name_t name;
@@ -115,7 +117,7 @@ fromtext_hip(ARGS_FROMTEXT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 totext_hip(ARGS_TOTEXT) {
 	isc_region_t region;
 	dns_name_t name;
@@ -165,7 +167,9 @@ totext_hip(ARGS_TOTEXT) {
 	region.length = key_len;
 	RETERR(isc_base64_totext(&region, 1, "", target));
 	region.length = length - key_len;
-	RETERR(str_totext(tctx->linebreak, target));
+	if (region.length > 0) {
+		RETERR(str_totext(tctx->linebreak, target));
+	}
 
 	/*
 	 * Rendezvous Servers.
@@ -186,12 +190,13 @@ totext_hip(ARGS_TOTEXT) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 fromwire_hip(ARGS_FROMWIRE) {
 	isc_region_t region, rr;
 	dns_name_t name;
 	uint8_t hit_len;
 	uint16_t key_len;
+	size_t len;
 
 	REQUIRE(type == dns_rdatatype_hip);
 
@@ -214,12 +219,13 @@ fromwire_hip(ARGS_FROMWIRE) {
 		RETERR(DNS_R_FORMERR);
 	}
 	isc_region_consume(&region, 2);
-	if (region.length < (unsigned)(hit_len + key_len)) {
+	len = hit_len + key_len;
+	if (len > region.length) {
 		RETERR(DNS_R_FORMERR);
 	}
 
-	RETERR(mem_tobuffer(target, rr.base, 4 + hit_len + key_len));
-	isc_buffer_forward(source, 4 + hit_len + key_len);
+	RETERR(mem_tobuffer(target, rr.base, 4 + len));
+	isc_buffer_forward(source, 4 + len);
 
 	dns_decompress_setmethods(dctx, DNS_COMPRESS_NONE);
 	while (isc_buffer_activelength(source) > 0) {
@@ -229,7 +235,7 @@ fromwire_hip(ARGS_FROMWIRE) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 towire_hip(ARGS_TOWIRE) {
 	isc_region_t region;
 
@@ -242,7 +248,7 @@ towire_hip(ARGS_TOWIRE) {
 	return (mem_tobuffer(target, region.base, region.length));
 }
 
-static inline int
+static int
 compare_hip(ARGS_COMPARE) {
 	isc_region_t region1;
 	isc_region_t region2;
@@ -258,7 +264,7 @@ compare_hip(ARGS_COMPARE) {
 	return (isc_region_compare(&region1, &region2));
 }
 
-static inline isc_result_t
+static isc_result_t
 fromstruct_hip(ARGS_FROMSTRUCT) {
 	dns_rdata_hip_t *hip = source;
 	dns_rdata_hip_t myhip;
@@ -285,12 +291,14 @@ fromstruct_hip(ARGS_FROMSTRUCT) {
 	myhip = *hip;
 	for (result = dns_rdata_hip_first(&myhip); result == ISC_R_SUCCESS;
 	     result = dns_rdata_hip_next(&myhip))
-		/* empty */;
+	{
+		/* initialize the names */
+	}
 
 	return (mem_tobuffer(target, hip->servers, hip->servers_len));
 }
 
-static inline isc_result_t
+static isc_result_t
 tostruct_hip(ARGS_TOSTRUCT) {
 	isc_region_t region;
 	dns_rdata_hip_t *hip = target;
@@ -355,7 +363,7 @@ cleanup:
 	return (ISC_R_NOMEMORY);
 }
 
-static inline void
+static void
 freestruct_hip(ARGS_FREESTRUCT) {
 	dns_rdata_hip_t *hip = source;
 
@@ -373,7 +381,7 @@ freestruct_hip(ARGS_FREESTRUCT) {
 	hip->mctx = NULL;
 }
 
-static inline isc_result_t
+static isc_result_t
 additionaldata_hip(ARGS_ADDLDATA) {
 	UNUSED(rdata);
 	UNUSED(add);
@@ -384,7 +392,7 @@ additionaldata_hip(ARGS_ADDLDATA) {
 	return (ISC_R_SUCCESS);
 }
 
-static inline isc_result_t
+static isc_result_t
 digest_hip(ARGS_DIGEST) {
 	isc_region_t r;
 
@@ -394,7 +402,7 @@ digest_hip(ARGS_DIGEST) {
 	return ((digest)(arg, &r));
 }
 
-static inline bool
+static bool
 checkowner_hip(ARGS_CHECKOWNER) {
 	REQUIRE(type == dns_rdatatype_hip);
 
@@ -406,7 +414,7 @@ checkowner_hip(ARGS_CHECKOWNER) {
 	return (true);
 }
 
-static inline bool
+static bool
 checknames_hip(ARGS_CHECKNAMES) {
 	REQUIRE(rdata->type == dns_rdatatype_hip);
 
@@ -441,7 +449,7 @@ dns_rdata_hip_next(dns_rdata_hip_t *hip) {
 	dns_name_fromregion(&name, &region);
 	hip->offset += name.length;
 	INSIST(hip->offset <= hip->servers_len);
-	return (ISC_R_SUCCESS);
+	return (hip->offset < hip->servers_len ? ISC_R_SUCCESS : ISC_R_NOMORE);
 }
 
 void
@@ -457,7 +465,7 @@ dns_rdata_hip_current(dns_rdata_hip_t *hip, dns_name_t *name) {
 	INSIST(name->length + hip->offset <= hip->servers_len);
 }
 
-static inline int
+static int
 casecompare_hip(ARGS_COMPARE) {
 	isc_region_t r1;
 	isc_region_t r2;

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -17,7 +19,9 @@
 
 #ifdef HAVE_LMDB
 #include <lmdb.h>
-#endif /* ifdef HAVE_LMDB */
+
+#include <dns/lmdb.h>
+#endif /* HAVE_LMDB */
 
 #include <isc/atomic.h>
 #include <isc/file.h>
@@ -188,6 +192,7 @@ dns_view_create(isc_mem_t *mctx, dns_rdataclass_t rdclass, const char *name,
 	view->transfer_format = dns_one_answer;
 	view->cacheacl = NULL;
 	view->cacheonacl = NULL;
+	view->checknames = false;
 	view->queryacl = NULL;
 	view->queryonacl = NULL;
 	view->recursionacl = NULL;
@@ -314,10 +319,10 @@ cleanup_dynkeys:
 	}
 
 cleanup_weakrefs:
-	isc_refcount_decrement(&view->weakrefs);
+	isc_refcount_decrementz(&view->weakrefs);
 	isc_refcount_destroy(&view->weakrefs);
 
-	isc_refcount_decrement(&view->references);
+	isc_refcount_decrementz(&view->references);
 	isc_refcount_destroy(&view->references);
 
 	if (view->fwdtable != NULL) {
@@ -343,7 +348,7 @@ cleanup_name:
 	return (result);
 }
 
-static inline void
+static void
 destroy(dns_view_t *view) {
 	dns_dns64_t *dns64;
 	dns_dlzdb_t *dlzdb;
@@ -627,7 +632,6 @@ view_flushanddetach(dns_view_t **viewp, bool flush) {
 		dns_zone_t *mkzone = NULL, *rdzone = NULL;
 
 		isc_refcount_destroy(&view->references);
-		LOCK(&view->lock);
 		if (!RESSHUTDOWN(view)) {
 			dns_resolver_shutdown(view->resolver);
 		}
@@ -637,6 +641,7 @@ view_flushanddetach(dns_view_t **viewp, bool flush) {
 		if (!REQSHUTDOWN(view)) {
 			dns_requestmgr_shutdown(view->requestmgr);
 		}
+		LOCK(&view->lock);
 		if (view->zonetable != NULL) {
 			if (view->flush) {
 				dns_zt_flushanddetach(&view->zonetable);
@@ -660,6 +665,9 @@ view_flushanddetach(dns_view_t **viewp, bool flush) {
 		}
 		if (view->catzs != NULL) {
 			dns_catz_catzs_detach(&view->catzs);
+		}
+		if (view->ntatable_priv != NULL) {
+			dns_ntatable_shutdown(view->ntatable_priv);
 		}
 		UNLOCK(&view->lock);
 
@@ -698,7 +706,8 @@ dns_view_dialup(dns_view_t *view) {
 	REQUIRE(DNS_VIEW_VALID(view));
 	REQUIRE(view->zonetable != NULL);
 
-	(void)dns_zt_apply(view->zonetable, false, NULL, dialup, NULL);
+	(void)dns_zt_apply(view->zonetable, isc_rwlocktype_read, false, NULL,
+			   dialup, NULL);
 }
 
 void
@@ -1076,7 +1085,8 @@ db_find:
 			dns_rdataset_disassociate(rdataset);
 		}
 		if (sigrdataset != NULL &&
-		    dns_rdataset_isassociated(sigrdataset)) {
+		    dns_rdataset_isassociated(sigrdataset))
+		{
 			dns_rdataset_disassociate(sigrdataset);
 		}
 		if (node != NULL) {
@@ -1104,7 +1114,8 @@ db_find:
 			if (dns_rdataset_isassociated(&zrdataset)) {
 				dns_rdataset_clone(&zrdataset, rdataset);
 				if (sigrdataset != NULL &&
-				    dns_rdataset_isassociated(&zsigrdataset)) {
+				    dns_rdataset_isassociated(&zsigrdataset))
+				{
 					dns_rdataset_clone(&zsigrdataset,
 							   sigrdataset);
 				}
@@ -1131,7 +1142,8 @@ db_find:
 			dns_rdataset_clone(rdataset, &zrdataset);
 			dns_rdataset_disassociate(rdataset);
 			if (sigrdataset != NULL &&
-			    dns_rdataset_isassociated(sigrdataset)) {
+			    dns_rdataset_isassociated(sigrdataset))
+			{
 				dns_rdataset_clone(sigrdataset, &zsigrdataset);
 				dns_rdataset_disassociate(sigrdataset);
 			}
@@ -1153,7 +1165,8 @@ db_find:
 			dns_rdataset_disassociate(rdataset);
 		}
 		if (sigrdataset != NULL &&
-		    dns_rdataset_isassociated(sigrdataset)) {
+		    dns_rdataset_isassociated(sigrdataset))
+		{
 			dns_rdataset_disassociate(sigrdataset);
 		}
 		if (db != NULL) {
@@ -1250,7 +1263,8 @@ dns_view_simplefind(dns_view_t *view, const dns_name_t *name,
 			dns_rdataset_disassociate(rdataset);
 		}
 		if (sigrdataset != NULL &&
-		    dns_rdataset_isassociated(sigrdataset)) {
+		    dns_rdataset_isassociated(sigrdataset))
+		{
 			dns_rdataset_disassociate(sigrdataset);
 		}
 	} else if (result != ISC_R_SUCCESS && result != DNS_R_GLUE &&
@@ -1262,7 +1276,8 @@ dns_view_simplefind(dns_view_t *view, const dns_name_t *name,
 			dns_rdataset_disassociate(rdataset);
 		}
 		if (sigrdataset != NULL &&
-		    dns_rdataset_isassociated(sigrdataset)) {
+		    dns_rdataset_isassociated(sigrdataset))
+		{
 			dns_rdataset_disassociate(sigrdataset);
 		}
 		result = ISC_R_NOTFOUND;
@@ -1369,7 +1384,8 @@ db_find:
 			dns_rdataset_clone(rdataset, &zrdataset);
 			dns_rdataset_disassociate(rdataset);
 			if (sigrdataset != NULL &&
-			    dns_rdataset_isassociated(sigrdataset)) {
+			    dns_rdataset_isassociated(sigrdataset))
+			{
 				dns_rdataset_clone(sigrdataset, &zsigrdataset);
 				dns_rdataset_disassociate(sigrdataset);
 			}
@@ -1423,7 +1439,8 @@ finish:
 		if (dns_rdataset_isassociated(rdataset)) {
 			dns_rdataset_disassociate(rdataset);
 			if (sigrdataset != NULL &&
-			    dns_rdataset_isassociated(sigrdataset)) {
+			    dns_rdataset_isassociated(sigrdataset))
+			{
 				dns_rdataset_disassociate(sigrdataset);
 			}
 		}
@@ -1433,7 +1450,8 @@ finish:
 		}
 		dns_rdataset_clone(&zrdataset, rdataset);
 		if (sigrdataset != NULL &&
-		    dns_rdataset_isassociated(&zrdataset)) {
+		    dns_rdataset_isassociated(&zrdataset))
+		{
 			dns_rdataset_clone(&zsigrdataset, sigrdataset);
 		}
 	} else if (try_hints) {
@@ -1512,7 +1530,7 @@ dns_viewlist_findzone(dns_viewlist_t *list, const dns_name_t *name,
 	for (view = ISC_LIST_HEAD(*list); view != NULL;
 	     view = ISC_LIST_NEXT(view, link))
 	{
-		if (allclasses == false && view->rdclass != rdclass) {
+		if (!allclasses && view->rdclass != rdclass) {
 			continue;
 		}
 
@@ -1706,7 +1724,7 @@ dns_view_flushnode(dns_view_t *view, const dns_name_t *name, bool tree) {
 isc_result_t
 dns_view_adddelegationonly(dns_view_t *view, const dns_name_t *name) {
 	dns_name_t *item;
-	uint32_t hash;
+	unsigned int hash;
 
 	REQUIRE(DNS_VIEW_VALID(view));
 
@@ -1736,7 +1754,7 @@ dns_view_adddelegationonly(dns_view_t *view, const dns_name_t *name) {
 isc_result_t
 dns_view_excludedelegationonly(dns_view_t *view, const dns_name_t *name) {
 	dns_name_t *item;
-	uint32_t hash;
+	unsigned int hash;
 
 	REQUIRE(DNS_VIEW_VALID(view));
 
@@ -1766,7 +1784,7 @@ dns_view_excludedelegationonly(dns_view_t *view, const dns_name_t *name) {
 bool
 dns_view_isdelegationonly(dns_view_t *view, const dns_name_t *name) {
 	dns_name_t *item;
-	uint32_t hash;
+	unsigned int hash;
 
 	REQUIRE(DNS_VIEW_VALID(view));
 
@@ -1819,7 +1837,7 @@ dns_view_freezezones(dns_view_t *view, bool value) {
 	REQUIRE(DNS_VIEW_VALID(view));
 	REQUIRE(view->zonetable != NULL);
 
-	return (dns_zt_freezezones(view->zonetable, value));
+	return (dns_zt_freezezones(view->zonetable, view, value));
 }
 
 void
@@ -1974,26 +1992,28 @@ dns_view_issecuredomain(dns_view_t *view, const dns_name_t *name,
 
 void
 dns_view_untrust(dns_view_t *view, const dns_name_t *keyname,
-		 dns_rdata_dnskey_t *dnskey) {
+		 const dns_rdata_dnskey_t *dnskey) {
 	isc_result_t result;
 	dns_keytable_t *sr = NULL;
+	dns_rdata_dnskey_t tmpkey;
 
 	REQUIRE(DNS_VIEW_VALID(view));
 	REQUIRE(keyname != NULL);
 	REQUIRE(dnskey != NULL);
-
-	/*
-	 * Clear the revoke bit, if set, so that the key will match what's
-	 * in secroots now.
-	 */
-	dnskey->flags &= ~DNS_KEYFLAG_REVOKE;
 
 	result = dns_view_getsecroots(view, &sr);
 	if (result != ISC_R_SUCCESS) {
 		return;
 	}
 
-	result = dns_keytable_deletekey(sr, keyname, dnskey);
+	/*
+	 * Clear the revoke bit, if set, so that the key will match what's
+	 * in secroots now.
+	 */
+	tmpkey = *dnskey;
+	tmpkey.flags &= ~DNS_KEYFLAG_REVOKE;
+
+	result = dns_keytable_deletekey(sr, keyname, &tmpkey);
 	if (result == ISC_R_SUCCESS) {
 		/*
 		 * If key was found in secroots, then it was a
@@ -2006,6 +2026,88 @@ dns_view_untrust(dns_view_t *view, const dns_name_t *keyname,
 	}
 
 	dns_keytable_detach(&sr);
+}
+
+bool
+dns_view_istrusted(dns_view_t *view, const dns_name_t *keyname,
+		   const dns_rdata_dnskey_t *dnskey) {
+	isc_result_t result;
+	dns_keytable_t *sr = NULL;
+	dns_keynode_t *knode = NULL;
+	bool answer = false;
+	dns_rdataset_t dsset;
+
+	REQUIRE(DNS_VIEW_VALID(view));
+	REQUIRE(keyname != NULL);
+	REQUIRE(dnskey != NULL);
+
+	result = dns_view_getsecroots(view, &sr);
+	if (result != ISC_R_SUCCESS) {
+		return (false);
+	}
+
+	dns_rdataset_init(&dsset);
+	result = dns_keytable_find(sr, keyname, &knode);
+	if (result == ISC_R_SUCCESS) {
+		if (dns_keynode_dsset(knode, &dsset)) {
+			dns_rdata_t rdata = DNS_RDATA_INIT;
+			unsigned char data[4096], digest[DNS_DS_BUFFERSIZE];
+			dns_rdata_dnskey_t tmpkey = *dnskey;
+			dns_rdata_ds_t ds;
+			isc_buffer_t b;
+			dns_rdataclass_t rdclass = tmpkey.common.rdclass;
+
+			/*
+			 * Clear the revoke bit, if set, so that the key
+			 * will match what's in secroots now.
+			 */
+			tmpkey.flags &= ~DNS_KEYFLAG_REVOKE;
+
+			isc_buffer_init(&b, data, sizeof(data));
+			result = dns_rdata_fromstruct(&rdata, rdclass,
+						      dns_rdatatype_dnskey,
+						      &tmpkey, &b);
+			if (result != ISC_R_SUCCESS) {
+				goto finish;
+			}
+
+			result = dns_ds_fromkeyrdata(keyname, &rdata,
+						     DNS_DSDIGEST_SHA256,
+						     digest, &ds);
+			if (result != ISC_R_SUCCESS) {
+				goto finish;
+			}
+
+			dns_rdata_reset(&rdata);
+			isc_buffer_init(&b, data, sizeof(data));
+			result = dns_rdata_fromstruct(
+				&rdata, rdclass, dns_rdatatype_ds, &ds, &b);
+			if (result != ISC_R_SUCCESS) {
+				goto finish;
+			}
+
+			result = dns_rdataset_first(&dsset);
+			while (result == ISC_R_SUCCESS) {
+				dns_rdata_t this = DNS_RDATA_INIT;
+				dns_rdataset_current(&dsset, &this);
+				if (dns_rdata_compare(&rdata, &this) == 0) {
+					answer = true;
+					break;
+				}
+				result = dns_rdataset_next(&dsset);
+			}
+		}
+	}
+
+finish:
+	if (dns_rdataset_isassociated(&dsset)) {
+		dns_rdataset_disassociate(&dsset);
+	}
+	if (knode != NULL) {
+		dns_keytable_detachkeynode(sr, &knode);
+	}
+	dns_keytable_detach(&sr);
+	return (answer);
 }
 
 /*
@@ -2420,7 +2522,8 @@ dns_view_loadnta(dns_view_t *view) {
 
 		CHECK(isc_lex_gettoken(lex, options, &token));
 		if (token.type != isc_tokentype_eol &&
-		    token.type != isc_tokentype_eof) {
+		    token.type != isc_tokentype_eof)
+		{
 			CHECK(ISC_R_UNEXPECTEDTOKEN);
 		}
 
@@ -2454,25 +2557,37 @@ cleanup:
 
 void
 dns_view_setviewcommit(dns_view_t *view) {
+	dns_zone_t *redirect = NULL, *managed_keys = NULL;
+
 	REQUIRE(DNS_VIEW_VALID(view));
 
 	LOCK(&view->lock);
 
 	if (view->redirect != NULL) {
-		dns_zone_setviewcommit(view->redirect);
+		dns_zone_attach(view->redirect, &redirect);
 	}
 	if (view->managed_keys != NULL) {
-		dns_zone_setviewcommit(view->managed_keys);
+		dns_zone_attach(view->managed_keys, &managed_keys);
 	}
 	if (view->zonetable != NULL) {
 		dns_zt_setviewcommit(view->zonetable);
 	}
 
 	UNLOCK(&view->lock);
+
+	if (redirect != NULL) {
+		dns_zone_setviewcommit(redirect);
+		dns_zone_detach(&redirect);
+	}
+	if (managed_keys != NULL) {
+		dns_zone_setviewcommit(managed_keys);
+		dns_zone_detach(&managed_keys);
+	}
 }
 
 void
 dns_view_setviewrevert(dns_view_t *view) {
+	dns_zone_t *redirect = NULL, *managed_keys = NULL;
 	dns_zt_t *zonetable;
 
 	REQUIRE(DNS_VIEW_VALID(view));
@@ -2483,15 +2598,45 @@ dns_view_setviewrevert(dns_view_t *view) {
 	 */
 	LOCK(&view->lock);
 	if (view->redirect != NULL) {
-		dns_zone_setviewrevert(view->redirect);
+		dns_zone_attach(view->redirect, &redirect);
 	}
 	if (view->managed_keys != NULL) {
-		dns_zone_setviewrevert(view->managed_keys);
+		dns_zone_attach(view->managed_keys, &managed_keys);
 	}
 	zonetable = view->zonetable;
 	UNLOCK(&view->lock);
 
+	if (redirect != NULL) {
+		dns_zone_setviewrevert(redirect);
+		dns_zone_detach(&redirect);
+	}
+	if (managed_keys != NULL) {
+		dns_zone_setviewrevert(managed_keys);
+		dns_zone_detach(&managed_keys);
+	}
 	if (zonetable != NULL) {
 		dns_zt_setviewrevert(zonetable);
 	}
+}
+
+bool
+dns_view_staleanswerenabled(dns_view_t *view) {
+	uint32_t stale_ttl = 0;
+	bool result = false;
+
+	REQUIRE(DNS_VIEW_VALID(view));
+
+	if (dns_db_getservestalettl(view->cachedb, &stale_ttl) != ISC_R_SUCCESS)
+	{
+		return (false);
+	}
+	if (stale_ttl > 0) {
+		if (view->staleanswersok == dns_stale_answer_yes) {
+			result = true;
+		} else if (view->staleanswersok == dns_stale_answer_conf) {
+			result = view->staleanswersenable;
+		}
+	}
+
+	return (result);
 }

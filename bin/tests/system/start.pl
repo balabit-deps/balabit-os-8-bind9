@@ -1,10 +1,12 @@
 #!/usr/bin/perl -w
-#
+
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -23,7 +25,7 @@ use Getopt::Long;
 use Time::HiRes 'sleep'; # allows sleeping fractional seconds
 
 # Usage:
-#   perl start.pl [--noclean] [--restart] [--port port] test [server [options]]
+#   perl start.pl [--noclean] [--restart] [--port port] [--taskset cpus] test [server [options]]
 #
 #   --noclean       Do not cleanup files in server directory.
 #
@@ -37,6 +39,10 @@ use Time::HiRes 'sleep'; # allows sleeping fractional seconds
 #                   "named" nameservers, this can be overridden by the presence
 #                   of the file "named.port" in the server directory containing
 #                   the number of the query port.)
+#
+#   --taskset cpus  Use taskset to signal which cpus can be used. For example
+#                   cpus=fff0 means all cpus aexcept for 0, 1, 2, and 3 are
+#                   eligible.
 #
 #   test            Name of the test directory.
 #
@@ -57,15 +63,17 @@ use Time::HiRes 'sleep'; # allows sleeping fractional seconds
 #                   the file is ignored). If "options" is already set, then
 #                   "named.args" is ignored.
 
-my $usage = "usage: $0 [--noclean] [--restart] [--port <port>] test-directory [server-directory [server-options]]";
+my $usage = "usage: $0 [--noclean] [--restart] [--port <port>] [--taskset <cpus>] test-directory [server-directory [server-options]]";
 my $clean = 1;
 my $restart = 0;
 my $queryport = 5300;
+my $taskset = "";
 
 GetOptions(
-	'clean!'   => \$clean,
-	'restart!' => \$restart,
-	'port=i'   => \$queryport,
+	'clean!'    => \$clean,
+	'restart!'  => \$restart,
+	'port=i'    => \$queryport,
+	'taskset=s' => \$taskset,
 ) or die "$usage\n";
 
 my( $test, $server_arg, $options_arg ) = @ARGV;
@@ -118,9 +126,10 @@ if ($server_arg) {
 # Start the servers we found.
 
 foreach my $name(@ns) {
+	my $instances_so_far = count_running_lines($name);
 	&check_ns_port($name);
 	&start_ns_server($name, $options_arg);
-	&verify_ns_server($name);
+	&verify_ns_server($name, $instances_so_far);
 }
 
 foreach my $name(@ans) {
@@ -203,7 +212,7 @@ sub start_server {
 		if (++$tries > 140) {
 			print "I:$test:Couldn't start server $command (pid=$child)\n";
 			print "I:$test:failed\n";
-			system "kill -9 $child" if ("$child" ne "");
+			kill "ABRT", $child if ("$child" ne "");
 			chdir "$testdir";
 			system "$PERL $topdir/stop.pl $test";
 			exit 1;
@@ -220,16 +229,11 @@ sub construct_ns_command {
 
 	my $command;
 
-	if ($ENV{'USE_VALGRIND'}) {
-		$command = "valgrind -q --gen-suppressions=all --num-callers=48 --fullpath-after= --log-file=named-$server-valgrind-%p.log ";
-
-		if ($ENV{'USE_VALGRIND'} eq 'helgrind') {
-			$command .= "--tool=helgrind ";
-		} else {
-			$command .= "--tool=memcheck --track-origins=yes --leak-check=full ";
-		}
-
-		$command .= "$NAMED -m none -M external ";
+	if ($taskset) {
+		$command = "taskset $taskset $NAMED ";
+	} elsif ($ENV{'USE_RR'}) {
+		$ENV{'_RR_TRACE_DIR'} = ".";
+		$command = "rr record --chaos $NAMED ";
 	} else {
 		$command = "$NAMED ";
 	}
@@ -267,7 +271,7 @@ sub construct_ns_command {
 			}
 		}
 
-		$command .= "-c named.conf -d 99 -g -U 4";
+		$command .= "-c named.conf -d 99 -g -U 4 -T maxcachesize=2097152";
 	}
 
 	if (-e "$testdir/$server/named.notcp") {
@@ -333,7 +337,7 @@ sub construct_ans_command {
 	if ($restart) {
 		$command .= " >>ans.run 2>&1 &";
 	} else {
-			$command .= " >ans.run 2>&1 &";
+		$command .= " >ans.run 2>&1 &";
 	}
 
 	# get the shell to report the pid of the server ($!)
@@ -360,24 +364,28 @@ sub start_ans_server {
 	start_server($server, $command, $pid_file);
 }
 
-sub verify_ns_server {
+sub count_running_lines {
 	my ( $server ) = @_;
-
-	my $tries = 0;
 
 	my $runfile = "$testdir/$server/named.run";
 
-	while (1) {
-		# the shell *ought* to have created the file immediately, but this
-		# logic allows the creation to be delayed without issues
-		if (open(my $fh, "<", $runfile)) {
-			# the two non-whitespace blobs should be the date and time
-			# but we don't care about them really, only that they are there
-			if (grep /^\S+ \S+ running\R/, <$fh>) {
-				last;
-			}
-		}
+	# the shell *ought* to have created the file immediately, but this
+	# logic allows the creation to be delayed without issues
+	if (open(my $fh, "<", $runfile)) {
+		# the two non-whitespace blobs should be the date and time
+		# but we don't care about them really, only that they are there
+		return scalar(grep /^\S+ \S+ running\R/, <$fh>);
+	} else {
+		return 0;
+	}
+}
 
+sub verify_ns_server {
+	my ( $server, $instances_so_far ) = @_;
+
+	my $tries = 0;
+
+	while (count_running_lines($server) < $instances_so_far + 1) {
 		$tries++;
 
 		if ($tries >= 30) {
@@ -408,8 +416,13 @@ sub verify_ns_server {
 		$tcp = "";
 	}
 
+	my $ip = "10.53.0.$n";
+	if (-e "$testdir/$server/named.ipv6-only") {
+		$ip = "fd92:7065:b8e:ffff::$n";
+	}
+
 	while (1) {
-		my $return = system("$DIG $tcp +noadd +nosea +nostat +noquest +nocomm +nocmd +noedns -p $port version.bind. chaos txt \@10.53.0.$n > /dev/null");
+		my $return = system("$DIG $tcp +noadd +nosea +nostat +noquest +nocomm +nocmd +noedns -p $port version.bind. chaos txt \@$ip > /dev/null");
 
 		last if ($return == 0);
 

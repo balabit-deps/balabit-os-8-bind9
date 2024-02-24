@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -238,7 +240,7 @@ maybe_destroy_httpd(isc_httpd_t *httpd) {
 	}
 }
 
-static inline void
+static void
 free_buffer(isc_mem_t *mctx, isc_buffer_t *buffer) {
 	isc_region_t r;
 
@@ -246,6 +248,8 @@ free_buffer(isc_mem_t *mctx, isc_buffer_t *buffer) {
 	if (r.length > 0) {
 		isc_mem_put(mctx, r.base, r.length);
 	}
+
+	isc_buffer_initnull(buffer);
 }
 
 static void
@@ -284,7 +288,7 @@ destroy_httpd(isc_httpd_t *httpd) {
 	isc_httpdmgr_detach(&httpdmgr);
 }
 
-static inline isc_result_t
+static isc_result_t
 httpdmgr_socket_accept(isc_task_t *task, isc_httpdmgr_t *httpdmgr) {
 	isc_result_t result = ISC_R_SUCCESS;
 
@@ -298,7 +302,7 @@ httpdmgr_socket_accept(isc_task_t *task, isc_httpdmgr_t *httpdmgr) {
 	return (result);
 }
 
-static inline void
+static void
 httpd_socket_recv(isc_httpd_t *httpd, isc_region_t *region, isc_task_t *task) {
 	isc_result_t result = ISC_R_SUCCESS;
 
@@ -311,7 +315,7 @@ httpd_socket_recv(isc_httpd_t *httpd, isc_region_t *region, isc_task_t *task) {
 	}
 }
 
-static inline void
+static void
 httpd_socket_send(isc_httpd_t *httpd, isc_region_t *region, isc_task_t *task) {
 	isc_result_t result = ISC_R_SUCCESS;
 
@@ -381,7 +385,7 @@ isc_httpdmgr_create(isc_mem_t *mctx, isc_socket_t *sock, isc_task_t *task,
 
 cleanup:
 	httpdmgr->magic = 0;
-	isc_refcount_decrement(&httpdmgr->references);
+	isc_refcount_decrementz(&httpdmgr->references);
 	isc_refcount_destroy(&httpdmgr->references);
 	isc_task_detach(&httpdmgr->task);
 	isc_socket_detach(&httpdmgr->sock);
@@ -650,7 +654,8 @@ process_request(isc_httpd_t *httpd, int length) {
 	 * HTTP/1.0 or HTTP/1.1 for now.
 	 */
 	while (LENGTHOK(s) && BUFLENOK(s) &&
-	       (*s != '\n' && *s != '\r' && *s != '\0')) {
+	       (*s != '\n' && *s != '\r' && *s != '\0'))
+	{
 		s++;
 	}
 	if (!LENGTHOK(s)) {
@@ -667,7 +672,8 @@ process_request(isc_httpd_t *httpd, int length) {
 	}
 	*s = 0;
 	if ((strncmp(p, "HTTP/1.0", 8) != 0) &&
-	    (strncmp(p, "HTTP/1.1", 8) != 0)) {
+	    (strncmp(p, "HTTP/1.1", 8) != 0))
+	{
 		return (ISC_R_RANGE);
 	}
 	httpd->protocol = p;
@@ -910,6 +916,7 @@ isc_httpd_compress(isc_httpd_t *httpd) {
 	if (result != ISC_R_SUCCESS) {
 		return (result);
 	}
+	isc_buffer_clear(&httpd->compbuffer);
 	isc_buffer_region(&httpd->compbuffer, &r);
 
 	/*
@@ -1041,7 +1048,7 @@ isc_httpd_recvdone(isc_task_t *task, isc_event_t *ev) {
 
 	isc_httpd_addheader(httpd, "Server: libisc", NULL);
 
-	if (is_compressed == true) {
+	if (is_compressed) {
 		isc_httpd_addheader(httpd, "Content-Encoding", "deflate");
 		isc_httpd_addheaderuint(
 			httpd, "Content-Length",

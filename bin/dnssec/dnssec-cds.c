@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -635,7 +637,8 @@ matching_sigs(keyinfo_t *keytbl, dns_rdataset_t *rdataset,
 						   NULL);
 
 			if (result != ISC_R_SUCCESS &&
-			    result != DNS_R_FROMWILDCARD) {
+			    result != DNS_R_FROMWILDCARD)
+			{
 				vbprintf(1,
 					 "skip RRSIG by key %d:"
 					 " verification failed: %s\n",
@@ -754,6 +757,8 @@ ds_from_cds(dns_rdatalist_t *dslist, isc_buffer_t *buf, dns_rdata_t *cds) {
 	dns_rdata_ds_t ds;
 	dns_rdata_t *rdata;
 
+	REQUIRE(buf != NULL);
+
 	rdata = rdata_get();
 
 	result = dns_rdata_tostruct(cds, &ds, NULL);
@@ -771,6 +776,8 @@ ds_from_cdnskey(dns_rdatalist_t *dslist, isc_buffer_t *buf,
 		dns_rdata_t *cdnskey) {
 	isc_result_t result;
 	unsigned i, n;
+
+	REQUIRE(buf != NULL);
 
 	n = sizeof(dtype) / sizeof(dtype[0]);
 	for (i = 0; i < n; i++) {
@@ -847,7 +854,7 @@ make_new_ds_set(ds_maker_func_t *ds_from_rdata, uint32_t ttl,
 	}
 }
 
-static inline int
+static int
 rdata_cmp(const void *rdata1, const void *rdata2) {
 	return (dns_rdata_compare((const dns_rdata_t *)rdata1,
 				  (const dns_rdata_t *)rdata2));
@@ -1091,7 +1098,8 @@ main(int argc, char *argv[]) {
 			 * so that it works just like sed(1).
 			 */
 			if (isc_commandline_argument ==
-			    argv[isc_commandline_index - 1]) {
+			    argv[isc_commandline_index - 1])
+			{
 				isc_commandline_index--;
 				inplace = "";
 			} else {
@@ -1183,7 +1191,8 @@ main(int argc, char *argv[]) {
 		fatal("missing RRSIG CDNSKEY records for %s", namestr);
 	}
 	if (dns_rdataset_isassociated(&cds_set) &&
-	    !dns_rdataset_isassociated(&cds_sig)) {
+	    !dns_rdataset_isassociated(&cds_sig))
+	{
 		fatal("missing RRSIG CDS records for %s", namestr);
 	}
 
@@ -1205,7 +1214,8 @@ main(int argc, char *argv[]) {
 	if (dns_rdataset_isassociated(&cdnskey_set)) {
 		vbprintf(1, "verify CDNSKEY signature(s)\n");
 		if (!signed_loose(matching_sigs(old_key_tbl, &cdnskey_set,
-						&cdnskey_sig))) {
+						&cdnskey_sig)))
+		{
 			fatal("could not validate child CDNSKEY RRset for %s",
 			      namestr);
 		}
@@ -1213,7 +1223,8 @@ main(int argc, char *argv[]) {
 	if (dns_rdataset_isassociated(&cds_set)) {
 		vbprintf(1, "verify CDS signature(s)\n");
 		if (!signed_loose(
-			    matching_sigs(old_key_tbl, &cds_set, &cds_sig))) {
+			    matching_sigs(old_key_tbl, &cds_set, &cds_sig)))
+		{
 			fatal("could not validate child CDS RRset for %s",
 			      namestr);
 		}

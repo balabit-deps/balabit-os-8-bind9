@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -75,9 +77,9 @@ struct ns_interface {
 	isc_sockaddr_t	   addr;       /*%< Address and port. */
 	unsigned int	   flags;      /*%< Interface flags */
 	char		   name[32];   /*%< Null terminated. */
-	dns_dispatch_t *   udpdispatch[MAX_UDP_DISPATCH];
+	dns_dispatch_t	  *udpdispatch[MAX_UDP_DISPATCH];
 	/*%< UDP dispatchers. */
-	isc_socket_t *	tcpsocket; /*%< TCP socket. */
+	isc_socket_t   *tcpsocket; /*%< TCP socket. */
 	isc_nmsocket_t *udplistensocket;
 	isc_nmsocket_t *tcplistensocket;
 	isc_dscp_t	dscp;	       /*%< "listen-on" DSCP value */
@@ -147,20 +149,6 @@ ns_interfacemgr_scan(ns_interfacemgr_t *mgr, bool verbose);
  * in named.conf.
  */
 
-isc_result_t
-ns_interfacemgr_adjust(ns_interfacemgr_t *mgr, ns_listenlist_t *list,
-		       bool verbose);
-/*%<
- * Similar to ns_interfacemgr_scan(), but this function also tries to see the
- * need for an explicit listen-on when a list element in 'list' is going to
- * override an already-listening a wildcard interface.
- *
- * This function does not update localhost and localnets ACLs.
- *
- * This should be called once on server startup, after configuring views and
- * zones.
- */
-
 void
 ns_interfacemgr_setlistenon4(ns_interfacemgr_t *mgr, ns_listenlist_t *value);
 /*%<
@@ -196,6 +184,12 @@ ns_interfacemgr_dumprecursing(FILE *f, ns_interfacemgr_t *mgr);
 
 bool
 ns_interfacemgr_listeningon(ns_interfacemgr_t *mgr, const isc_sockaddr_t *addr);
+
+ns_server_t *
+ns_interfacemgr_getserver(ns_interfacemgr_t *mgr);
+/*%<
+ * Returns the ns_server object associated with the interface manager.
+ */
 
 ns_interface_t *
 ns__interfacemgr_getif(ns_interfacemgr_t *mgr);

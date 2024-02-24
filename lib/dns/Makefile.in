@@ -1,8 +1,10 @@
 # Copyright (C) Internet Systems Consortium, Inc. ("ISC")
 #
+# SPDX-License-Identifier: MPL-2.0
+#
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0.  If a copy of the MPL was not distributed with this
+# file, you can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
@@ -20,28 +22,27 @@ VERSION=@BIND9_VERSION@
 
 @LIBDNS_MAPAPI@
 
-@LIBDNS_API@
-
 @BIND9_MAKE_INCLUDES@
-
-USE_ISC_SPNEGO = @USE_ISC_SPNEGO@
 
 CINCLUDES =	-I. -I${top_srcdir}/lib/dns -Iinclude ${DNS_INCLUDES} \
 		${ISC_INCLUDES} \
+		${FSTRM_CFLAGS} \
 		${OPENSSL_CFLAGS} @DST_GSSAPI_INC@ \
+		${PROTOBUF_C_CFLAGS} \
 		${JSON_C_CFLAGS} \
 		${LIBXML2_CFLAGS} \
+		${LMDB_CFLAGS} \
 		${MAXMINDDB_CFLAGS}
 
-CDEFINES =	@USE_GSSAPI@ ${USE_ISC_SPNEGO}
+CDEFINES =	@USE_GSSAPI@
 
 CWARNINGS =
 
-ISCLIBS =	../../lib/isc/libisc.@A@ ${OPENSSL_LIBS} ${JSON_C_LIBS} ${LIBXML2_LIBS} ${ZLIB_LIBS}
+ISCLIBS =	../../lib/isc/libisc.@A@ @NO_LIBTOOL_ISCLIBS@
 
 ISCDEPLIBS =	../../lib/isc/libisc.@A@
 
-LIBS =		${MAXMINDDB_LIBS} @LIBS@
+LIBS =		${FSTRM_LIBS} ${MAXMINDDB_LIBS} ${LMDB_LIBS} ${PROTOBUF_C_LIBS} @LIBS@
 
 # Alphabetically
 
@@ -83,7 +84,7 @@ PORTDNSOBJS =	client.@O@ ecdb.@O@
 OBJS=		@DNSTAPOBJS@ ${DNSOBJS} ${OTHEROBJS} ${DSTOBJS} \
 		${PORTDNSOBJS} @GEOIP2LINKOBJS@
 
-DSTSRCS =	@DST_EXTRA_SRCS@ @PKCS11LINKSRCS@ \
+DSTSRCS =	@DST_EXTRA_SRCS@ \
 		dst_api.c dst_parse.c \
 		dst_result.c gssapi_link.c gssapictx.c hmac_link.c \
 		openssl_link.c openssldh_link.c \
@@ -96,7 +97,7 @@ GEOIPL2INKSRCS = geoip2.c
 
 DNSTAPSRCS = dnstap.c dnstap.pb-c.c
 
-DNSSRCS =	acl.c adb.c badcache. byaddr.c \
+DNSSRCS =	acl.c adb.c badcache.c byaddr.c \
 		cache.c callbacks.c clientinfo.c compress.c \
 		db.c dbiterator.c dbtable.c diff.c dispatch.c \
 		dlz.c dns64.c dnsrps.c dnssec.c ds.c dyndb.c \
@@ -134,9 +135,6 @@ version.@O@: version.c
 		-DVERSION=\"${VERSION}\" \
 		-DMAJOR=\"${MAJOR}\" \
 		-DMAPAPI=\"${MAPAPI}\" \
-		-DLIBINTERFACE=${LIBINTERFACE} \
-		-DLIBREVISION=${LIBREVISION} \
-		-DLIBAGE=${LIBAGE} \
 		-c ${srcdir}/version.c
 
 libdns.@SA@: ${OBJS}
@@ -146,7 +144,7 @@ libdns.@SA@: ${OBJS}
 libdns.la: ${OBJS}
 	${LIBTOOL_MODE_LINK} \
 		${CC} ${ALL_CFLAGS} ${LDFLAGS} -o libdns.la -rpath ${libdir} \
-		-version-info ${LIBINTERFACE}:${LIBREVISION}:${LIBAGE} \
+		-release "${VERSION}" \
 		${OBJS} ${ISCLIBS} @DNS_CRYPTO_LIBS@ ${LIBS}
 
 include: gen
@@ -204,7 +202,7 @@ newrr::
 
 rdata.@O@: include
 
-depend: include
+depend: include @DNSTAPSRCS@
 subdirs: include
 ${OBJS}: include
 
@@ -215,5 +213,3 @@ dnstap.pb-c.c dnstap.pb-c.h: dnstap.proto
 	$(PROTOC_C) --c_out=. --proto_path ${srcdir} dnstap.proto
 
 dnstap.pb-c.@O@: dnstap.pb-c.c
-
-spnego.@O@: spnego_asn1.c spnego.h

@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -44,11 +46,9 @@ typedef struct isc_counter isc_counter_t;		  /*%< Counter */
 typedef int16_t		   isc_dscp_t;	       /*%< Diffserv code point */
 typedef struct isc_event   isc_event_t;	       /*%< Event */
 typedef ISC_LIST(isc_event_t) isc_eventlist_t; /*%< Event List */
-typedef unsigned int	isc_eventtype_t;       /*%< Event Type */
-typedef uint32_t	isc_fsaccess_t;	       /*%< FS Access */
-typedef struct isc_hash isc_hash_t;	       /*%< Hash */
-typedef struct isc_hp	isc_hp_t;	       /*%< Hazard
-						*   pointer */
+typedef unsigned int	 isc_eventtype_t;      /*%< Event Type */
+typedef uint32_t	 isc_fsaccess_t;       /*%< FS Access */
+typedef struct isc_hash	 isc_hash_t;	       /*%< Hash */
 typedef struct isc_httpd isc_httpd_t;	       /*%< HTTP client */
 typedef void(isc_httpdfree_t)(isc_buffer_t *, void *); /*%< HTTP free function
 							*/
@@ -68,22 +68,21 @@ typedef struct isc_mempool	 isc_mempool_t;	      /*%< Memory Pool */
 typedef struct isc_netaddr	 isc_netaddr_t;	      /*%< Net Address */
 typedef struct isc_nm		 isc_nm_t;	      /*%< Network manager */
 typedef struct isc_nmsocket	 isc_nmsocket_t; /*%< Network manager socket */
-typedef struct isc_nmiface  isc_nmiface_t;  /*%< Network manager interface.  */
-typedef struct isc_nmhandle isc_nmhandle_t; /*%< Network manager handle */
-typedef struct isc_portset  isc_portset_t;  /*%< Port Set */
-typedef struct isc_quota    isc_quota_t;    /*%< Quota */
-typedef struct isc_ratelimiter isc_ratelimiter_t;    /*%< Rate Limiter */
-typedef struct isc_region      isc_region_t;	     /*%< Region */
-typedef uint64_t	       isc_resourcevalue_t;  /*%< Resource Value */
-typedef unsigned int	       isc_result_t;	     /*%< Result */
-typedef struct isc_rwlock      isc_rwlock_t;	     /*%< Read Write Lock */
-typedef struct isc_sockaddr    isc_sockaddr_t;	     /*%< Socket Address */
-typedef ISC_LIST(isc_sockaddr_t) isc_sockaddrlist_t; /*%< Socket Address List
-						      * */
-typedef struct isc_socket      isc_socket_t;	     /*%< Socket */
-typedef struct isc_socketevent isc_socketevent_t;    /*%< Socket Event */
-typedef struct isc_socketmgr   isc_socketmgr_t;	     /*%< Socket Manager */
-typedef struct isc_stats       isc_stats_t;	     /*%< Statistics */
+typedef struct isc_nmhandle	 isc_nmhandle_t; /*%< Network manager handle */
+typedef struct isc_portset	 isc_portset_t;	 /*%< Port Set */
+typedef struct isc_quota	 isc_quota_t;	 /*%< Quota */
+typedef struct isc_ratelimiter	 isc_ratelimiter_t;   /*%< Rate Limiter */
+typedef struct isc_region	 isc_region_t;	      /*%< Region */
+typedef uint64_t		 isc_resourcevalue_t; /*%< Resource Value */
+typedef unsigned int		 isc_result_t;	      /*%< Result */
+typedef struct isc_rwlock	 isc_rwlock_t;	      /*%< Read Write Lock */
+typedef struct isc_sockaddr	 isc_sockaddr_t;      /*%< Socket Address */
+typedef ISC_LIST(isc_sockaddr_t) isc_sockaddrlist_t;  /*%< Socket Address List
+						       * */
+typedef struct isc_socket      isc_socket_t;	      /*%< Socket */
+typedef struct isc_socketevent isc_socketevent_t;     /*%< Socket Event */
+typedef struct isc_socketmgr   isc_socketmgr_t;	      /*%< Socket Manager */
+typedef struct isc_stats       isc_stats_t;	      /*%< Statistics */
 #if defined(_WIN32) && !defined(_WIN64)
 typedef int_fast32_t isc_statscounter_t; /*%< Statistics Counter */
 #else  /* if defined(_WIN32) && !defined(_WIN64) */

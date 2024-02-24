@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -55,6 +57,11 @@ struct dns_zt {
 	dns_rbt_t *table;
 };
 
+struct zt_freeze_params {
+	dns_view_t *view;
+	bool freeze;
+};
+
 #define ZTMAGIC	     ISC_MAGIC('Z', 'T', 'b', 'l')
 #define VALID_ZT(zt) ISC_MAGIC_VALID(zt, ZTMAGIC)
 
@@ -88,11 +95,7 @@ dns_zt_create(isc_mem_t *mctx, dns_rdataclass_t rdclass, dns_zt_t **ztp) {
 		goto cleanup_zt;
 	}
 
-	result = isc_rwlock_init(&zt->rwlock, 0, 0);
-	if (result != ISC_R_SUCCESS) {
-		goto cleanup_rbt;
-	}
-
+	isc_rwlock_init(&zt->rwlock, 0, 0);
 	zt->mctx = NULL;
 	isc_mem_attach(mctx, &zt->mctx);
 	isc_refcount_init(&zt->references, 1);
@@ -106,9 +109,6 @@ dns_zt_create(isc_mem_t *mctx, dns_rdataclass_t rdclass, dns_zt_t **ztp) {
 	*ztp = zt;
 
 	return (ISC_R_SUCCESS);
-
-cleanup_rbt:
-	dns_rbt_destroy(&zt->table);
 
 cleanup_zt:
 	isc_mem_put(mctx, zt, sizeof(*zt));
@@ -225,7 +225,8 @@ flush(dns_zone_t *zone, void *uap) {
 static void
 zt_destroy(dns_zt_t *zt) {
 	if (atomic_load_acquire(&zt->flush)) {
-		(void)dns_zt_apply(zt, false, NULL, flush, NULL);
+		(void)dns_zt_apply(zt, isc_rwlocktype_none, false, NULL, flush,
+				   NULL);
 	}
 	dns_rbt_destroy(&zt->table);
 	isc_rwlock_destroy(&zt->rwlock);
@@ -267,9 +268,8 @@ dns_zt_load(dns_zt_t *zt, bool stop, bool newonly) {
 	struct zt_load_params params;
 	REQUIRE(VALID_ZT(zt));
 	params.newonly = newonly;
-	RWLOCK(&zt->rwlock, isc_rwlocktype_read);
-	result = dns_zt_apply(zt, stop, NULL, load, &params);
-	RWUNLOCK(&zt->rwlock, isc_rwlocktype_read);
+	result = dns_zt_apply(zt, isc_rwlocktype_read, stop, NULL, load,
+			      &params);
 	return (result);
 }
 
@@ -340,9 +340,8 @@ dns_zt_asyncload(dns_zt_t *zt, bool newonly, dns_zt_allloaded_t alldone,
 	zt->loaddone = alldone;
 	zt->loaddone_arg = arg;
 
-	RWLOCK(&zt->rwlock, isc_rwlocktype_read);
-	result = dns_zt_apply(zt, false, NULL, asyncload, zt);
-	RWUNLOCK(&zt->rwlock, isc_rwlocktype_read);
+	result = dns_zt_apply(zt, isc_rwlocktype_read, false, NULL, asyncload,
+			      zt);
 
 	/*
 	 * Have all the loads completed?
@@ -375,21 +374,21 @@ asyncload(dns_zone_t *zone, void *zt_) {
 		 * Caller is holding a reference to zt->loads_pending
 		 * and zt->references so these can't decrement to zero.
 		 */
-		INSIST(isc_refcount_decrement(&zt->loads_pending) > 1);
-		INSIST(isc_refcount_decrement(&zt->references) > 1);
+		isc_refcount_decrement1(&zt->references);
+		isc_refcount_decrement1(&zt->loads_pending);
 	}
 	return (ISC_R_SUCCESS);
 }
 
 isc_result_t
-dns_zt_freezezones(dns_zt_t *zt, bool freeze) {
+dns_zt_freezezones(dns_zt_t *zt, dns_view_t *view, bool freeze) {
 	isc_result_t result, tresult;
+	struct zt_freeze_params params = { view, freeze };
 
 	REQUIRE(VALID_ZT(zt));
 
-	RWLOCK(&zt->rwlock, isc_rwlocktype_read);
-	result = dns_zt_apply(zt, false, &tresult, freezezones, &freeze);
-	RWUNLOCK(&zt->rwlock, isc_rwlocktype_read);
+	result = dns_zt_apply(zt, isc_rwlocktype_read, false, &tresult,
+			      freezezones, &params);
 	if (tresult == ISC_R_NOTFOUND) {
 		tresult = ISC_R_SUCCESS;
 	}
@@ -398,7 +397,7 @@ dns_zt_freezezones(dns_zt_t *zt, bool freeze) {
 
 static isc_result_t
 freezezones(dns_zone_t *zone, void *uap) {
-	bool freeze = *(bool *)uap;
+	struct zt_freeze_params *params = uap;
 	bool frozen;
 	isc_result_t result = ISC_R_SUCCESS;
 	char classstr[DNS_RDATACLASS_FORMATSIZE];
@@ -413,7 +412,13 @@ freezezones(dns_zone_t *zone, void *uap) {
 	if (raw != NULL) {
 		zone = raw;
 	}
-	if (dns_zone_gettype(zone) != dns_zone_master) {
+	if (params->view != dns_zone_getview(zone)) {
+		if (raw != NULL) {
+			dns_zone_detach(&raw);
+		}
+		return (ISC_R_SUCCESS);
+	}
+	if (dns_zone_gettype(zone) != dns_zone_primary) {
 		if (raw != NULL) {
 			dns_zone_detach(&raw);
 		}
@@ -427,7 +432,7 @@ freezezones(dns_zone_t *zone, void *uap) {
 	}
 
 	frozen = dns_zone_getupdatedisabled(zone);
-	if (freeze) {
+	if (params->freeze) {
 		if (frozen) {
 			result = DNS_R_FROZEN;
 		}
@@ -435,13 +440,14 @@ freezezones(dns_zone_t *zone, void *uap) {
 			result = dns_zone_flush(zone);
 		}
 		if (result == ISC_R_SUCCESS) {
-			dns_zone_setupdatedisabled(zone, freeze);
+			dns_zone_setupdatedisabled(zone, params->freeze);
 		}
 	} else {
 		if (frozen) {
 			result = dns_zone_loadandthaw(zone);
 			if (result == DNS_R_CONTINUE ||
-			    result == DNS_R_UPTODATE) {
+			    result == DNS_R_UPTODATE)
+			{
 				result = ISC_R_SUCCESS;
 			}
 		}
@@ -462,8 +468,8 @@ freezezones(dns_zone_t *zone, void *uap) {
 	level = (result != ISC_R_SUCCESS) ? ISC_LOG_ERROR : ISC_LOG_DEBUG(1);
 	isc_log_write(dns_lctx, DNS_LOGCATEGORY_GENERAL, DNS_LOGMODULE_ZONE,
 		      level, "%s zone '%s/%s'%s%s: %s",
-		      freeze ? "freezing" : "thawing", zonename, classstr, sep,
-		      vname, isc_result_totext(result));
+		      params->freeze ? "freezing" : "thawing", zonename,
+		      classstr, sep, vname, isc_result_totext(result));
 	if (raw != NULL) {
 		dns_zone_detach(&raw);
 	}
@@ -517,7 +523,7 @@ dns_zt_setviewrevert(dns_zt_t *zt) {
 }
 
 isc_result_t
-dns_zt_apply(dns_zt_t *zt, bool stop, isc_result_t *sub,
+dns_zt_apply(dns_zt_t *zt, isc_rwlocktype_t lock, bool stop, isc_result_t *sub,
 	     isc_result_t (*action)(dns_zone_t *, void *), void *uap) {
 	dns_rbtnode_t *node;
 	dns_rbtnodechain_t chain;
@@ -526,6 +532,10 @@ dns_zt_apply(dns_zt_t *zt, bool stop, isc_result_t *sub,
 
 	REQUIRE(VALID_ZT(zt));
 	REQUIRE(action != NULL);
+
+	if (lock != isc_rwlocktype_none) {
+		RWLOCK(&zt->rwlock, lock);
+	}
 
 	dns_rbtnodechain_init(&chain);
 	result = dns_rbtnodechain_first(&chain, zt->table, NULL, NULL);
@@ -547,7 +557,8 @@ dns_zt_apply(dns_zt_t *zt, bool stop, isc_result_t *sub,
 				tresult = result;
 				goto cleanup; /* don't break */
 			} else if (result != ISC_R_SUCCESS &&
-				   tresult == ISC_R_SUCCESS) {
+				   tresult == ISC_R_SUCCESS)
+			{
 				tresult = result;
 			}
 		}
@@ -561,6 +572,10 @@ cleanup:
 	dns_rbtnodechain_invalidate(&chain);
 	if (sub != NULL) {
 		*sub = tresult;
+	}
+
+	if (lock != isc_rwlocktype_none) {
+		RWUNLOCK(&zt->rwlock, lock);
 	}
 
 	return (result);

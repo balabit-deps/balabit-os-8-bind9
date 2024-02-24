@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,6 +20,7 @@
 
 #include <isc/app.h>
 #include <isc/commandline.h>
+#include <isc/managers.h>
 #include <isc/mem.h>
 #include <isc/print.h>
 #include <isc/socket.h>
@@ -38,11 +41,12 @@ static int quiet = 0;
 static int stats = 0;
 static isc_mem_t *mctx = NULL;
 dns_zone_t *zone = NULL;
+isc_nm_t *netmgr = NULL;
 isc_taskmgr_t *taskmgr = NULL;
 isc_timermgr_t *timermgr = NULL;
 isc_socketmgr_t *socketmgr = NULL;
 dns_zonemgr_t *zonemgr = NULL;
-dns_zonetype_t zonetype = dns_zone_master;
+dns_zonetype_t zonetype = dns_zone_primary;
 isc_sockaddr_t addr;
 
 #define ERRRET(result, function)                                        \
@@ -113,8 +117,8 @@ setup(const char *zonename, const char *filename, const char *classname) {
 
 	dns_zone_setclass(zone, rdclass);
 
-	if (zonetype == dns_zone_slave) {
-		dns_zone_setmasters(zone, &addr, 1);
+	if (zonetype == dns_zone_secondary) {
+		dns_zone_setprimaries(zone, &addr, 1);
 	}
 
 	result = dns_zone_load(zone, false);
@@ -255,7 +259,8 @@ main(int argc, char **argv) {
 			memset(&addr, 0, sizeof(addr));
 			addr.type.sin.sin_family = AF_INET;
 			if (inet_pton(AF_INET, isc_commandline_argument,
-				      &addr.type.sin.sin_addr) != 1) {
+				      &addr.type.sin.sin_addr) != 1)
+			{
 				fprintf(stderr, "bad master address '%s'\n",
 					isc_commandline_argument);
 				exit(1);
@@ -269,10 +274,10 @@ main(int argc, char **argv) {
 			stats++;
 			break;
 		case 'S':
-			zonetype = dns_zone_slave;
+			zonetype = dns_zone_secondary;
 			break;
 		case 'M':
-			zonetype = dns_zone_master;
+			zonetype = dns_zone_primary;
 			break;
 		default:
 			usage();
@@ -285,7 +290,7 @@ main(int argc, char **argv) {
 
 	RUNTIME_CHECK(isc_app_start() == ISC_R_SUCCESS);
 	isc_mem_create(&mctx);
-	RUNTIME_CHECK(isc_taskmgr_create(mctx, 2, 0, NULL, &taskmgr) ==
+	RUNTIME_CHECK(isc_managers_create(mctx, 2, 0, NULL, &taskmgr) ==
 		      ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_timermgr_create(mctx, &timermgr) == ISC_R_SUCCESS);
 	RUNTIME_CHECK(isc_socketmgr_create(mctx, &socketmgr) == ISC_R_SUCCESS);
@@ -302,7 +307,7 @@ main(int argc, char **argv) {
 	dns_zonemgr_shutdown(zonemgr);
 	dns_zonemgr_detach(&zonemgr);
 	isc_socketmgr_destroy(&socketmgr);
-	isc_taskmgr_destroy(&taskmgr);
+	isc_managers_destroy(&netmgr, &taskmgr);
 	isc_timermgr_destroy(&timermgr);
 	if (!quiet && stats) {
 		isc_mem_stats(mctx, stdout);

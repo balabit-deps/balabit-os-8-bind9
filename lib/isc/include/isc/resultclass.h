@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * License, v. 2.0.  If a copy of the MPL was not distributed with this
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -27,7 +29,7 @@
 #define ISC_RESULTCLASS_TONUM(rclass) ((rclass) >> 16)
 #define ISC_RESULTCLASS_SIZE	      65536
 #define ISC_RESULTCLASS_INCLASS(rclass, result) \
-	((rclass) == ((result)&0xFFFF0000))
+	((rclass) == ((result) & 0xFFFF0000))
 
 #define ISC_RESULTCLASS_ISC	 ISC_RESULTCLASS_FROMNUM(0)
 #define ISC_RESULTCLASS_DNS	 ISC_RESULTCLASS_FROMNUM(1)

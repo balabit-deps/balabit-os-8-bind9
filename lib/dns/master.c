@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -86,7 +88,7 @@
 #define DNS_MASTER_LHS 2048
 #define DNS_MASTER_RHS MINTSIZ
 
-#define CHECKNAMESFAIL(x) (((x)&DNS_MASTER_CHECKNAMESFAIL) != 0)
+#define CHECKNAMESFAIL(x) (((x) & DNS_MASTER_CHECKNAMESFAIL) != 0)
 
 typedef ISC_LIST(dns_rdatalist_t) rdatalist_head_t;
 
@@ -339,7 +341,14 @@ static unsigned char ip6_arpa_offsets[] = { 0, 4, 9 };
 static dns_name_t const ip6_arpa = DNS_NAME_INITABSOLUTE(ip6_arpa_data,
 							 ip6_arpa_offsets);
 
-static inline isc_result_t
+static bool
+dns_master_isprimary(dns_loadctx_t *lctx) {
+	return ((lctx->options & DNS_MASTER_ZONE) != 0 &&
+		(lctx->options & DNS_MASTER_SLAVE) == 0 &&
+		(lctx->options & DNS_MASTER_KEY) == 0);
+}
+
+static isc_result_t
 gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *token, bool eol,
 	 dns_rdatacallbacks_t *callbacks) {
 	isc_result_t result;
@@ -364,7 +373,8 @@ gettoken(isc_lex_t *lex, unsigned int options, isc_token_t *token, bool eol,
 	}
 	if (eol != true) {
 		if (token->type == isc_tokentype_eol ||
-		    token->type == isc_tokentype_eof) {
+		    token->type == isc_tokentype_eof)
+		{
 			{
 				unsigned long int line;
 				const char *what;
@@ -541,8 +551,7 @@ loadctx_create(dns_masterformat_t format, isc_mem_t *mctx, unsigned int options,
 		lctx->load = load_map;
 		break;
 	default:
-		INSIST(0);
-		ISC_UNREACHABLE();
+		UNREACHABLE();
 	}
 
 	if (lex != NULL) {
@@ -675,7 +684,10 @@ genname(char *name, int it, char *buffer, size_t length) {
 	char fmt[sizeof("%04000000000d")];
 	char numbuf[128];
 	char *cp;
-	char mode[2];
+	char mode[2] = { 0 };
+	char brace[2] = { 0 };
+	char comma1[2] = { 0 };
+	char comma2[2] = { 0 };
 	int delta = 0;
 	isc_textregion_t r;
 	unsigned int n;
@@ -700,23 +712,31 @@ genname(char *name, int it, char *buffer, size_t length) {
 			strlcpy(fmt, "%d", sizeof(fmt));
 			/* Get format specifier. */
 			if (*name == '{') {
-				n = sscanf(name, "{%d,%u,%1[doxXnN]}", &delta,
-					   &width, mode);
-				switch (n) {
-				case 1:
-					break;
-				case 2:
+				n = sscanf(name,
+					   "{%d%1[,}]%u%1[,}]%1[doxXnN]%1[}]",
+					   &delta, comma1, &width, comma2, mode,
+					   brace);
+				if (n < 2 || n > 6) {
+					return (DNS_R_SYNTAX);
+				}
+				if (comma1[0] == '}') {
+					/* %{delta} */
+				} else if (comma1[0] == ',' && comma2[0] == '}')
+				{
+					/* %{delta,width} */
 					n = snprintf(fmt, sizeof(fmt), "%%0%ud",
 						     width);
-					break;
-				case 3:
+				} else if (comma1[0] == ',' &&
+					   comma2[0] == ',' && mode[0] != 0 &&
+					   brace[0] == '}')
+				{
+					/* %{delta,width,format} */
 					if (mode[0] == 'n' || mode[0] == 'N') {
 						nibblemode = true;
 					}
 					n = snprintf(fmt, sizeof(fmt),
 						     "%%0%u%c", width, mode[0]);
-					break;
-				default:
+				} else {
 					return (DNS_R_SYNTAX);
 				}
 				if (n >= sizeof(fmt)) {
@@ -726,6 +746,13 @@ genname(char *name, int it, char *buffer, size_t length) {
 				while (*name != '\0' && *name++ != '}') {
 					continue;
 				}
+			}
+			/*
+			 * 'it' is >= 0 so we don't need to check for
+			 * underflow.
+			 */
+			if ((it > 0 && delta > INT_MAX - it)) {
+				return (ISC_R_RANGE);
 			}
 			if (nibblemode) {
 				n = nibbles(numbuf, sizeof(numbuf), width,
@@ -792,7 +819,8 @@ generate(dns_loadctx_t *lctx, char *range, char *lhs, char *gtype, char *rhs,
 	isc_buffer_t target;
 	isc_result_t result;
 	isc_textregion_t r;
-	int i, n, start, stop, step = 0;
+	int n, start, stop, step = 0;
+	unsigned int i;
 	dns_incctx_t *ictx;
 	char dummy[2];
 
@@ -840,17 +868,14 @@ generate(dns_loadctx_t *lctx, char *range, char *lhs, char *gtype, char *rhs,
 	 * RFC2930: TKEY and TSIG are not allowed to be loaded
 	 * from master files.
 	 */
-	if ((lctx->options & DNS_MASTER_ZONE) != 0 &&
-	    (lctx->options & DNS_MASTER_SLAVE) == 0 &&
-	    dns_rdatatype_ismeta(type))
-	{
+	if (dns_master_isprimary(lctx) && dns_rdatatype_ismeta(type)) {
 		(*callbacks->error)(callbacks, "%s: %s:%lu: meta RR type '%s'",
 				    "$GENERATE", source, line, gtype);
 		result = DNS_R_METATYPE;
 		goto insist_cleanup;
 	}
 
-	for (i = start; i <= stop; i += step) {
+	for (i = start; i <= (unsigned int)stop; i += step) {
 		result = genname(lhs, i, lhsbuf, DNS_MASTER_LHS);
 		if (result != ISC_R_SUCCESS) {
 			goto error_cleanup;
@@ -869,9 +894,7 @@ generate(dns_loadctx_t *lctx, char *range, char *lhs, char *gtype, char *rhs,
 			goto error_cleanup;
 		}
 
-		if ((lctx->options & DNS_MASTER_ZONE) != 0 &&
-		    (lctx->options & DNS_MASTER_SLAVE) == 0 &&
-		    (lctx->options & DNS_MASTER_KEY) == 0 &&
+		if (dns_master_isprimary(lctx) &&
 		    !dns_name_issubdomain(owner, lctx->top))
 		{
 			char namebuf[DNS_NAME_FORMATSIZE];
@@ -1078,7 +1101,7 @@ load_text(dns_loadctx_t *lctx) {
 	char *lhs = NULL;
 	char *gtype = NULL;
 	char *rhs = NULL;
-	const char *source = "";
+	const char *source;
 	unsigned long line = 0;
 	bool explicit_ttl;
 	char classname1[DNS_RDATACLASS_FORMATSIZE];
@@ -1189,7 +1212,8 @@ load_text(dns_loadctx_t *lctx) {
 				EXPECTEOL;
 				continue;
 			} else if (strcasecmp(DNS_AS_STR(token), "$INCLUDE") ==
-				   0) {
+				   0)
+			{
 				COMMITALL;
 				if ((lctx->options & DNS_MASTER_NOINCLUDE) != 0)
 				{
@@ -1223,7 +1247,8 @@ load_text(dns_loadctx_t *lctx) {
 				GETTOKEN(lctx->lex, 0, &token, true);
 
 				if (token.type == isc_tokentype_eol ||
-				    token.type == isc_tokentype_eof) {
+				    token.type == isc_tokentype_eof)
+				{
 					if (token.type == isc_tokentype_eof) {
 						WARNUNEXPECTEDEOF(lctx->lex);
 					}
@@ -1291,7 +1316,8 @@ load_text(dns_loadctx_t *lctx) {
 				EXPECTEOL;
 				continue;
 			} else if (strcasecmp(DNS_AS_STR(token), "$GENERATE") ==
-				   0) {
+				   0)
+			{
 				/*
 				 * Lazy cleanup.
 				 */
@@ -1328,7 +1354,8 @@ load_text(dns_loadctx_t *lctx) {
 				/* TTL? */
 				if (dns_ttl_fromtext(&token.value.as_textregion,
 						     &lctx->ttl) ==
-				    ISC_R_SUCCESS) {
+				    ISC_R_SUCCESS)
+				{
 					limit_ttl(callbacks, source, line,
 						  &lctx->ttl);
 					lctx->ttl_known = true;
@@ -1351,7 +1378,8 @@ load_text(dns_loadctx_t *lctx) {
 					 false);
 				rhs = isc_mem_strdup(mctx, DNS_AS_STR(token));
 				if (!lctx->ttl_known &&
-				    !lctx->default_ttl_known) {
+				    !lctx->default_ttl_known)
+				{
 					(*callbacks->error)(callbacks,
 							    "%s: %s:%lu: no "
 							    "TTL specified",
@@ -1365,7 +1393,8 @@ load_text(dns_loadctx_t *lctx) {
 						goto insist_and_cleanup;
 					}
 				} else if (!explicit_ttl &&
-					   lctx->default_ttl_known) {
+					   lctx->default_ttl_known)
+				{
 					lctx->ttl = lctx->default_ttl;
 				}
 				/*
@@ -1469,7 +1498,8 @@ load_text(dns_loadctx_t *lctx) {
 			 * state.  Linked lists are undone by commit().
 			 */
 			if (ictx->glue != NULL &&
-			    !dns_name_caseequal(ictx->glue, new_name)) {
+			    !dns_name_caseequal(ictx->glue, new_name))
+			{
 				result = commit(callbacks, lctx, &glue_list,
 						ictx->glue, source,
 						ictx->glue_line);
@@ -1500,7 +1530,8 @@ load_text(dns_loadctx_t *lctx) {
 			     !dns_name_caseequal(ictx->current, new_name)))
 			{
 				if (current_has_delegation &&
-				    is_glue(&current_list, new_name)) {
+				    is_glue(&current_list, new_name))
+				{
 					rdcount_save = rdcount;
 					rdlcount_save = rdlcount;
 					target_save = target;
@@ -1536,14 +1567,13 @@ load_text(dns_loadctx_t *lctx) {
 				 * Check for internal wildcards.
 				 */
 				if ((lctx->options &
-				     DNS_MASTER_CHECKWILDCARD) != 0) {
+				     DNS_MASTER_CHECKWILDCARD) != 0)
+				{
 					check_wildcard(ictx, source, line,
 						       callbacks);
 				}
 			}
-			if ((lctx->options & DNS_MASTER_ZONE) != 0 &&
-			    (lctx->options & DNS_MASTER_SLAVE) == 0 &&
-			    (lctx->options & DNS_MASTER_KEY) == 0 &&
+			if (dns_master_isprimary(lctx) &&
 			    !dns_name_issubdomain(new_name, lctx->top))
 			{
 				char namebuf[DNS_NAME_FORMATSIZE];
@@ -1740,8 +1770,7 @@ load_text(dns_loadctx_t *lctx) {
 		 * RFC1123: MD and MF are not allowed to be loaded from
 		 * master files.
 		 */
-		if ((lctx->options & DNS_MASTER_ZONE) != 0 &&
-		    (lctx->options & DNS_MASTER_SLAVE) == 0 &&
+		if (dns_master_isprimary(lctx) &&
 		    (type == dns_rdatatype_md || type == dns_rdatatype_mf))
 		{
 			char typebuf[DNS_RDATATYPE_FORMATSIZE];
@@ -1763,10 +1792,7 @@ load_text(dns_loadctx_t *lctx) {
 		 * RFC2930: TKEY and TSIG are not allowed to be loaded
 		 * from master files.
 		 */
-		if ((lctx->options & DNS_MASTER_ZONE) != 0 &&
-		    (lctx->options & DNS_MASTER_SLAVE) == 0 &&
-		    dns_rdatatype_ismeta(type))
-		{
+		if (dns_master_isprimary(lctx) && dns_rdatatype_ismeta(type)) {
 			char typebuf[DNS_RDATATYPE_FORMATSIZE];
 
 			result = DNS_R_METATYPE;
@@ -1835,7 +1861,8 @@ load_text(dns_loadctx_t *lctx) {
 				result = DNS_R_BADOWNERNAME;
 				desc = dns_result_totext(result);
 				if (CHECKNAMESFAIL(lctx->options) ||
-				    type == dns_rdatatype_nsec3) {
+				    type == dns_rdatatype_nsec3)
+				{
 					(*callbacks->error)(
 						callbacks, "%s:%lu: %s: %s",
 						source, line, namebuf, desc);
@@ -1895,6 +1922,30 @@ load_text(dns_loadctx_t *lctx) {
 			if (MANYERRS(lctx, result)) {
 				SETRESULT(lctx, result);
 				read_till_eol = true;
+				target = target_ft;
+				continue;
+			} else {
+				goto insist_and_cleanup;
+			}
+		}
+
+		if (dns_rdatatype_atparent(type) &&
+		    dns_master_isprimary(lctx) &&
+		    dns_name_equal(ictx->current, lctx->top))
+		{
+			char namebuf[DNS_NAME_FORMATSIZE];
+			char typebuf[DNS_RDATATYPE_FORMATSIZE];
+
+			dns_name_format(ictx->current, namebuf,
+					sizeof(namebuf));
+			dns_rdatatype_format(type, typebuf, sizeof(typebuf));
+			(*callbacks->error)(
+				callbacks,
+				"%s:%lu: %s record at top of zone (%s)", source,
+				line, typebuf, namebuf);
+			result = DNS_R_ATZONETOP;
+			if (MANYERRS(lctx, result)) {
+				SETRESULT(lctx, result);
 				target = target_ft;
 				continue;
 			} else {
@@ -1963,8 +2014,7 @@ load_text(dns_loadctx_t *lctx) {
 		}
 
 		if ((type == dns_rdatatype_sig || type == dns_rdatatype_nxt) &&
-		    lctx->warn_tcr && (lctx->options & DNS_MASTER_ZONE) != 0 &&
-		    (lctx->options & DNS_MASTER_SLAVE) == 0)
+		    lctx->warn_tcr && dns_master_isprimary(lctx))
 		{
 			(*callbacks->warn)(callbacks,
 					   "%s:%lu: old style DNSSEC "
@@ -2042,7 +2092,8 @@ load_text(dns_loadctx_t *lctx) {
 		}
 
 		if ((lctx->options & DNS_MASTER_CHECKTTL) != 0 &&
-		    lctx->ttl > lctx->maxttl) {
+		    lctx->ttl > lctx->maxttl)
+		{
 			(callbacks->error)(callbacks,
 					   "dns_master_load: %s:%lu: "
 					   "TTL %d exceeds configured "
@@ -2196,7 +2247,7 @@ cleanup:
  * Fill/check exists buffer with 'len' bytes.  Track remaining bytes to be
  * read when incrementally filling the buffer.
  */
-static inline isc_result_t
+static isc_result_t
 read_and_check(bool do_read, isc_buffer_t *buffer, size_t len, FILE *f,
 	       uint32_t *totallen) {
 	isc_result_t result;
@@ -2517,7 +2568,8 @@ load_raw(dns_loadctx_t *lctx) {
 		}
 
 		if ((lctx->options & DNS_MASTER_CHECKTTL) != 0 &&
-		    rdatalist.ttl > lctx->maxttl) {
+		    rdatalist.ttl > lctx->maxttl)
+		{
 			(callbacks->error)(callbacks,
 					   "dns_master_load: "
 					   "TTL %d exceeds configured "
@@ -2548,7 +2600,8 @@ load_raw(dns_loadctx_t *lctx) {
 			dns_rdata_init(&rdata[i]);
 
 			if (sequential_read &&
-			    isc_buffer_availablelength(&target) < MINTSIZ) {
+			    isc_buffer_availablelength(&target) < MINTSIZ)
+			{
 				unsigned int j;
 
 				INSIST(i > 0); /* detect an infinite loop */

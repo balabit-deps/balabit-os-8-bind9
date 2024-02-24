@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -38,13 +40,15 @@
 #define NAMED_EVENTCLASS    ISC_EVENTCLASS(0x4E43)
 #define NAMED_EVENT_RELOAD  (NAMED_EVENTCLASS + 0)
 #define NAMED_EVENT_DELZONE (NAMED_EVENTCLASS + 1)
+#define NAMED_EVENT_COMMAND (NAMED_EVENTCLASS + 2)
+#define NAMED_EVENT_TATSEND (NAMED_EVENTCLASS + 3)
 
 /*%
  * Name server state.  Better here than in lots of separate global variables.
  */
 struct named_server {
 	unsigned int magic;
-	isc_mem_t *  mctx;
+	isc_mem_t   *mctx;
 
 	ns_server_t *sctx;
 
@@ -65,12 +69,12 @@ struct named_server {
 			     * */
 
 	/* Server data structures. */
-	dns_loadmgr_t *	   loadmgr;
-	dns_zonemgr_t *	   zonemgr;
+	dns_loadmgr_t	  *loadmgr;
+	dns_zonemgr_t	  *zonemgr;
 	dns_viewlist_t	   viewlist;
 	dns_kasplist_t	   kasplist;
 	ns_interfacemgr_t *interfacemgr;
-	dns_db_t *	   in_roothints;
+	dns_db_t	  *in_roothints;
 
 	isc_timer_t *interface_timer;
 	isc_timer_t *heartbeat_timer;
@@ -80,9 +84,9 @@ struct named_server {
 	uint32_t interface_interval;
 	uint32_t heartbeat_interval;
 
-	isc_mutex_t    reload_event_lock;
-	isc_event_t *  reload_event;
-	named_reload_t reload_status;
+	isc_mutex_t  reload_event_lock;
+	isc_event_t *reload_event;
+	atomic_int   reload_status;
 
 	bool flushonshutdown;
 
@@ -92,15 +96,15 @@ struct named_server {
 	isc_stats_t *resolverstats;  /*% Resolver stats */
 	isc_stats_t *sockstats;	     /*%< Socket stats */
 
-	named_controls_t *   controls; /*%< Control channels */
+	named_controls_t    *controls; /*%< Control channels */
 	unsigned int	     dispatchgen;
 	named_dispatchlist_t dispatches;
 
 	named_statschannellist_t statschannels;
 
 	dns_tsigkey_t *sessionkey;
-	char *	       session_keyfile;
-	dns_name_t *   session_keyname;
+	char	      *session_keyfile;
+	dns_name_t    *session_keyname;
 	unsigned int   session_keyalg;
 	uint16_t       session_keybits;
 	bool	       interface_auto;
@@ -332,6 +336,13 @@ named_server_showzone(named_server_t *server, isc_lex_t *lex,
 isc_result_t
 named_server_signing(named_server_t *server, isc_lex_t *lex,
 		     isc_buffer_t **text);
+
+/*%
+ * Lists the DNSSEC status for a given zone.
+ */
+isc_result_t
+named_server_dnssec(named_server_t *server, isc_lex_t *lex,
+		    isc_buffer_t **text);
 
 /*%
  * Lists status information for a given zone (e.g., name, type, files,

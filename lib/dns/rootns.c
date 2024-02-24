@@ -1,9 +1,11 @@
 /*
  * Copyright (C) Internet Systems Consortium, Inc. ("ISC")
  *
+ * SPDX-License-Identifier: MPL-2.0
+ *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/.
+ * file, you can obtain one at https://mozilla.org/MPL/2.0/.
  *
  * See the COPYRIGHT file distributed with this work for additional
  * information regarding copyright ownership.
@@ -32,6 +34,9 @@
 #include <dns/rootns.h>
 #include <dns/view.h>
 
+/*
+ * Also update 'upcoming' when updating 'root_ns'.
+ */
 static char root_ns[] =
 	";\n"
 	"; Internet Root Nameservers\n"
@@ -52,8 +57,8 @@ static char root_ns[] =
 	".                       518400  IN      NS      M.ROOT-SERVERS.NET.\n"
 	"A.ROOT-SERVERS.NET.     3600000 IN      A       198.41.0.4\n"
 	"A.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:503:BA3E::2:30\n"
-	"B.ROOT-SERVERS.NET.     3600000 IN      A       199.9.14.201\n"
-	"B.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:500:200::b\n"
+	"B.ROOT-SERVERS.NET.     3600000 IN      A       170.247.170.2\n"
+	"B.ROOT-SERVERS.NET.     3600000 IN      AAAA    2801:1b8:10::b\n"
 	"C.ROOT-SERVERS.NET.     3600000 IN      A       192.33.4.12\n"
 	"C.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:500:2::c\n"
 	"D.ROOT-SERVERS.NET.     3600000 IN      A       199.7.91.13\n"
@@ -76,6 +81,24 @@ static char root_ns[] =
 	"L.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:500:9f::42\n"
 	"M.ROOT-SERVERS.NET.     3600000 IN      A       202.12.27.33\n"
 	"M.ROOT-SERVERS.NET.     3600000 IN      AAAA    2001:DC3::35\n";
+
+static unsigned char b_data[] = "\001b\014root-servers\003net";
+static unsigned char b_offsets[] = { 0, 2, 15, 19 };
+
+static struct upcoming {
+	const dns_name_t name;
+	dns_rdatatype_t type;
+	isc_stdtime_t time;
+} upcoming[] = { {
+			 .name = DNS_NAME_INITABSOLUTE(b_data, b_offsets),
+			 .type = dns_rdatatype_a,
+			 .time = 1701086400 /* November 27 2023, 12:00 UTC */
+		 },
+		 {
+			 .name = DNS_NAME_INITABSOLUTE(b_data, b_offsets),
+			 .type = dns_rdatatype_aaaa,
+			 .time = 1701086400 /* November 27 2023, 12:00 UTC */
+		 } };
 
 static isc_result_t
 in_rootns(dns_rdataset_t *rootns, dns_name_t *name) {
@@ -128,7 +151,7 @@ check_node(dns_rdataset_t *rootns, dns_name_t *name,
 			if (dns_name_compare(name, dns_rootname) == 0) {
 				break;
 			}
-		/* FALLTHROUGH */
+			FALLTHROUGH;
 		default:
 			result = ISC_R_FAILURE;
 			goto cleanup;
@@ -174,7 +197,7 @@ check_hints(dns_db_t *db) {
 		if (result != ISC_R_SUCCESS) {
 			goto cleanup;
 		}
-		result = dns_db_allrdatasets(db, node, NULL, now, &rdsiter);
+		result = dns_db_allrdatasets(db, node, NULL, 0, now, &rdsiter);
 		if (result != ISC_R_SUCCESS) {
 			goto cleanup;
 		}
@@ -291,7 +314,8 @@ report(dns_view_t *view, dns_name_t *name, bool missing, dns_rdata_t *rdata) {
 	isc_result_t result;
 
 	if (strcmp(view->name, "_bind") != 0 &&
-	    strcmp(view->name, "_default") != 0) {
+	    strcmp(view->name, "_default") != 0)
+	{
 		viewname = view->name;
 		sep = ": view ";
 	}
@@ -334,6 +358,18 @@ inrrset(dns_rdataset_t *rrset, dns_rdata_t *rdata) {
 	return (false);
 }
 
+static bool
+changing(const dns_name_t *name, dns_rdatatype_t type, isc_stdtime_t now) {
+	for (size_t i = 0; i < ARRAY_SIZE(upcoming); i++) {
+		if (upcoming[i].time > now && upcoming[i].type == type &&
+		    dns_name_equal(&upcoming[i].name, name))
+		{
+			return (true);
+		}
+	}
+	return (false);
+}
+
 /*
  * Check that the address RRsets match.
  *
@@ -365,7 +401,9 @@ check_address_records(dns_view_t *view, dns_db_t *hints, dns_db_t *db,
 		while (result == ISC_R_SUCCESS) {
 			dns_rdata_reset(&rdata);
 			dns_rdataset_current(&rootrrset, &rdata);
-			if (!inrrset(&hintrrset, &rdata)) {
+			if (!inrrset(&hintrrset, &rdata) &&
+			    !changing(name, dns_rdatatype_a, now))
+			{
 				report(view, name, true, &rdata);
 			}
 			result = dns_rdataset_next(&rootrrset);
@@ -374,7 +412,9 @@ check_address_records(dns_view_t *view, dns_db_t *hints, dns_db_t *db,
 		while (result == ISC_R_SUCCESS) {
 			dns_rdata_reset(&rdata);
 			dns_rdataset_current(&hintrrset, &rdata);
-			if (!inrrset(&rootrrset, &rdata)) {
+			if (!inrrset(&rootrrset, &rdata) &&
+			    !changing(name, dns_rdatatype_a, now))
+			{
 				report(view, name, false, &rdata);
 			}
 			result = dns_rdataset_next(&hintrrset);
@@ -413,7 +453,9 @@ check_address_records(dns_view_t *view, dns_db_t *hints, dns_db_t *db,
 		while (result == ISC_R_SUCCESS) {
 			dns_rdata_reset(&rdata);
 			dns_rdataset_current(&rootrrset, &rdata);
-			if (!inrrset(&hintrrset, &rdata)) {
+			if (!inrrset(&hintrrset, &rdata) &&
+			    !changing(name, dns_rdatatype_aaaa, now))
+			{
 				report(view, name, true, &rdata);
 			}
 			dns_rdata_reset(&rdata);
@@ -423,7 +465,9 @@ check_address_records(dns_view_t *view, dns_db_t *hints, dns_db_t *db,
 		while (result == ISC_R_SUCCESS) {
 			dns_rdata_reset(&rdata);
 			dns_rdataset_current(&hintrrset, &rdata);
-			if (!inrrset(&rootrrset, &rdata)) {
+			if (!inrrset(&rootrrset, &rdata) &&
+			    !changing(name, dns_rdatatype_aaaa, now))
+			{
 				report(view, name, false, &rdata);
 			}
 			dns_rdata_reset(&rdata);
@@ -468,7 +512,8 @@ dns_root_checkhints(dns_view_t *view, dns_db_t *hints, dns_db_t *db) {
 	isc_stdtime_get(&now);
 
 	if (strcmp(view->name, "_bind") != 0 &&
-	    strcmp(view->name, "_default") != 0) {
+	    strcmp(view->name, "_default") != 0)
+	{
 		viewname = view->name;
 		sep = ": view ";
 	}
