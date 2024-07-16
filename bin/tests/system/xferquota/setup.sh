@@ -15,10 +15,9 @@
 # Set up test data for zone transfer quota tests.
 #
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+. ../conf.sh
 
-$PERL setup.pl
+$PYTHON setup.py
 
 cp -f ns1/changing1.db ns1/changing.db
 

@@ -11,7 +11,6 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=${SYSTEMTESTTOP:=..}
 prog=$0
 args=""
 quiet=0
@@ -19,7 +18,7 @@ dir=""
 msg="cryptography"
 
 if test -z "$KEYGEN"; then
-  . $SYSTEMTESTTOP/conf.sh
+  . ../conf.sh
   alg="-a $DEFAULT_ALGORITHM -b $DEFAULT_BITS"
 else
   alg=""
@@ -90,8 +89,6 @@ if $KEYGEN $args $alg foo >/dev/null 2>&1; then
 else
   if test $quiet -eq 0; then
     echo_i "This test requires support for $msg" >&2
-    echo_i "configure with --with-openssl, or --enable-native-pkcs11" \
-      "--with-pkcs11" >&2
   fi
   exit 255
 fi

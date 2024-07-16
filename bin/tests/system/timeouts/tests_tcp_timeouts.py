@@ -26,7 +26,7 @@ import dns.query
 import dns.rdataclass
 import dns.rdatatype
 
-import pytest_custom_markers  # pylint: disable=import-error
+import isctest.mark  # pylint: disable=import-error
 
 
 TIMEOUT = 10
@@ -185,12 +185,7 @@ def test_long_axfr(named_port):
         assert soa is not None
 
 
-# This test relies on the maximum socket send buffer size (wmem_max) being set
-# to 212992 bytes (the typical default value on Linux systems).  Environments
-# that use a different value for this setting (for example, FreeBSD defaults to
-# 32768 bytes) may need their system-level settings to be tweaked in order for
-# this test to pass.
-@pytest_custom_markers.flaky(max_runs=3)
+@isctest.mark.flaky(max_runs=3)
 def test_send_timeout(named_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect(("10.53.0.1", named_port))
@@ -217,7 +212,7 @@ def test_send_timeout(named_port):
                 raise EOFError from e
 
 
-@pytest_custom_markers.long_test
+@isctest.mark.long_test
 def test_max_transfer_idle_out(named_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect(("10.53.0.1", named_port))
@@ -251,7 +246,7 @@ def test_max_transfer_idle_out(named_port):
             assert soa is None
 
 
-@pytest_custom_markers.long_test
+@isctest.mark.long_test
 def test_max_transfer_time_out(named_port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect(("10.53.0.1", named_port))

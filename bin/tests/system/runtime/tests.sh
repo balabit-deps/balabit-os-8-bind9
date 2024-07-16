@@ -11,14 +11,13 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-# shellcheck source=conf.sh
-SYSTEMTESTTOP=..
-. "$SYSTEMTESTTOP/conf.sh"
-
 set -e
 
-RNDCCMD="$RNDC -c $SYSTEMTESTTOP/common/rndc.conf -p ${CONTROLPORT} -s"
-NAMED_DEFAULT_ARGS="-m record,size,mctx -d 99 -g -U 4"
+# shellcheck source=conf.sh
+. ../conf.sh
+
+RNDCCMD="$RNDC -c ../_common/rndc.conf -p ${CONTROLPORT} -s"
+NAMED_DEFAULT_ARGS="-m record -d 99 -g -U 4"
 
 kill_named() {
   pidfile="${1}"
@@ -28,10 +27,10 @@ kill_named() {
 
   pid=$(cat "${pidfile}" 2>/dev/null)
   if [ "${pid:+set}" = "set" ]; then
-    $KILL -15 "${pid}" >/dev/null 2>&1
+    kill -15 "${pid}" >/dev/null 2>&1
     retries=10
     while [ "$retries" -gt 0 ]; do
-      if ! $KILL -0 "${pid}" >/dev/null 2>&1; then
+      if ! kill -0 "${pid}" >/dev/null 2>&1; then
         break
       fi
       sleep 1
@@ -63,7 +62,7 @@ run_named() (
 )
 
 check_pid() (
-  return $(! $KILL -0 "${1}" >/dev/null 2>&1)
+  return $(! kill -0 "${1}" >/dev/null 2>&1)
 )
 
 status=0
@@ -81,12 +80,14 @@ status=$((status + ret))
 n=$((n + 1))
 echo_i "verifying that named checks for conflicting named processes ($n)"
 ret=0
+test -f ns2/named.lock || ret=1
 testpid=$(run_named ns2 named$n.run -c named-alt2.conf -D runtime-ns2-extra-2 -X named.lock)
 test -n "$testpid" || ret=1
 retry_quiet 10 check_named_log "another named process" ns2/named$n.run || ret=1
 test -n "$testpid" && retry_quiet 10 check_pid $testpid || ret=1
-test -n "$testpid" && $KILL -15 $testpid >kill$n.out 2>&1 && ret=1
+test -n "$testpid" && kill -15 $testpid >kill$n.out 2>&1 && ret=1
 test -n "$testpid" && retry_quiet 10 check_pid $testpid || ret=1
+test -f ns2/named.lock || ret=1
 if [ $ret -ne 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
 
@@ -222,14 +223,41 @@ if [ $ret -ne 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
 
 n=$((n + 1))
+echo_i "checking that named log missing IPv4 primaries in -4 mode ($n)"
+ret=0
+INSTANCE_NAME="missing-primaries-ipv4-only-mode"
+testpid=$(run_named ns2 named$n.run -c named-alt8.conf -D "${INSTANCE_NAME}" -4)
+test -n "$testpid" || ret=1
+retry_quiet 60 check_named_log "running$" ns2/named$n.run || ret=1
+grep "IPv6 disabled and no IPv4 primaries" ns2/named$n.run >/dev/null || ret=1
+kill_named ns2/named.pid || ret=1
+test -n "$testpid" && retry_quiet 10 check_pid $testpid || ret=1
+if [ $ret -ne 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "checking that named log missing IPv6 primaries in -6 mode ($n)"
+ret=0
+INSTANCE_NAME="missing-primaries-ipv4-only-mode"
+testpid=$(run_named ns2 named$n.run -c named-alt8.conf -D "${INSTANCE_NAME}" -6)
+test -n "$testpid" || ret=1
+retry_quiet 60 check_named_log "running$" ns2/named$n.run || ret=1
+grep "IPv4 disabled and no IPv6 primaries" ns2/named$n.run >/dev/null || ret=1
+kill_named ns2/named.pid || ret=1
+test -n "$testpid" && retry_quiet 10 check_pid $testpid || ret=1
+if [ $ret -ne 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
 echo_i "verifying that named switches UID ($n)"
-if [ "$(id -u)" -eq 0 ] && [ -z "$CYGWIN" ]; then
+if [ "$(id -u)" -eq 0 ]; then
   ret=0
-  TEMP_NAMED_DIR=$(mktemp -d "$(pwd)/ns2/tmp.XXXXXXXX")
-  if [ "$?" -eq 0 ]; then
+  {
+    TEMP_NAMED_DIR=$(mktemp -d "$(pwd)/ns2/tmp.XXXXXXXX")
+    rc=$?
+  } || true
+  if [ "$rc" -eq 0 ]; then
     copy_setports ns2/named-alt9.conf.in "${TEMP_NAMED_DIR}/named-alt9.conf"
-    export SOFTHSM2_CONF="${TEMP_NAMED_DIR}/softhsm2.conf"
-    sh "$TOP/bin/tests/prepare-softhsm2.sh"
     chown -R nobody: "${TEMP_NAMED_DIR}"
     chmod 0700 "${TEMP_NAMED_DIR}"
     testpid=$(run_named "${TEMP_NAMED_DIR}" "${TEMP_NAMED_DIR}/named$n.run" -u nobody -c named-alt9.conf)
@@ -238,6 +266,7 @@ if [ "$(id -u)" -eq 0 ] && [ -z "$CYGWIN" ]; then
     [ -s "${TEMP_NAMED_DIR}/named9.pid" ] || ret=1
     grep "loading configuration: permission denied" "${TEMP_NAMED_DIR}/named$n.run" >/dev/null && ret=1
     kill_named "${TEMP_NAMED_DIR}/named9.pid" || ret=1
+    test -n "$testpid" || ret=1
     test -n "$testpid" && retry_quiet 10 check_pid $testpid || ret=1
   else
     echo_i "mktemp failed"

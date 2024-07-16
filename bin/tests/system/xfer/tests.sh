@@ -11,11 +11,13 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 DIGOPTS="+tcp +noadd +nosea +nostat +noquest +nocomm +nocmd -p ${PORT}"
-RNDCCMD="$RNDC -c $SYSTEMTESTTOP/common/rndc.conf -p ${CONTROLPORT} -s"
+RNDCCMD="$RNDC -c ../_common/rndc.conf -p ${CONTROLPORT} -s"
+NS_PARAMS="-X named.lock -m record -c named.conf -d 99 -g -U 4 -T maxcachesize=2097152"
 
 status=0
 n=0
@@ -36,13 +38,24 @@ tmp=0
 # Spin to allow the zone to transfer.
 #
 wait_for_xfer() {
-  $DIG $DIGOPTS example. @10.53.0.3 axfr >dig.out.ns3.test$n || return 1
-  grep "^;" dig.out.ns3.test$n >/dev/null && return 1
+  ZONE=$1
+  SERVER=$2
+  $DIG $DIGOPTS $ZONE @$SERVER axfr >dig.out.test$n || return 1
+  grep "^;" dig.out.test$n >/dev/null && return 1
   return 0
 }
-retry_quiet 25 wait_for_xfer || tmp=1
-grep "^;" dig.out.ns3.test$n | cat_i
-digcomp dig1.good dig.out.ns3.test$n || tmp=1
+retry_quiet 25 wait_for_xfer example. 10.53.0.3 || tmp=1
+grep "^;" dig.out.test$n | cat_i
+digcomp dig1.good dig.out.test$n || tmp=1
+if test $tmp != 0; then echo_i "failed"; fi
+status=$((status + tmp))
+
+n=$((n + 1))
+echo_i "testing zone transfer functionality (fallback to DNS after DoT failed) ($n)"
+tmp=0
+retry_quiet 25 wait_for_xfer dot-fallback. 10.53.0.2 || tmp=1
+grep "^;" dig.out.test$n | cat_i
+digcomp dig3.good dig.out.test$n || tmp=1
 if test $tmp != 0; then echo_i "failed"; fi
 status=$((status + tmp))
 
@@ -176,7 +189,7 @@ grep "^;" dig.out.ns6.test$n | cat_i
 
 $DIG $DIGOPTS primary. \
   @10.53.0.3 axfr >dig.out.ns3.test$n || tmp=1
-grep "^;" dig.out.ns3.test$n >/dev/null && cat_i dig.out.ns3.test$n
+grep "^;" dig.out.ns3.test$n >/dev/null && cat_i <dig.out.ns3.test$n
 
 digcomp dig.out.ns6.test$n dig.out.ns3.test$n || tmp=1
 
@@ -250,13 +263,16 @@ fi
 
 # now we test transfers with assorted TSIG glitches
 DIGCMD="$DIG $DIGOPTS @10.53.0.4"
-SENDCMD="$PERL ../send.pl 10.53.0.5 $EXTRAPORT1"
+
+sendcmd() {
+  send 10.53.0.5 "$EXTRAPORT1"
+}
 
 echo_i "testing that incorrectly signed transfers will fail..."
 n=$((n + 1))
 echo_i "initial correctly-signed transfer should succeed ($n)"
 
-$SENDCMD <ans5/goodaxfr
+sendcmd <ans5/goodaxfr
 
 # Initially, ns4 is not authoritative for anything.
 # Now that ans is up and running with the right data, we make ns4
@@ -293,7 +309,8 @@ $DIGCMD nil. TXT | grep 'initial AXFR' >/dev/null || {
 n=$((n + 1))
 echo_i "unsigned transfer ($n)"
 
-$SENDCMD <ans5/unsigned
+sendcmd <ans5/unsigned
+sleep 1
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -312,7 +329,7 @@ $DIGCMD nil. TXT | grep 'unsigned AXFR' >/dev/null && {
 n=$((n + 1))
 echo_i "bad keydata ($n)"
 
-$SENDCMD <ans5/badkeydata
+sendcmd <ans5/badkeydata
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -331,7 +348,7 @@ $DIGCMD nil. TXT | grep 'bad keydata AXFR' >/dev/null && {
 n=$((n + 1))
 echo_i "partially-signed transfer ($n)"
 
-$SENDCMD <ans5/partial
+sendcmd <ans5/partial
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -350,7 +367,7 @@ $DIGCMD nil. TXT | grep 'partially signed AXFR' >/dev/null && {
 n=$((n + 1))
 echo_i "unknown key ($n)"
 
-$SENDCMD <ans5/unknownkey
+sendcmd <ans5/unknownkey
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -369,7 +386,7 @@ $DIGCMD nil. TXT | grep 'unknown key AXFR' >/dev/null && {
 n=$((n + 1))
 echo_i "incorrect key ($n)"
 
-$SENDCMD <ans5/wrongkey
+sendcmd <ans5/wrongkey
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -386,9 +403,28 @@ $DIGCMD nil. TXT | grep 'incorrect key AXFR' >/dev/null && {
 }
 
 n=$((n + 1))
+echo_i "bad question section ($n)"
+
+sendcmd <ans5/wrongname
+
+$RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
+
+sleep 2
+
+nextpart ns4/named.run | grep "question name mismatch" >/dev/null || {
+  echo_i "failed: expected status was not logged"
+  status=$((status + 1))
+}
+
+$DIGCMD nil. TXT | grep 'wrong question AXFR' >/dev/null && {
+  echo_i "failed"
+  status=$((status + 1))
+}
+
+n=$((n + 1))
 echo_i "bad message id ($n)"
 
-$SENDCMD <ans5/badmessageid
+sendcmd <ans5/badmessageid
 
 # Uncomment to see AXFR stream with mismatching IDs.
 # $DIG $DIGOPTS @10.53.0.5 -y tsig_key:LSAnCU+Z nil. AXFR +all
@@ -397,13 +433,12 @@ $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
 sleep 2
 
-msg="detected message ID mismatch on incoming AXFR stream, transfer will fail in BIND 9.17.2 and later if AXFR source is not fixed"
-nextpart ns4/named.run | grep "$msg" >/dev/null || {
+nextpart ns4/named.run | grep "unexpected message id" >/dev/null || {
   echo_i "failed: expected status was not logged"
   status=$((status + 1))
 }
 
-$DIGCMD nil. TXT | grep 'bad message id' >/dev/null || {
+$DIGCMD nil. TXT | grep 'bad message id' >/dev/null && {
   echo_i "failed"
   status=$((status + 1))
 }
@@ -411,7 +446,7 @@ $DIGCMD nil. TXT | grep 'bad message id' >/dev/null || {
 n=$((n + 1))
 echo_i "mismatched SOA ($n)"
 
-${SENDCMD} <ans5/soamismatch
+sendcmd <ans5/soamismatch
 
 $RNDCCMD 10.53.0.4 retransfer nil | sed 's/^/ns4 /' | cat_i
 
@@ -444,8 +479,6 @@ n=$((n + 1))
 echo_i "test smaller transfer TCP message size ($n)"
 $DIG $DIGOPTS example. @10.53.0.8 axfr \
   -y key1.:1234abcd8765 >dig.out.msgsize.test$n || status=1
-
-$DOS2UNIX dig.out.msgsize.test$n >/dev/null 2>&1
 
 bytes=$(wc -c <dig.out.msgsize.test$n)
 if [ $bytes -ne 459357 ]; then
@@ -540,6 +573,53 @@ check_xfer_stats() {
 }
 retry_quiet 10 check_xfer_stats || tmp=1
 if test $tmp != 0; then echo_i "failed"; fi
+status=$((status + tmp))
+
+n=$((n + 1))
+echo_i "test that transfer-source uses port option correctly ($n)"
+tmp=0
+grep "10.53.0.3#${EXTRAPORT1} (primary): query 'primary/SOA/IN' approved" ns6/named.run >/dev/null || tmp=1
+if test $tmp != 0; then echo_i "failed"; fi
+status=$((status + tmp))
+
+wait_for_message() (
+  nextpartpeek ns6/named.run >wait_for_message.$n
+  grep -F "$1" wait_for_message.$n >/dev/null
+)
+
+nextpart ns6/named.run >/dev/null
+
+n=$((n + 1))
+echo_i "test max-transfer-time-in with 1 second timeout ($n)"
+stop_server ns1
+copy_setports ns1/named2.conf.in ns1/named.conf
+start_server --noclean --restart --port ${PORT} ns1 -- "-D xfer-ns1 $NS_PARAMS -T transferinsecs -T transferslowly"
+sleep 1
+$RNDCCMD 10.53.0.6 retransfer axfr-max-transfer-time 2>&1 | sed 's/^/ns6 /' | cat_i
+tmp=0
+retry_quiet 10 wait_for_message "maximum transfer time exceeded: timed out" || tmp=1
+status=$((status + tmp))
+
+nextpart ns6/named.run >/dev/null
+
+n=$((n + 1))
+echo_i "test max-transfer-idle-in with 50 seconds timeout ($n)"
+stop_server ns1
+copy_setports ns1/named3.conf.in ns1/named.conf
+start_server --noclean --restart --port ${PORT} ns1 -- "-D xfer-ns1 $NS_PARAMS -T transferinsecs -T transferstuck"
+sleep 1
+start=$(date +%s)
+$RNDCCMD 10.53.0.6 retransfer axfr-max-idle-time 2>&1 | sed 's/^/ns6 /' | cat_i
+tmp=0
+retry_quiet 60 wait_for_message "maximum idle time exceeded: timed out" || tmp=1
+if [ $tmp -eq 0 ]; then
+  now=$(date +%s)
+  diff=$((now - start))
+  # we expect a timeout in 50 seconds
+  test $diff -lt 50 && tmp=1
+  test $diff -ge 59 && tmp=1
+  if test $tmp != 0; then echo_i "unexpected diff value: ${diff}"; fi
+fi
 status=$((status + tmp))
 
 echo_i "exit status: $status"

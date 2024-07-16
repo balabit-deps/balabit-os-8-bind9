@@ -1,4 +1,2 @@
-0001-Add_--install-layout=deb_to_setup.py_call.patch
-0002-python-fix-for-dist-packages.patch
-0003-Remove-the-reference-to-OPTIONS.md-it-breaks-build-o.patch
 0004-Disable-treat-warnings-as-errors-in-sphinx-build.patch
+always-use-standard-library-stdatomic.patch

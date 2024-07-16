@@ -11,8 +11,7 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+. ../conf.sh
 
 $SHELL clean.sh
 
@@ -24,6 +23,11 @@ if $FEATURETEST --md5; then
 key "md5" {
         secret "97rnFx24Tfna4mHPfgnerA==";
         algorithm hmac-md5;
+};
+
+key "hmac-md5-legacy" {
+	algorithm "hmac-md5";
+	secret "B7HCXJs0XnSPzypG5oHuGw==";
 };
 
 key "md5-trunc" {

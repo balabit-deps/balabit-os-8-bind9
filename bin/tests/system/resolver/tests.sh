@@ -11,8 +11,10 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+# shellcheck source=../conf.sh
+. ../conf.sh
 
 dig_with_opts() {
   "${DIG}" -p "${PORT}" "${@}"
@@ -23,7 +25,7 @@ resolve_with_opts() {
 }
 
 rndccmd() {
-  "${RNDC}" -c "${SYSTEMTESTTOP}/common/rndc.conf" -p "${CONTROLPORT}" -s "${@}"
+  "${RNDC}" -c ../_common/rndc.conf -p "${CONTROLPORT}" -s "${@}"
 }
 
 status=0
@@ -278,33 +280,33 @@ status=$((status + ret))
 
 n=$((n + 1))
 echo_i "check that the resolver limits the number of NS records it follows in a referral response ($n)"
-# ns5 is the recusor being tested.  ns4 holds the sourcens zone containing names with varying numbers of NS
-# records pointing to non-existent nameservers in the targetns zone on ns6.
+# ns5 is the recusor being tested.  ns4 holds the sourcens zone containing
+# names with varying numbers of NS records pointing to non-existent
+# nameservers in the targetns zone on ns6.
 ret=0
 rndccmd 10.53.0.5 flush || ret=1 # Ensure cache is empty before doing this test
+count_fetches() {
+  actual=$(nextpartpeek ns5/named.run | grep -c " fetch: ns.fake${nscount}")
+  [ "${actual:-0}" -eq "${expected}" ] || return 1
+  return 0
+}
 for nscount in 1 2 3 4 5 6 7 8 9 10; do
   # Verify number of NS records at source server
   dig_with_opts +norecurse @10.53.0.4 target${nscount}.sourcens ns >dig.ns4.out.${nscount}.${n}
-  sourcerecs=$(grep NS dig.ns4.out.${nscount}.${n} | grep -v ';' | wc -l)
+  sourcerecs=$(grep NS dig.ns4.out.${nscount}.${n} | grep -cv ';')
   test "${sourcerecs}" -eq "${nscount}" || ret=1
   test "${sourcerecs}" -eq "${nscount}" || echo_i "NS count incorrect for target${nscount}.sourcens"
+
   # Expected queries = 2 * number of NS records, up to a maximum of 10.
   expected=$((nscount * 2))
   if [ "$expected" -gt 10 ]; then expected=10; fi
-  # Work out the queries made by checking statistics on the target before and after the test
-  rndccmd 10.53.0.6 stats || ret=1
-  initial_count=$(awk '/responses sent/ {print $1}' ns6/named.stats)
-  mv ns6/named.stats ns6/named.stats.initial.${nscount}.${n}
+  # Count the number of logged fetches
+  nextpart ns5/named.run >/dev/null
   dig_with_opts @10.53.0.5 target${nscount}.sourcens A >dig.ns5.out.${nscount}.${n} || ret=1
-  rndccmd 10.53.0.6 stats || ret=1
-  final_count=$(awk '/responses sent/ {print $1}' ns6/named.stats)
-  mv ns6/named.stats ns6/named.stats.final.${nscount}.${n}
-  # Check number of queries during the test is as expected
-  actual=$((final_count - initial_count))
-  if [ "$actual" -ne "$expected" ]; then
+  retry_quiet 5 count_fetches ns5/named.run $nscount $expected || {
     echo_i "query count error: $nscount NS records: expected queries $expected, actual $actual"
     ret=1
-  fi
+  }
 done
 if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
@@ -596,18 +598,18 @@ n=$((n + 1))
 echo_i "check prefetch qtype * (${n})"
 ret=0
 dig_with_opts @10.53.0.5 fetchall.tld any >dig.out.1.${n} || ret=1
-ttl1=$(awk '/"A" "short" "ttl"/ { print $2 - 3 }' dig.out.1.${n})
+ttl1=$(awk '/^fetchall.tld/ { print $2 - 3; exit }' dig.out.1.${n})
 # sleep so we are in prefetch range
 sleep "${ttl1:-0}"
 # trigger prefetch
 dig_with_opts @10.53.0.5 fetchall.tld any >dig.out.2.${n} || ret=1
-ttl2=$(awk '/"A" "short" "ttl"/ { print $2 }' dig.out.2.${n})
+ttl2=$(awk '/^fetchall.tld/ { print $2; exit }' dig.out.2.${n})
 sleep 1
 # check that prefetch occurred;
-# note that only one record is prefetched, which is the TXT record in this case,
+# note that only the first record is prefetched,
 # because of the order of the records in the cache
 dig_with_opts @10.53.0.5 fetchall.tld any >dig.out.3.${n} || ret=1
-ttl3=$(awk '/"A" "short" "ttl"/ { print $2 }' dig.out.3.${n})
+ttl3=$(awk '/^fetchall.tld/ { print $2; exit }' dig.out.3.${n})
 test "${ttl3:-0}" -gt "${ttl2:-1}" || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
@@ -627,9 +629,21 @@ n=$((n + 1))
 echo_i "check that '-t aaaa' in .digrc does not have unexpected side effects ($n)"
 ret=0
 echo "-t aaaa" >.digrc
-(HOME="$(pwd)" dig_with_opts @10.53.0.4 . >dig.out.1.${n}) || ret=1
-(HOME="$(pwd)" dig_with_opts @10.53.0.4 . A >dig.out.2.${n}) || ret=1
-(HOME="$(pwd)" dig_with_opts @10.53.0.4 -x 127.0.0.1 >dig.out.3.${n}) || ret=1
+(
+  HOME="$(pwd)"
+  export HOME
+  dig_with_opts @10.53.0.4 . >dig.out.1.${n}
+) || ret=1
+(
+  HOME="$(pwd)"
+  export HOME
+  dig_with_opts @10.53.0.4 . A >dig.out.2.${n}
+) || ret=1
+(
+  HOME="$(pwd)"
+  export HOME
+  dig_with_opts @10.53.0.4 -x 127.0.0.1 >dig.out.3.${n}
+) || ret=1
 grep ';\..*IN.*AAAA$' dig.out.1.${n} >/dev/null || ret=1
 grep ';\..*IN.*A$' dig.out.2.${n} >/dev/null || ret=1
 grep 'extra type option' dig.out.2.${n} >/dev/null && ret=1
@@ -852,7 +866,7 @@ status=$((status + ret))
 n=$((n + 1))
 echo_i "check that the resolver accepts a reply with empty question section with TC=1 and retries over TCP ($n)"
 ret=0
-dig_with_opts @10.53.0.5 truncated.no-questions. a +tries=3 +time=5 >dig.ns5.out.${n} || ret=1
+dig_with_opts @10.53.0.5 truncated.no-questions. a +tries=3 +time=4 >dig.ns5.out.${n} || ret=1
 grep "status: NOERROR" dig.ns5.out.${n} >/dev/null || ret=1
 grep "ANSWER: 1," dig.ns5.out.${n} >/dev/null || ret=1
 grep "1\.2\.3\.4" dig.ns5.out.${n} >/dev/null || ret=1
@@ -862,12 +876,34 @@ status=$((status + ret))
 n=$((n + 1))
 echo_i "check that the resolver rejects a reply with empty question section with TC=0 ($n)"
 ret=0
-dig_with_opts @10.53.0.5 not-truncated.no-questions. a +tries=3 +time=5 >dig.ns5.out.${n} || ret=1
+dig_with_opts @10.53.0.5 not-truncated.no-questions. a +tries=3 +time=4 >dig.ns5.out.${n} || ret=1
 grep "status: NOERROR" dig.ns5.out.${n} >/dev/null && ret=1
 grep "ANSWER: 1," dig.ns5.out.${n} >/dev/null && ret=1
 grep "1\.2\.3\.4" dig.ns5.out.${n} >/dev/null && ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
+
+if ${FEATURETEST} --enable-querytrace; then
+  n=$((n + 1))
+  echo_i "check that SERVFAIL is returned for an empty question section via TCP ($n)"
+  ret=0
+  nextpart ns5/named.run >/dev/null
+  # bind to local address so that addresses in log messages are consistent
+  # between platforms
+  dig_with_opts @10.53.0.5 -b 10.53.0.5 tcpalso.no-questions. a +tries=2 +timeout=15 >dig.ns5.out.${n} || ret=1
+  grep "status: SERVFAIL" dig.ns5.out.${n} >/dev/null || ret=1
+  check_namedrun() {
+    nextpartpeek ns5/named.run >nextpart.out.${n}
+    grep 'resolving tcpalso.no-questions/A for [^:]*: empty question section, accepting it anyway as TC=1' nextpart.out.${n} >/dev/null || return 1
+    grep '(tcpalso.no-questions/A): connecting via TCP' nextpart.out.${n} >/dev/null || return 1
+    grep 'resolving tcpalso.no-questions/A for [^:]*: empty question section$' nextpart.out.${n} >/dev/null || return 1
+    grep '(tcpalso.no-questions/A): nextitem' nextpart.out.${n} >/dev/null || return 1
+    return 0
+  }
+  retry_quiet 12 check_namedrun || ret=1
+  if [ $ret != 0 ]; then echo_i "failed"; fi
+  status=$((status + ret))
+fi
 
 n=$((n + 1))
 echo_i "checking SERVFAIL is returned when all authoritative servers return FORMERR ($n)"
@@ -878,9 +914,17 @@ if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
 
 n=$((n + 1))
+echo_i "checking SERVFAIL is not returned if only some authoritative servers return FORMERR ($n)"
+ret=0
+dig_with_opts @10.53.0.5 ns.partial-formerr. a >dig.ns5.out.${n} || ret=1
+grep "status: SERVFAIL" dig.ns5.out.${n} >/dev/null && ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
 echo_i "check logged command line ($n)"
 ret=0
-grep "running as: .* -m record,size,mctx " ns1/named.run >/dev/null || ret=1
+grep "running as: .* -m record " ns1/named.run >/dev/null || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
 
@@ -893,13 +937,65 @@ if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))
 
 n=$((n + 1))
+echo_i "check that the addition section for HTTPS is populated on initial query to a recursive server ($n)"
+ret=0
+dig_with_opts @10.53.0.7 www.example.net https >dig.out.ns7.${n} || ret=1
+grep "status: NOERROR" dig.out.ns7.${n} >/dev/null || ret=1
+grep "flags:[^;]* ra[ ;]" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ADDITIONAL: 2" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ANSWER: 1," dig.out.ns7.${n} >/dev/null || ret=1
+grep "http-server\.example\.net\..*A.*10\.53\.0\.6" dig.out.ns7.${n} >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "check HTTPS loop is handled properly ($n)"
+ret=0
+dig_with_opts @10.53.0.7 https-loop.example.net https >dig.out.ns7.${n} || ret=1
+grep "status: NOERROR" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ANSWER: 1," dig.out.ns7.${n} >/dev/null || ret=1
+grep "ADDITIONAL: 2" dig.out.ns7.${n} >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "check HTTPS -> CNAME loop is handled properly ($n)"
+ret=0
+dig_with_opts @10.53.0.7 https-cname-loop.example.net https >dig.out.ns7.${n} || ret=1
+grep "status: NOERROR" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ADDITIONAL: 2" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ANSWER: 1," dig.out.ns7.${n} >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "check HTTPS cname chains are followed ($n)"
+ret=0
+dig_with_opts @10.53.0.7 https-cname.example.net https >dig.out.ns7.${n} || ret=1
+grep "status: NOERROR" dig.out.ns7.${n} >/dev/null || ret=1
+grep "ADDITIONAL: 4" dig.out.ns7.${n} >/dev/null || ret=1
+grep 'http-server\.example\.net\..*A.10\.53\.0\.6' dig.out.ns7.${n} >/dev/null || ret=1
+grep 'cname-server\.example\.net\..*CNAME.cname-next\.example\.net\.' dig.out.ns7.${n} >/dev/null || ret=1
+grep 'cname-next\.example\.net\..*CNAME.http-server\.example\.net\.' dig.out.ns7.${n} >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "check ADB find loops are detected ($n)"
+ret=0
+dig_with_opts +tcp +tries=1 +timeout=5 @10.53.0.1 fake.lame.example.org >dig.out.ns1.${n} || ret=1
+grep "status: SERVFAIL" dig.out.ns1.${n} >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
 echo_i "check handling of large referrals to unresponsive name servers ($n)"
 ret=0
 dig_with_opts +timeout=15 large-referral.example.net @10.53.0.1 a >dig.out.ns1.test${n} || ret=1
 grep "status: SERVFAIL" dig.out.ns1.test${n} >/dev/null || ret=1
 # Check the total number of findname() calls triggered by a single query
 # for large-referral.example.net/A.
-findname_call_count="$(grep -c "large-referral\.example\.net.*FINDNAME" ns1/named.run)"
+findname_call_count="$(grep -c "large-referral\.example\.net.*FINDNAME" ns1/named.run || true)"
 if [ "${findname_call_count}" -gt 1000 ]; then
   echo_i "failed: ${findname_call_count} (> 1000) findname() calls detected for large-referral.example.net"
   ret=1
@@ -953,6 +1049,18 @@ grep "ANSWER: [12]," dig.out.2.${n} >/dev/null || ret=1
 lines=$(awk '$1 == "mixedttl.tld." && $2 > 30 { print }' dig.out.2.${n} | wc -l)
 test ${lines:-1} -ne 0 && ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
+
+n=$((n + 1))
+echo_i "check resolver behavior when FORMERR for EDNS options happens (${n})"
+ret=0
+msg="resolving options-formerr/A .* server sent FORMERR with echoed DNS COOKIE"
+if [ $ret != 0 ]; then echo_i "failed"; fi
+nextpart ns5/named.run >/dev/null
+dig_with_opts +tcp @10.53.0.5 options-formerr A >dig.out.${n} || ret=1
+grep "status: NOERROR" dig.out.${n} >/dev/null || ret=1
+nextpart ns5/named.run | grep "$msg" >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+
 status=$((status + ret))
 
 echo_i "exit status: $status"

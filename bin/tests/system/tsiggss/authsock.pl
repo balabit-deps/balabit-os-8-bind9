@@ -33,6 +33,10 @@ if (!defined($path)) {
 	exit(1);
 }
 
+# Enable output autoflush so that it's not lost when the parent sends TERM.
+select STDOUT;
+$| = 1;
+
 unlink($path);
 my $server = IO::Socket::UNIX->new(Local => $path, Type => SOCK_STREAM, Listen => 8) or
     die "unable to create socket $path";
@@ -44,17 +48,13 @@ open(my $pid,">",$pidfile)
 print $pid "$$\n";
 close($pid);
 
-# close gracefully
-sub rmpid { unlink "$pidfile"; exit 1; };
-$SIG{INT} = \&rmpid;
-$SIG{TERM} = \&rmpid;
-
 if ($timeout != 0) {
     # die after the given timeout
     alarm($timeout);
 }
 
 while (my $client = $server->accept()) {
+	printf("accept()\n");
 	$client->recv(my $buf, 8, 0);
 	my ($version, $req_len) = unpack('N N', $buf);
 

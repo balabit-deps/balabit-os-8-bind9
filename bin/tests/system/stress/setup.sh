@@ -12,7 +12,7 @@
 # information regarding copyright ownership.
 
 # shellcheck source=conf.sh
-. "$SYSTEMTESTTOP/conf.sh"
+. ../conf.sh
 
 cp ns2/zone.template.db ns2/zone000000.example.db
 cp ns2/zone.template.db ns2/zone000001.example.db

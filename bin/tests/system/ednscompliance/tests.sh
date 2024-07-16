@@ -11,8 +11,9 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 DIGOPTS="+norec -p ${PORT}"
 
@@ -20,43 +21,43 @@ status=0
 n=0
 zone=.
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "check +edns=100 sets version 100 ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +qr +edns=100 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +qr +edns=100 soa $zone >dig.out$n || ret=1
 grep "EDNS: version: 100," dig.out$n >/dev/null || {
   ret=1
   reason="version"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 ret=0 reason=
 echo_i "check +ednsopt=100 adds option 100 ($n)"
-$DIG $DIGOPTS @10.53.0.1 +qr +ednsopt=100 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +qr +ednsopt=100 soa $zone >dig.out$n || ret=1
 grep "; OPT=100" dig.out$n >/dev/null || {
   ret=1
   reason="option"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "check +ednsflags=0x80 sets flags to 0x0080 ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +qr +ednsflags=0x80 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +qr +ednsflags=0x80 soa $zone >dig.out$n || ret=1
 grep "MBZ: 0x0080," dig.out$n >/dev/null || {
   ret=1
   reason="flags"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "Unknown EDNS version ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsnegotiation soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsnegotiation soa $zone >dig.out$n || ret=1
 grep "status: BADVERS," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -70,12 +71,12 @@ grep "IN.SOA." dig.out$n >/dev/null && {
   reason="soa"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "Unknown EDNS option ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +ednsopt=100 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +ednsopt=100 soa $zone >dig.out$n || ret=1
 grep "status: NOERROR," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -93,12 +94,12 @@ grep "IN.SOA." dig.out$n >/dev/null || {
   reason="nosoa"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "Unknown EDNS version + option ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsneg +ednsopt=100 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsneg +ednsopt=100 soa $zone >dig.out$n || ret=1
 grep "status: BADVERS," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -116,12 +117,12 @@ grep "IN.SOA." dig.out$n >/dev/null && {
   reason="soa"
 }
 if [ $ret != 0 ]; then echo_i "failed: $reason"; fi
-status=$(expr $status + $ret)
-n=$(expr $n + 1)
+status=$((status + ret))
+n=$((n + 1))
 
 echo_i "Unknown EDNS flag ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +ednsflags=0x80 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +ednsflags=0x80 soa $zone >dig.out$n || ret=1
 grep "status: NOERROR," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -139,12 +140,12 @@ grep ".IN.SOA." dig.out$n >/dev/null || {
   reason="nosoa"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "Unknown EDNS version + flag ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsneg +ednsflags=0x80 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +edns=100 +noednsneg +ednsflags=0x80 soa $zone >dig.out$n || ret=1
 grep "status: BADVERS," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -162,12 +163,12 @@ grep "IN.SOA." dig.out$n >/dev/null && {
   reason="soa"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
-n=$(expr $n + 1)
+status=$((status + ret))
+n=$((n + 1))
 
 echo_i "DiG's EDNS negotiation ($n)"
 ret=0 reason=
-$DIG $DIGOPTS @10.53.0.1 +edns=100 soa $zone >dig.out$n
+$DIG $DIGOPTS @10.53.0.1 +edns=100 soa $zone >dig.out$n || ret=1
 grep "status: NOERROR," dig.out$n >/dev/null || {
   ret=1
   reason="status"
@@ -181,8 +182,8 @@ grep "IN.SOA." dig.out$n >/dev/null || {
   reason="soa"
 }
 if [ $ret != 0 ]; then echo_i "failed $reason"; fi
-status=$(expr $status + $ret)
-n=$(expr $n + 1)
+status=$((status + ret))
+n=$((n + 1))
 
 echo_i "exit status: $status"
 [ $status -eq 0 ] || exit 1

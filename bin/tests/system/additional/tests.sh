@@ -11,17 +11,18 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 DIGOPTS="-p ${PORT}"
-RNDCCMD="$RNDC -c $SYSTEMTESTTOP/common/rndc.conf -p ${CONTROLPORT} -s"
+RNDCCMD="$RNDC -c ../_common/rndc.conf -p ${CONTROLPORT} -s"
 
 status=0
 n=0
 
 dotests() {
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with RT, single zone (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t RT rt.rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -30,7 +31,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with RT, two zones (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t RT rt.rt2.example @10.53.0.1 >dig.out.$n || ret=1
@@ -39,7 +40,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NAPTR, single zone (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t NAPTR nap.naptr.example @10.53.0.1 >dig.out.$n || ret=1
@@ -48,7 +49,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NAPTR, two zones (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t NAPTR nap.hang3b.example @10.53.0.1 >dig.out.$n || ret=1
@@ -57,7 +58,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with LP (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t LP nid2.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -88,7 +89,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NID (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t NID ns1.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -105,7 +106,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NID + LP (+rec) ($n)"
   ret=0
   $DIG $DIGOPTS +rec -t NID nid2.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -124,7 +125,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with RT, single zone (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t RT rt.rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -133,7 +134,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with RT, two zones (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t RT rt.rt2.example @10.53.0.1 >dig.out.$n || ret=1
@@ -142,7 +143,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NAPTR, single zone (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t NAPTR nap.naptr.example @10.53.0.1 >dig.out.$n || ret=1
@@ -151,7 +152,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NAPTR, two zones (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t NAPTR nap.hang3b.example @10.53.0.1 >dig.out.$n || ret=1
@@ -160,7 +161,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with LP (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t LP nid2.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -191,7 +192,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NID (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t NID ns1.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -208,7 +209,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NID + LP (+norec) ($n)"
   ret=0
   $DIG $DIGOPTS +norec -t NID nid2.nid.example @10.53.0.1 >dig.out.$n || ret=1
@@ -227,7 +228,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NS, root zone ($n)"
   ret=0
   $DIG $DIGOPTS -t NS . @10.53.0.1 >dig.out.$n || ret=1
@@ -238,7 +239,7 @@ dotests() {
     status=$((status + 1))
   fi
 
-  n=$(expr $n + 1)
+  n=$((n + 1))
   echo_i "test with NS, non-root zone ($n)"
   ret=0
   $DIG $DIGOPTS -t NS rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -274,7 +275,7 @@ echo_i "testing with 'minimal-responses no;'"
 minimal=no
 dotests
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing with 'minimal-any no;' ($n)"
 ret=0
 $DIG $DIGOPTS -t ANY www.rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -288,7 +289,7 @@ echo_i "reconfiguring server: minimal-any yes"
 copy_setports ns1/named3.conf.in ns1/named.conf
 rndc_reconfig ns1 10.53.0.1
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing with 'minimal-any yes;' over UDP ($n)"
 ret=0
 $DIG $DIGOPTS -t ANY +notcp www.rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -297,7 +298,7 @@ if [ $ret -eq 1 ]; then
   echo_i "failed"
   status=$((status + 1))
 fi
-n=$(expr $n + 1)
+n=$((n + 1))
 
 echo_i "testing with 'minimal-any yes;' over TCP ($n)"
 ret=0
@@ -308,7 +309,7 @@ if [ $ret -eq 1 ]; then
   status=$((status + 1))
 fi
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing with 'minimal-any yes;' over UDP ($n)"
 ret=0
 $DIG $DIGOPTS -t ANY +notcp www.rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -330,7 +331,7 @@ echo_i "testing with 'minimal-responses no-auth-recursive;'"
 minimal=no-auth-recursive
 dotests
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing returning TLSA records with MX query ($n)"
 ret=0
 $DIG $DIGOPTS -t mx mx.example @10.53.0.1 >dig.out.$n || ret=1
@@ -342,7 +343,7 @@ if [ $ret -eq 1 ]; then
   status=$((status + 1))
 fi
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing returning TLSA records with SRV query ($n)"
 ret=0
 $DIG $DIGOPTS -t srv _xmpp-client._tcp.srv.example @10.53.0.1 >dig.out.$n || ret=1
@@ -358,7 +359,7 @@ echo_i "reconfiguring server: minimal-responses no"
 copy_setports ns1/named2.conf.in ns1/named.conf
 rndc_reconfig ns1 10.53.0.1
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing NS handling in ANY responses (authoritative) ($n)"
 ret=0
 $DIG $DIGOPTS -t ANY rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -369,7 +370,7 @@ if [ $ret -eq 1 ]; then
   status=$((status + 1))
 fi
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing NS handling in ANY responses (recursive) ($n)"
 ret=0
 $DIG $DIGOPTS -t ANY rt.example @10.53.0.3 >dig.out.$n || ret=1
@@ -380,7 +381,7 @@ if [ $ret -eq 1 ]; then
   status=$((status + 1))
 fi
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing out-of-zone additional data from auth zones (authoritative) ($n)"
 ret=0
 $DIG $DIGOPTS -t NS rt.example @10.53.0.1 >dig.out.$n || ret=1
@@ -390,7 +391,7 @@ if [ $ret -eq 1 ]; then
   status=$((status + 1))
 fi
 
-n=$(expr $n + 1)
+n=$((n + 1))
 echo_i "testing out-of-zone additional data from auth zones (recursive) ($n)"
 ret=0
 $DIG $DIGOPTS -t NS ex @10.53.0.3 >dig.out.$n || ret=1

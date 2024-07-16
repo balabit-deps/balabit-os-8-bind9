@@ -1,3 +1,32 @@
+bind9 (1:9.18.28-0ubuntu0.20.04.1) focal-security; urgency=medium
+
+  * Updated to 9.18.28 to fix multiple security issues.
+    - Please see the following for a list of changes, including possibly
+      incompatible ones:
+      https://kb.isc.org/docs/changes-to-be-aware-of-when-moving-from-bind-916-to-918
+    - CVE-2024-0760: A flood of DNS messages over TCP may make the server
+      unstable
+    - CVE-2024-1737: BIND's database will be slow if a very large number of
+      RRs exist at the same name
+    - CVE-2024-1975: SIG(0) can be used to exhaust CPU resources
+    - CVE-2024-4076: Assertion failure when serving both stale cache data
+      and authoritative zone content
+  * Packaging changes required for 9.18.28:
+    - Dropped patches no longer required with 9.18.28:
+      + 0001-Add_--install-layout=deb_to_setup.py_call.patch
+      + 0002-python-fix-for-dist-packages.patch
+      + 0003-Remove-the-reference-to-OPTIONS.md-it-breaks-build-o.patch
+    - Synced patch with jammy's 1:9.18.28-0ubuntu0.22.04.1 package:
+      + always-use-standard-library-stdatomic.patch
+    - debian/NEWS: list changes in 9.18, taken from jammy.
+    - debian/*: sync most of the packaging with jammy's package, including
+      autopkgtests except for dyndb-ldap as the bind-dyndb-ldap package is
+      broken in focal.
+    - debian/tests/simpletest: wait a couple of seconds for the service to
+      actually start.
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 16 Jul 2024 14:48:12 -0400
+
 bind9 (1:9.16.48-0ubuntu0.20.04.1) focal-security; urgency=medium
 
   * Updated to 9.16.48 to fix multiple security issues.

@@ -12,13 +12,14 @@
 # information regarding copyright ownership.
 
 # shellcheck source=conf.sh
-. "$SYSTEMTESTTOP/conf.sh"
+. ../conf.sh
 
 set -e
 
 $SHELL clean.sh
 
 mkdir keys
+mkdir ns3/keys
 
 copy_setports ns2/named.conf.in ns2/named.conf
 if ! $SHELL ../testcrypto.sh -q RSASHA1; then

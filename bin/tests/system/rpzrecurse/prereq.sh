@@ -11,13 +11,10 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+. ../conf.sh
 
-if $PERL -e 'use Net::DNS;' 2>/dev/null; then
-  :
-else
-  echo_i "This test requires the Net::DNS library." >&2
+if ! ${PERL} -MNet::DNS -e ''; then
+  echo_i "perl Net::DNS module is required"
   exit 1
 fi
 

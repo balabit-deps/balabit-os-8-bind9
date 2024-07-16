@@ -23,6 +23,7 @@
 #include <isc/buffer.h>
 #include <isc/mem.h>
 #include <isc/once.h>
+#include <isc/result.h>
 #include <isc/rwlock.h>
 #include <isc/string.h>
 #include <isc/util.h>
@@ -36,7 +37,6 @@
 #include <dns/rdata.h>
 #include <dns/rdataset.h>
 #include <dns/rdatasetiter.h>
-#include <dns/result.h>
 
 /***
  *** Private Types
@@ -59,6 +59,8 @@ struct dns_dbimplementation {
  */
 
 #include "rbtdb.h"
+
+unsigned int dns_pps = 0U;
 
 static ISC_LIST(dns_dbimplementation_t) implementations;
 static isc_rwlock_t implock;
@@ -334,15 +336,6 @@ dns_db_load(dns_db_t *db, const char *filename, dns_masterformat_t format,
 	}
 
 	return (result);
-}
-
-isc_result_t
-dns_db_serialize(dns_db_t *db, dns_dbversion_t *version, FILE *file) {
-	REQUIRE(DNS_DB_VALID(db));
-	if (db->methods->serialize == NULL) {
-		return (ISC_R_NOTIMPLEMENTED);
-	}
-	return ((db->methods->serialize)(db, version, file));
 }
 
 isc_result_t
@@ -655,6 +648,8 @@ dns_db_createiterator(dns_db_t *db, unsigned int flags,
 
 	REQUIRE(DNS_DB_VALID(db));
 	REQUIRE(iteratorp != NULL && *iteratorp == NULL);
+	REQUIRE((flags & (DNS_DB_NSEC3ONLY | DNS_DB_NONSEC3)) !=
+		(DNS_DB_NSEC3ONLY | DNS_DB_NONSEC3));
 
 	return (db->methods->createiterator(db, flags, iteratorp));
 }
@@ -818,10 +813,10 @@ freenode:
 }
 
 unsigned int
-dns_db_nodecount(dns_db_t *db) {
+dns_db_nodecount(dns_db_t *db, dns_dbtree_t tree) {
 	REQUIRE(DNS_DB_VALID(db));
 
-	return ((db->methods->nodecount)(db));
+	return ((db->methods->nodecount)(db, tree));
 }
 
 size_t
@@ -835,22 +830,11 @@ dns_db_hashsize(dns_db_t *db) {
 	return ((db->methods->hashsize)(db));
 }
 
-isc_result_t
-dns_db_adjusthashsize(dns_db_t *db, size_t size) {
-	REQUIRE(DNS_DB_VALID(db));
-
-	if (db->methods->adjusthashsize != NULL) {
-		return ((db->methods->adjusthashsize)(db, size));
-	}
-
-	return (ISC_R_NOTIMPLEMENTED);
-}
-
 void
-dns_db_settask(dns_db_t *db, isc_task_t *task) {
+dns_db_settask(dns_db_t *db, isc_task_t *task, isc_task_t *prunetask) {
 	REQUIRE(DNS_DB_VALID(db));
 
-	(db->methods->settask)(db, task);
+	(db->methods->settask)(db, task, prunetask);
 }
 
 isc_result_t
@@ -1136,4 +1120,22 @@ dns_db_setgluecachestats(dns_db_t *db, isc_stats_t *stats) {
 	}
 
 	return (ISC_R_NOTIMPLEMENTED);
+}
+
+void
+dns_db_setmaxrrperset(dns_db_t *db, uint32_t value) {
+	REQUIRE(DNS_DB_VALID(db));
+
+	if (db->methods->setmaxrrperset != NULL) {
+		(db->methods->setmaxrrperset)(db, value);
+	}
+}
+
+void
+dns_db_setmaxtypepername(dns_db_t *db, uint32_t value) {
+	REQUIRE(DNS_DB_VALID(db));
+
+	if (db->methods->setmaxtypepername != NULL) {
+		(db->methods->setmaxtypepername)(db, value);
+	}
 }

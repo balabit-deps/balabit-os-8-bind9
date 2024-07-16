@@ -26,6 +26,7 @@
 #include <isc/print.h>
 #include <isc/refcount.h>
 #include <isc/region.h>
+#include <isc/result.h>
 #include <isc/util.h>
 
 #include <dns/callbacks.h>
@@ -38,7 +39,6 @@
 #include <dns/rdataset.h>
 #include <dns/rdatasetiter.h>
 #include <dns/rdatatype.h>
-#include <dns/result.h>
 #include <dns/sdb.h>
 #include <dns/types.h>
 
@@ -1003,7 +1003,7 @@ findext(dns_db_t *db, const dns_name_t *name, dns_dbversion_t *version,
 	}
 
 	if (foundname != NULL) {
-		dns_name_copynf(xname, foundname);
+		dns_name_copy(xname, foundname);
 	}
 
 	if (nodep != NULL) {
@@ -1243,8 +1243,9 @@ issecure(dns_db_t *db) {
 }
 
 static unsigned int
-nodecount(dns_db_t *db) {
+nodecount(dns_db_t *db, dns_dbtree_t tree) {
 	UNUSED(db);
+	UNUSED(tree);
 
 	return (0);
 }
@@ -1262,9 +1263,10 @@ overmem(dns_db_t *db, bool over) {
 }
 
 static void
-settask(dns_db_t *db, isc_task_t *task) {
+settask(dns_db_t *db, isc_task_t *task, isc_task_t *prunetask) {
 	UNUSED(db);
 	UNUSED(task);
+	UNUSED(prunetask);
 }
 
 static dns_dbmethods_t sdb_methods = {
@@ -1272,7 +1274,6 @@ static dns_dbmethods_t sdb_methods = {
 	detach,
 	beginload,
 	endload,
-	NULL, /* serialize */
 	dump,
 	currentversion,
 	newversion,
@@ -1318,7 +1319,8 @@ static dns_dbmethods_t sdb_methods = {
 	NULL, /* setservestalerefresh */
 	NULL, /* getservestalerefresh */
 	NULL, /* setgluecachestats */
-	NULL  /* adjusthashsize */
+	NULL, /* setmaxrrperset */
+	NULL  /* setmaxtypepername */
 };
 
 static isc_result_t
@@ -1548,7 +1550,7 @@ dbiterator_current(dns_dbiterator_t *iterator, dns_dbnode_t **nodep,
 
 	attachnode(iterator->db, sdbiter->current, nodep);
 	if (name != NULL) {
-		dns_name_copynf(sdbiter->current->name, name);
+		dns_name_copy(sdbiter->current->name, name);
 		return (ISC_R_SUCCESS);
 	}
 	return (ISC_R_SUCCESS);
@@ -1563,7 +1565,7 @@ dbiterator_pause(dns_dbiterator_t *iterator) {
 static isc_result_t
 dbiterator_origin(dns_dbiterator_t *iterator, dns_name_t *name) {
 	UNUSED(iterator);
-	dns_name_copynf(dns_rootname, name);
+	dns_name_copy(dns_rootname, name);
 	return (ISC_R_SUCCESS);
 }
 

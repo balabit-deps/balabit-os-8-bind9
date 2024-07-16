@@ -1,0 +1,27 @@
+Description: Enforce use of standard library stdatomic.h rather than isc's
+ Upstream added a commit to fix faulty stdatomic.h header detection on Oracle
+ Linux 7, but this made detection on Ubuntu faulty. It therefore tries to
+ use <isc/stdatomic.h> instead, which causes programs using bind9 such as
+ bind-dyndb-ldap to fail to build. By enforcing bind9's use of the standard
+ stdatomic.h original behavior is maintained. The upstream commit that caused
+ this issue is
+ https://github.com/isc-projects/bind9/commit/fb95c1b8f4a0f4e410d1665e5c787982f107fc0c
+Author: Lena Voytek <lena.voytek@canonical.com>
+Forwarded: not-needed
+Last-Update: 2024-01-26
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/lib/isc/include/isc/atomic.h
++++ b/lib/isc/include/isc/atomic.h
+@@ -13,11 +13,7 @@
+ 
+ #pragma once
+ 
+-#if HAVE_STDATOMIC_H
+ #include <stdatomic.h>
+-#else
+-#include <isc/stdatomic.h>
+-#endif
+ 
+ #include <isc/util.h>
+ 

@@ -11,11 +11,12 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 DIGOPTS="+short -p ${PORT}"
-RNDCCMD="$RNDC -p ${CONTROLPORT} -c ../common/rndc.conf"
+RNDCCMD="$RNDC -p ${CONTROLPORT} -c ../_common/rndc.conf"
 
 status=0
 
@@ -39,23 +40,29 @@ dnstap_data_ready() {
 for bad in bad-*.conf; do
   ret=0
   echo_i "checking that named-checkconf detects error in $bad"
-  $CHECKCONF $bad >/dev/null 2>&1
-  if [ $? != 1 ]; then
+  {
+    $CHECKCONF $bad >/dev/null 2>&1
+    rc=$?
+  } || true
+  if [ $rc != 1 ]; then
     echo_i "failed"
     ret=1
   fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 done
 
 for good in good-*.conf; do
   ret=0
   echo_i "checking that named-checkconf detects no error in $good"
-  $CHECKCONF $good >/dev/null 2>&1
-  if [ $? != 0 ]; then
+  {
+    $CHECKCONF $good >/dev/null 2>&1
+    rc=$?
+  } || true
+  if [ $rc != 0 ]; then
     echo_i "failed"
     ret=1
   fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 done
 
 echo_i "wait for servers to finish loading"
@@ -65,14 +72,18 @@ wait_for_log 20 "all zones loaded" ns2/named.run || ret=1
 wait_for_log 20 "all zones loaded" ns3/named.run || ret=1
 wait_for_log 20 "all zones loaded" ns4/named.run || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 # both the 'a.example/A' lookup and the './NS' lookup to ns1
-# need tocomplete before reopening/rolling for the counts to
+# need to complete before reopening/rolling for the counts to
 # be correct.
 
-$DIG $DIGOPTS @10.53.0.3 a.example >dig.out
-wait_for_log 20 "(./NS): query_reset" ns1/named.run || true
+echo_i "prime cache"
+ret=0
+$DIG $DIGOPTS @10.53.0.3 a.example >dig.out || true
+wait_for_log 20 "(.): reset client" ns1/named.run || true
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
 
 # check three different dnstap reopen/roll methods:
 # ns1: dnstap-reopen; ns2: dnstap -reopen; ns3: dnstap -roll
@@ -87,15 +98,19 @@ if [ -n "$FSTRM_CAPTURE" ]; then
   fstrm_capture_pid=$!
   wait_for_log 10 "socket path ns4/dnstap.out" fstrm_capture.out.1 || ret=1
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 fi
 
+echo_i "reopen/roll capture streams"
+ret=0
 $RNDCCMD -s 10.53.0.1 dnstap-reopen | sed 's/^/ns1 /' | cat_i
 $RNDCCMD -s 10.53.0.2 dnstap -reopen | sed 's/^/ns2 /' | cat_i
 $RNDCCMD -s 10.53.0.3 dnstap -roll | sed 's/^/ns3 /' | cat_i
 $RNDCCMD -s 10.53.0.4 dnstap -reopen | sed 's/^/ns4 /' | cat_i
 
-$DIG $DIGOPTS @10.53.0.3 a.example >dig.out
+echo_i "send test traffic"
+ret=0
+$DIG $DIGOPTS @10.53.0.3 a.example >dig.out || ret=1
 
 # send an UPDATE to ns2
 $NSUPDATE <<-EOF
@@ -167,7 +182,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking TCP message counts"
 ret=0
@@ -184,7 +199,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking AUTH_QUERY message counts"
 ret=0
@@ -201,7 +216,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking AUTH_RESPONSE message counts"
 ret=0
@@ -218,7 +233,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking CLIENT_QUERY message counts"
 ret=0
@@ -235,7 +250,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking CLIENT_RESPONSE message counts"
 ret=0
@@ -252,7 +267,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking RESOLVER_QUERY message counts"
 ret=0
@@ -269,7 +284,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking RESOLVER_RESPONSE message counts"
 ret=0
@@ -286,7 +301,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking UPDATE_QUERY message counts"
 ret=0
@@ -303,7 +318,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking UPDATE_RESPONSE message counts"
 ret=0
@@ -320,7 +335,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking reopened message counts"
 
@@ -372,7 +387,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking TCP message counts"
 ret=0
@@ -389,7 +404,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking AUTH_QUERY message counts"
 ret=0
@@ -406,7 +421,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking AUTH_RESPONSE message counts"
 ret=0
@@ -423,7 +438,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking CLIENT_QUERY message counts"
 ret=0
@@ -440,7 +455,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking CLIENT_RESPONSE message counts"
 ret=0
@@ -457,7 +472,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking RESOLVER_QUERY message counts"
 ret=0
@@ -474,7 +489,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking RESOLVER_RESPONSE message counts"
 ret=0
@@ -491,7 +506,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking UPDATE_QUERY message counts"
 ret=0
@@ -508,7 +523,7 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking UPDATE_RESPONSE message counts"
 ret=0
@@ -525,16 +540,16 @@ ret=0
   ret=1
 }
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 echo_i "checking whether destination UDP port is logged for client queries"
 ret=0
 $DNSTAPREAD ns3/dnstap.out.save | grep -Eq "CQ [0-9:.]+ -> 10.53.0.3:${PORT} UDP" || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 HAS_PYYAML=0
-if [ -n "$PYTHON" ]; then
+if [ -x "$PYTHON" ]; then
   $PYTHON -c "import yaml" 2>/dev/null && HAS_PYYAML=1
 fi
 
@@ -545,7 +560,7 @@ if [ $HAS_PYYAML -ne 0 ]; then
     $PYTHON ydump.py "$DNSTAPREAD" "ns3/dnstap.out.save" >ydump.out || ret=1
   } | cat_i
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 fi
 
 echo_i "checking dnstap-read hex output"
@@ -555,13 +570,13 @@ echo $hex | $WIRETEST >dnstap.hex
 grep 'status: NOERROR' dnstap.hex >/dev/null 2>&1 || ret=1
 grep 'ANSWER: 3, AUTHORITY: 1' dnstap.hex >/dev/null 2>&1 || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
 if [ -n "$FSTRM_CAPTURE" ]; then
-  $DIG $DIGOPTS @10.53.0.4 a.example >dig.out
+  $DIG $DIGOPTS @10.53.0.4 a.example >dig.out || ret=1
 
   # send an UPDATE to ns4
-  $NSUPDATE <<-EOF >nsupdate.out 2>&1
+  $NSUPDATE <<-EOF >nsupdate.out 2>&1 && ret=1
 	server 10.53.0.4 ${PORT}
 	zone example
 	update add b.example 3600 in a 10.10.10.10
@@ -576,7 +591,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
   kill $fstrm_capture_pid
   wait
   udp4=$($DNSTAPREAD dnstap.out | grep "UDP " | wc -l)
@@ -597,7 +612,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking TCP message counts"
   ret=0
@@ -606,7 +621,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking AUTH_QUERY message counts"
   ret=0
@@ -615,7 +630,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking AUTH_RESPONSE message counts"
   ret=0
@@ -624,7 +639,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking CLIENT_QUERY message counts"
   ret=0
@@ -633,7 +648,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking CLIENT_RESPONSE message counts"
   ret=0
@@ -642,7 +657,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking RESOLVER_QUERY message counts"
   ret=0
@@ -651,7 +666,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking RESOLVER_RESPONSE message counts"
   ret=0
@@ -667,7 +682,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking UPDATE_RESPONSE message counts"
   ret=0
@@ -676,7 +691,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   mv dnstap.out dnstap.out.save
 
@@ -689,7 +704,7 @@ EOF
     ret=1
   }
   $RNDCCMD -s 10.53.0.4 dnstap -reopen | sed 's/^/ns4 /' | cat_i
-  $DIG $DIGOPTS @10.53.0.4 a.example >dig.out
+  $DIG $DIGOPTS @10.53.0.4 a.example >dig.out || ret=1
 
   echo_i "checking reopened unix socket message counts"
   sleep 2
@@ -719,7 +734,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking TCP message counts"
   ret=0
@@ -728,7 +743,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking AUTH_QUERY message counts"
   ret=0
@@ -737,7 +752,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking AUTH_RESPONSE message counts"
   ret=0
@@ -746,7 +761,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking CLIENT_QUERY message counts"
   ret=0
@@ -755,7 +770,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking CLIENT_RESPONSE message counts"
   ret=0
@@ -764,7 +779,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking RESOLVER_QUERY message counts"
   ret=0
@@ -773,7 +788,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking RESOLVER_RESPONSE message counts"
   ret=0
@@ -789,7 +804,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 
   echo_i "checking UPDATE_RESPONSE message counts"
   ret=0
@@ -798,7 +813,7 @@ EOF
     ret=1
   }
   if [ $ret != 0 ]; then echo_i "failed"; fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 fi
 
 echo_i "checking large packet printing"
@@ -808,30 +823,42 @@ ret=0
 lines=$($DNSTAPREAD -y large-answer.fstrm | grep -c "opcode: QUERY")
 [ $lines -eq 2 ] || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$(expr $status + $ret)
+status=$((status + ret))
 
-test_dnstap_roll() (
+_test_dnstap_roll() (
   ip="$1"
   ns="$2"
   n="$3"
+
   $RNDCCMD -s "${ip}" dnstap -roll "${n}" | sed "s/^/${ns} /" | cat_i \
     && files=$(find "$ns" -name "dnstap.out.[0-9]" | wc -l) \
-    && test "$files" -le "${n}" && test "$files" -ge "1"
+    && test "$files" -eq "${n}" && test "$files" -ge "1" || return 1
 )
 
-echo_i "checking 'rndc -roll <value>' (no versions)"
-ret=0
-start_server --noclean --restart --port "${PORT}" ns3
-_repeat 5 test_dnstap_roll 10.53.0.3 ns3 3 || ret=1
-if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$((status + ret))
+test_dnstap_roll() {
+  echo_i "checking 'rndc -roll $4' ($1)"
+  ret=0
 
-echo_i "checking 'rndc -roll <value>' (versions)"
-ret=0
+  try=0
+  while test $try -lt 12; do
+    touch "$3/dnstap.out.$try"
+    try=$((try + 1))
+  done
+
+  _repeat 10 _test_dnstap_roll $2 $3 $4 || ret=1
+  if [ $ret != 0 ]; then echo_i "failed"; fi
+  status=$((status + ret))
+}
+
+start_server --noclean --restart --port "${PORT}" ns3
+test_dnstap_roll "no versions" 10.53.0.3 ns3 6
+test_dnstap_roll "no versions" 10.53.0.3 ns3 3
+test_dnstap_roll "no versions" 10.53.0.3 ns3 1
+
 start_server --noclean --restart --port "${PORT}" ns2
-_repeat 5 test_dnstap_roll 10.53.0.2 ns2 3 || ret=1
-if [ $ret != 0 ]; then echo_i "failed"; fi
-status=$((status + ret))
+test_dnstap_roll "versions" 10.53.0.2 ns2 6
+test_dnstap_roll "versions" 10.53.0.2 ns2 3
+test_dnstap_roll "versions" 10.53.0.2 ns2 1
 
 echo_i "exit status: $status"
 [ "$status" -eq 0 ] || exit 1

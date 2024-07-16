@@ -11,9 +11,10 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
+set -e
+
 #shellcheck source=conf.sh
-SYSTEMTESTTOP=..
-. "$SYSTEMTESTTOP/conf.sh"
+. ../conf.sh
 
 dig_with_opts() {
   "$DIG" -p "${PORT}" "$@"
@@ -40,28 +41,49 @@ dig_with_opts @10.53.0.2 axfr example | grep -v "^ds0" \
 # add 1/5 second per query
 timeout=$(($(wc -l <query.list) / 5))
 while [ $i -lt $passes ]; do
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.1.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.1.test$n" 2>&1) &
   pid1="$!"
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.2.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.2.test$n" 2>&1) &
   pid2="$!"
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.3.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.3.test$n" 2>&1) &
   pid3="$!"
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.4.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.4.test$n" 2>&1) &
   pid4="$!"
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.5.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.5.test$n" 2>&1) &
   pid5="$!"
-  (dig_with_opts @10.53.0.3 -f query.list >"dig.out$i.6.test$n") &
+  (dig_with_opts -d +qr @10.53.0.3 -f query.list >"dig.out$i.6.test$n" 2>&1) &
   pid6="$!"
 
-  retry_quiet "$timeout" wait_for_pid "$pid1" "$pid2" "$pid3" "$pid4" "$pid5" "$pid6" || ret=1
-  kill -TERM "$pid1" "$pid2" "$pid3" "$pid4" "$pid5" "$pid6" 2>/dev/null
+  retry_quiet "$timeout" wait_for_pid "$pid1" "$pid2" "$pid3" "$pid4" "$pid5" "$pid6" || {
+    echo_i "wait_for_pid failed"
+    ret=1
+  }
+  kill -TERM "$pid1" "$pid2" "$pid3" "$pid4" "$pid5" "$pid6" 2>/dev/null || true
 
-  wait "$pid1" || ret=1
-  wait "$pid2" || ret=1
-  wait "$pid3" || ret=1
-  wait "$pid4" || ret=1
-  wait "$pid5" || ret=1
-  wait "$pid6" || ret=1
+  wait "$pid1" || {
+    echo_i "wait $pid1 (dig.out$i.1.test$n) failed with $?"
+    ret=1
+  }
+  wait "$pid2" || {
+    echo_i "wait $pid2 (dig.out$i.2.test$n) failed with $?"
+    ret=1
+  }
+  wait "$pid3" || {
+    echo_i "wait $pid3 (dig.out$i.3.test$n) failed with $?"
+    ret=1
+  }
+  wait "$pid4" || {
+    echo_i "wait $pid4 (dig.out$i.4.test$n) failed with $?"
+    ret=1
+  }
+  wait "$pid5" || {
+    echo_i "wait $pid5 (dig.out$i.5.test$n) failed with $?"
+    ret=1
+  }
+  wait "$pid6" || {
+    echo_i "wait $pid6 (dig.out$i.6.test$n) failed with $?"
+    ret=1
+  }
 
   grep "status: SERVFAIL" "dig.out$i.1.test$n" >/dev/null && ret=1
   grep "status: SERVFAIL" "dig.out$i.2.test$n" >/dev/null && ret=1
