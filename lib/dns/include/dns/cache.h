@@ -11,8 +11,7 @@
  * information regarding copyright ownership.
  */
 
-#ifndef DNS_CACHE_H
-#define DNS_CACHE_H 1
+#pragma once
 
 /*****
 ***** Module Info
@@ -57,32 +56,29 @@ ISC_LANG_BEGINDECLS
  ***	Functions
  ***/
 isc_result_t
-dns_cache_create(isc_mem_t *cmctx, isc_mem_t *hmctx, isc_taskmgr_t *taskmgr,
+dns_cache_create(isc_mem_t *mctx, isc_taskmgr_t *taskmgr,
 		 isc_timermgr_t *timermgr, dns_rdataclass_t rdclass,
 		 const char *cachename, const char *db_type,
 		 unsigned int db_argc, char **db_argv, dns_cache_t **cachep);
 /*%<
- * Create a new DNS cache.
- *
- * dns_cache_create2() will create a named cache.
- *
- * dns_cache_create3() will create a named cache using two separate memory
- * contexts, one for cache data which can be cleaned and a separate one for
- * memory allocated for the heap (which can grow without an upper limit and
- * has no mechanism for shrinking).
- *
- * dns_cache_create() is a backward compatible version that internally
- * specifies an empty cache name and a single memory context.
+ * Create a new named DNS cache using two separate memory contexts, one for
+ * cache data which can be cleaned and a separate one for memory allocated for
+ * the heap (which can grow without an upper limit and has no mechanism for
+ * shrinking).
  *
  * Requires:
  *
- *\li	'cmctx' (and 'hmctx' if applicable) is a valid memory context.
+ *\li	'mctx' is a valid memory context.
+ *
+ *\li	'taskmgr' is a valid task manager (if 'db_type' is "rbt").
  *
  *\li	'taskmgr' is a valid task manager and 'timermgr' is a valid timer
- * 	manager, or both are NULL.  If NULL, no periodic cleaning of the
- * 	cache will take place.
+ * 	manager, or both are NULL (if 'db_type' is not "rbt").  If NULL, no
+ * 	periodic cleaning of the cache will take place.
  *
  *\li	'cachename' is a valid string.  This must not be NULL.
+
+ *\li	'mctx' is a valid memory context.
  *
  *\li	'cachep' is a valid pointer, and *cachep == NULL
  *
@@ -153,61 +149,6 @@ dns_cache_attachdb(dns_cache_t *cache, dns_db_t **dbp);
  * Ensures:
  *
  *\li	*dbp is attached to the database.
- */
-
-isc_result_t
-dns_cache_setfilename(dns_cache_t *cache, const char *filename);
-/*%<
- * If 'filename' is non-NULL, make the cache persistent.
- * The cache's data will be stored in the given file.
- * If 'filename' is NULL, make the cache non-persistent.
- * Files that are no longer used are not unlinked automatically.
- *
- * Returns:
- *\li	#ISC_R_SUCCESS
- *\li	#ISC_R_NOMEMORY
- *\li	Various file-related failures
- */
-
-isc_result_t
-dns_cache_load(dns_cache_t *cache);
-/*%<
- * If the cache has a file name, load the cache contents from the file.
- * Previous cache contents are not discarded.
- * If no file name has been set, do nothing and return success.
- *
- * MT:
- *\li	Multiple simultaneous attempts to load or dump the cache
- * 	will be serialized with respect to one another, but
- *	the cache may be read and updated while the dump is
- *	in progress.  Updates performed during loading
- *	may or may not be preserved, and reads may return
- * 	either the old or the newly loaded data.
- *
- * Returns:
- *
- *\li	#ISC_R_SUCCESS
- *  \li    Various failures depending on the database implementation type
- */
-
-isc_result_t
-dns_cache_dump(dns_cache_t *cache);
-/*%<
- * If the cache has a file name, write the cache contents to disk,
- * overwriting any preexisting file.  If no file name has been set,
- * do nothing and return success.
- *
- * MT:
- *\li	Multiple simultaneous attempts to load or dump the cache
- * 	will be serialized with respect to one another, but
- *	the cache may be read and updated while the dump is
- *	in progress.  Updates performed during the dump may
- * 	or may not be reflected in the dumped file.
- *
- * Returns:
- *
- *\li	#ISC_R_SUCCESS
- *  \li    Various failures depending on the database implementation type
  */
 
 isc_result_t
@@ -339,6 +280,18 @@ dns_cache_updatestats(dns_cache_t *cache, isc_result_t result);
  * Update cache statistics based on result code in 'result'
  */
 
+void
+dns_cache_setmaxrrperset(dns_cache_t *cache, uint32_t value);
+/*%<
+ * Set the maximum resource records per RRSet that can be cached.
+ */
+
+void
+dns_cache_setmaxtypepername(dns_cache_t *cache, uint32_t value);
+/*%<
+ * Set the maximum resource record types per owner name that can be cached.
+ */
+
 #ifdef HAVE_LIBXML2
 int
 dns_cache_renderxml(dns_cache_t *cache, void *writer0);
@@ -356,5 +309,3 @@ dns_cache_renderjson(dns_cache_t *cache, void *cstats0);
 #endif /* HAVE_JSON_C */
 
 ISC_LANG_ENDDECLS
-
-#endif /* DNS_CACHE_H */

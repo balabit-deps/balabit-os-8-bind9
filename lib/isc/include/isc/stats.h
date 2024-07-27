@@ -11,8 +11,7 @@
  * information regarding copyright ownership.
  */
 
-#ifndef ISC_STATS_H
-#define ISC_STATS_H 1
+#pragma once
 
 /*! \file isc/stats.h */
 
@@ -101,7 +100,10 @@ enum {
 	isc_sockstatscounter_rawrecvfail = 60,
 	isc_sockstatscounter_rawactive = 61,
 
-	isc_sockstatscounter_max = 62
+	isc_sockstatscounter_tcp4clients = 62,
+	isc_sockstatscounter_tcp6clients = 63,
+
+	isc_sockstatscounter_max = 64
 };
 
 ISC_LANG_BEGINDECLS
@@ -252,5 +254,3 @@ isc_stats_resize(isc_stats_t **stats, int ncounters);
  */
 
 ISC_LANG_ENDDECLS
-
-#endif /* ISC_STATS_H */

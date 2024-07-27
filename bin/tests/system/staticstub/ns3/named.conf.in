@@ -13,7 +13,7 @@
 
 key rndc_key {
 	secret "1234abcd8765";
-	algorithm hmac-sha256;
+	algorithm @DEFAULT_HMAC@;
 };
 
 controls {
@@ -43,4 +43,9 @@ zone "example.org" {
 zone "undelegated" {
 	type primary;
 	file "undelegated.db.signed";
+};
+
+zone "unsigned" {
+	type primary;
+	file "unsigned.db";
 };

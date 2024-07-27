@@ -11,8 +11,9 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 # Set known locale for the tests
 
@@ -94,7 +95,7 @@ qname() {
 #        parameter should have that period as well.
 
 idna_test() {
-  n=$(expr $n + 1)
+  n=$((n + 1))
   description=$1
   if [ "$2" != "" ]; then
     description="${description}: $2"
@@ -102,8 +103,11 @@ idna_test() {
   echo_i "$description ($n)"
 
   ret=0
-  $DIGCMD $2 $3 >dig.out.$n 2>&1
-  if [ $? -ne 0 ]; then
+  {
+    $DIGCMD $2 $3 >dig.out.$n 2>&1
+    rc=$?
+  } || true
+  if [ $rc -ne 0 ]; then
     echo_i "failed: dig command returned non-zero status"
     ret=1
   else
@@ -113,7 +117,7 @@ idna_test() {
       ret=1
     fi
   fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 }
 
 # Function for performing a test where "dig" is expected to fail
@@ -123,7 +127,7 @@ idna_test() {
 #   $3 - Name being queried
 
 idna_fail() {
-  n=$(expr $n + 1)
+  n=$((n + 1))
   description=$1
   if [ "$2" != "" ]; then
     description="${description}: $2"
@@ -131,12 +135,15 @@ idna_fail() {
   echo_i "$description ($n)"
 
   ret=0
-  $DIGCMD $2 $3 >dig.out.$n 2>&1
-  if [ $? -eq 0 ]; then
+  {
+    $DIGCMD $2 $3 >dig.out.$n 2>&1
+    rc=$?
+  } || true
+  if [ $rc -eq 0 ]; then
     echo_i "failed: dig command unexpectedly succeeded"
     ret=1
   fi
-  status=$(expr $status + $ret)
+  status=$((status + ret))
 }
 
 # Function to check that case is preserved for an all-ASCII label.
@@ -345,6 +352,23 @@ idna_enabled_test() {
   idna_test "$text" "+noidnin +noidnout" "xn--19g" "xn--19g."
   idna_test "$text" "+noidnin +idnout" "xn--19g" "√."
   idna_test "$text" "+idnin   +idnout" "xn--19g" "√."
+
+  # Test that non-letter characters are preserved in the output.  When
+  # UseSTD3ASCIIRules are enabled, it would mangle non-letter characters like
+  # `_` (underscore) and `*` (wildcard.
+
+  text="Checking valid non-letter characters"
+  idna_test "$text" "" "*.xn--nxasmq6b.com" "*.xn--nxasmq6b.com."
+  idna_test "$text" "+noidnin +noidnout" "*.xn--nxasmq6b.com" "*.xn--nxasmq6b.com."
+  idna_test "$text" "+noidnin +idnout" "*.xn--nxasmq6b.com" "*.βόλοσ.com."
+  idna_test "$text" "+idnin +noidnout" "*.xn--nxasmq6b.com" "*.xn--nxasmq6b.com."
+  idna_test "$text" "+idnin +idnout" "*.xn--nxasmq6b.com" "*.βόλοσ.com."
+
+  idna_test "$text" "" "_tcp.xn--nxasmq6b.com" "_tcp.xn--nxasmq6b.com."
+  idna_test "$text" "+noidnin +noidnout" "_tcp.xn--nxasmq6b.com" "_tcp.xn--nxasmq6b.com."
+  idna_test "$text" "+noidnin +idnout" "_tcp.xn--nxasmq6b.com" "_tcp.βόλοσ.com."
+  idna_test "$text" "+idnin +noidnout" "_tcp.xn--nxasmq6b.com" "_tcp.xn--nxasmq6b.com."
+  idna_test "$text" "+idnin +idnout" "_tcp.xn--nxasmq6b.com" "_tcp.βόλοσ.com."
 }
 
 # Function to perform tests if IDNA is not enabled.
@@ -356,8 +380,7 @@ idna_disabled_test() {
 
 # Main test begins here
 
-$FEATURETEST --with-idn
-if [ $? -eq 0 ]; then
+if $FEATURETEST --with-libidn2; then
   idna_enabled_test
 else
   idna_disabled_test

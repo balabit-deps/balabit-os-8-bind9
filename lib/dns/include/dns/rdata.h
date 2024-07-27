@@ -11,8 +11,7 @@
  * information regarding copyright ownership.
  */
 
-#ifndef DNS_RDATA_H
-#define DNS_RDATA_H 1
+#pragma once
 
 /*****
 ***** Module Info
@@ -574,6 +573,13 @@ dns_rdatatype_isdnssec(dns_rdatatype_t type);
  */
 
 bool
+dns_rdatatype_iskeymaterial(dns_rdatatype_t type);
+/*%<
+ * Return true iff the rdata type 'type' is a DNSSEC key
+ * related type, like DNSKEY, CDNSKEY, or CDS.
+ */
+
+bool
 dns_rdatatype_iszonecutauth(dns_rdatatype_t type);
 /*%<
  * Return true iff rdata of type 'type' is considered authoritative
@@ -596,8 +602,8 @@ dns_rdatatype_isknown(dns_rdatatype_t type);
  */
 
 isc_result_t
-dns_rdata_additionaldata(dns_rdata_t *rdata, dns_additionaldatafunc_t add,
-			 void *arg);
+dns_rdata_additionaldata(dns_rdata_t *rdata, const dns_name_t *owner,
+			 dns_additionaldatafunc_t add, void *arg);
 /*%<
  * Call 'add' for each name and type from 'rdata' which is subject to
  * additional section processing.
@@ -808,5 +814,3 @@ const char *
 dns_rdata_updateop(dns_rdata_t *rdata, dns_section_t section);
 
 ISC_LANG_ENDDECLS
-
-#endif /* DNS_RDATA_H */

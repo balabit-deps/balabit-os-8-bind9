@@ -19,9 +19,9 @@
 #include <isc/magic.h>
 #include <isc/mem.h>
 #include <isc/netaddr.h>
-#include <isc/platform.h>
 #include <isc/print.h>
 #include <isc/random.h>
+#include <isc/result.h>
 #include <isc/serial.h>
 #include <isc/stats.h>
 #include <isc/stdtime.h>
@@ -49,7 +49,6 @@
 #include <dns/rdatasetiter.h>
 #include <dns/rdatastruct.h>
 #include <dns/rdatatype.h>
-#include <dns/result.h>
 #include <dns/soa.h>
 #include <dns/ssu.h>
 #include <dns/stats.h>
@@ -1206,10 +1205,7 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 				}
 			}
 
-			if (type == dns_rdatatype_dnskey ||
-			    type == dns_rdatatype_cdnskey ||
-			    type == dns_rdatatype_cds)
-			{
+			if (dns_rdatatype_iskeymaterial(type)) {
 				/*
 				 * DNSKEY RRset is signed with KSK.
 				 * CDS and CDNSKEY RRsets too (RFC 7344, 4.1).
@@ -1243,10 +1239,7 @@ add_sigs(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 			/*
 			 * CDS and CDNSKEY are signed with KSK (RFC 7344, 4.1).
 			 */
-			if (type == dns_rdatatype_dnskey ||
-			    type == dns_rdatatype_cdnskey ||
-			    type == dns_rdatatype_cds)
-			{
+			if (dns_rdatatype_iskeymaterial(type)) {
 				if (!KSK(keys[i]) && keyset_kskonly) {
 					continue;
 				}
@@ -1499,23 +1492,37 @@ struct dns_update_state {
 };
 
 static uint32_t
-dns__jitter_expire(dns_zone_t *zone, uint32_t sigvalidityinterval) {
+dns__jitter_expire(dns_zone_t *zone) {
 	/* Spread out signatures over time */
-	if (sigvalidityinterval >= 3600U) {
-		uint32_t expiryinterval =
-			dns_zone_getsigresigninginterval(zone);
+	isc_stdtime_t jitter = DEFAULT_JITTER;
+	isc_stdtime_t sigvalidity = dns_zone_getsigvalidityinterval(zone);
+	dns_kasp_t *kasp = dns_zone_getkasp(zone);
 
-		if (sigvalidityinterval < 7200U) {
-			expiryinterval = 1200;
-		} else if (expiryinterval > sigvalidityinterval) {
-			expiryinterval = sigvalidityinterval;
+	if (kasp != NULL) {
+		jitter = dns_kasp_sigjitter(kasp);
+		sigvalidity = dns_kasp_sigvalidity(kasp);
+		INSIST(jitter <= sigvalidity);
+	} else {
+		jitter = dns_zone_getsigresigninginterval(zone);
+		if (jitter > sigvalidity) {
+			jitter = sigvalidity;
 		} else {
-			expiryinterval = sigvalidityinterval - expiryinterval;
+			jitter = sigvalidity - jitter;
 		}
-		uint32_t jitter = isc_random_uniform(expiryinterval);
-		sigvalidityinterval -= jitter;
 	}
-	return (sigvalidityinterval);
+
+	if (jitter > sigvalidity) {
+		jitter = sigvalidity;
+	}
+
+	if (sigvalidity >= 3600U) {
+		if (sigvalidity > 7200U) {
+			sigvalidity -= isc_random_uniform(jitter);
+		} else {
+			sigvalidity -= isc_random_uniform(1200);
+		}
+	}
+	return (sigvalidity);
 }
 
 isc_result_t
@@ -1568,8 +1575,7 @@ dns_update_signaturesinc(dns_update_log_t *log, dns_zone_t *zone, dns_db_t *db,
 		isc_stdtime_get(&state->now);
 		state->inception = state->now - 3600; /* Allow for some clock
 							 skew. */
-		state->expire = state->now +
-				dns__jitter_expire(zone, sigvalidityinterval);
+		state->expire = state->now + dns__jitter_expire(zone);
 		state->soaexpire = state->now + sigvalidityinterval;
 		state->keyexpire = dns_zone_getkeyvalidityinterval(zone);
 		if (state->keyexpire == 0) {
@@ -1676,10 +1682,7 @@ next_state:
 						    &flag));
 				if (flag) {
 					isc_stdtime_t exp;
-					if (type == dns_rdatatype_dnskey ||
-					    type == dns_rdatatype_cdnskey ||
-					    type == dns_rdatatype_cds)
-					{
+					if (dns_rdatatype_iskeymaterial(type)) {
 						exp = state->keyexpire;
 					} else if (type == dns_rdatatype_soa) {
 						exp = state->soaexpire;

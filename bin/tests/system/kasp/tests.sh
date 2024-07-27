@@ -11,11 +11,12 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
+set -e
+
 # shellcheck source=conf.sh
+. ../conf.sh
 # shellcheck source=kasp.sh
-SYSTEMTESTTOP=..
-. "$SYSTEMTESTTOP/conf.sh"
-. "$SYSTEMTESTTOP/kasp.sh"
+. ../kasp.sh
 
 start_time="$(TZ=UTC date +%s)"
 status=0
@@ -37,7 +38,7 @@ dig_with_opts() {
 
 # RNDC.
 rndccmd() {
-  "$RNDC" -c "$SYSTEMTESTTOP/common/rndc.conf" -p "$CONTROLPORT" -s "$@"
+  "$RNDC" -c ../_common/rndc.conf -p "$CONTROLPORT" -s "$@"
 }
 
 # Log error and increment failure rate.
@@ -162,7 +163,7 @@ cp "$STATE_FILE" "$CMP_FILE"
 $SETTIME -P +3600 "$BASE_FILE" >/dev/null || log_error "settime failed"
 grep "; Publish: " "$KEY_FILE" >/dev/null || log_error "mismatch published in $KEY_FILE"
 grep "Publish: " "$PRIVATE_FILE" >/dev/null || log_error "mismatch published in $PRIVATE_FILE"
-$DIFF "$CMP_FILE" "$STATE_FILE" || log_error "unexpected file change in $STATE_FILE"
+diff "$CMP_FILE" "$STATE_FILE" || log_error "unexpected file change in $STATE_FILE"
 test "$ret" -eq 0 || echo_i "failed"
 status=$((status + ret))
 
@@ -393,6 +394,16 @@ check_subdomain
 dnssec_verify
 
 #
+# A zone with special characters.
+#
+set_zone "i-am.\":\;?&[]\@!\$*+,|=\.\(\)special.kasp."
+set_policy "default" "1" "3600"
+set_server "ns3" "10.53.0.3"
+# It is non-trivial to adapt the tests to deal with all possible different
+# escaping characters, so we will just try to verify the zone.
+dnssec_verify
+
+#
 # Zone: dynamic.kasp
 #
 set_zone "dynamic.kasp"
@@ -481,6 +492,23 @@ cp "${DIR}/template2.db.in" "${DIR}/${ZONE}.db"
 rndccmd 10.53.0.3 thaw "$ZONE" >/dev/null || log_error "rndc thaw zone ${ZONE} failed"
 
 retry_quiet 10 update_is_signed || ret=1
+test "$ret" -eq 0 || echo_i "failed"
+status=$((status + ret))
+
+#
+# Zone: dynamic-signed-inline-signing.kasp
+#
+set_zone "dynamic-signed-inline-signing.kasp"
+set_dynamic
+set_policy "default" "1" "3600"
+set_server "ns3" "10.53.0.3"
+dnssec_verify
+# Ensure no zone_resigninc for the unsigned version of the zone is triggered.
+n=$((n + 1))
+echo_i "check if resigning the raw version of the zone is prevented for zone ${ZONE} ($n)"
+ret=0
+grep "zone_resigninc: zone $ZONE/IN (unsigned): enter" $DIR/named.run && ret=1
+grep "error reading K$ZONE" $DIR/named.run && ret=1
 test "$ret" -eq 0 || echo_i "failed"
 status=$((status + ret))
 
@@ -1348,6 +1376,48 @@ check_rrsig_refresh() {
 check_rrsig_refresh
 
 #
+# Zone: dnskey-ttl-mismatch.autosign
+#
+set_zone "dnskey-ttl-mismatch.autosign"
+set_policy "autosign" "2" "300"
+set_server "ns3" "10.53.0.3"
+# Key properties.
+key_clear "KEY1"
+set_keyrole "KEY1" "ksk"
+set_keylifetime "KEY1" "63072000"
+set_keyalgorithm "KEY1" "$DEFAULT_ALGORITHM_NUMBER" "$DEFAULT_ALGORITHM" "$DEFAULT_BITS"
+set_keysigning "KEY1" "yes"
+set_zonesigning "KEY1" "no"
+
+key_clear "KEY2"
+set_keyrole "KEY2" "zsk"
+set_keylifetime "KEY2" "31536000"
+set_keyalgorithm "KEY2" "$DEFAULT_ALGORITHM_NUMBER" "$DEFAULT_ALGORITHM" "$DEFAULT_BITS"
+set_keysigning "KEY2" "no"
+set_zonesigning "KEY2" "yes"
+
+# Both KSK and ZSK stay OMNIPRESENT.
+set_keystate "KEY1" "GOAL" "omnipresent"
+set_keystate "KEY1" "STATE_DNSKEY" "omnipresent"
+set_keystate "KEY1" "STATE_KRRSIG" "omnipresent"
+set_keystate "KEY1" "STATE_DS" "omnipresent"
+
+set_keystate "KEY2" "GOAL" "omnipresent"
+set_keystate "KEY2" "STATE_DNSKEY" "omnipresent"
+set_keystate "KEY2" "STATE_ZRRSIG" "omnipresent"
+# Expect only two keys.
+key_clear "KEY3"
+key_clear "KEY4"
+
+check_keys
+check_dnssecstatus "$SERVER" "$POLICY" "$ZONE"
+set_keytimes_autosign_policy
+check_keytimes
+check_apex
+check_subdomain
+dnssec_verify
+
+#
 # Zone: fresh-sigs.autosign.
 #
 set_zone "fresh-sigs.autosign"
@@ -2155,7 +2225,7 @@ dnssec_verify
 n=$((n + 1))
 echo_i "check that rndc dnssec -rollover fails if key is inactive ($n)"
 ret=0
-rndccmd "$SERVER" dnssec -rollover -key $(key_get KEY4 ID) "$ZONE" >rndc.dnssec.rollover.out.$ZONE.$n
+rndccmd "$SERVER" dnssec -rollover -key $(key_get KEY4 ID) "$ZONE" >rndc.dnssec.rollover.out.$ZONE.$n || ret=1
 grep "key is not actively signing" rndc.dnssec.rollover.out.$ZONE.$n >/dev/null || log_error "bad error message"
 test "$ret" -eq 0 || echo_i "failed"
 status=$((status + ret))
@@ -3942,7 +4012,7 @@ dnssec_verify
 # Zone: step1.going-insecure.kasp
 #
 set_zone "step1.going-insecure.kasp"
-set_policy "insecure" "2" "7200"
+set_policy "insecure" "2" "3600"
 set_server "ns6" "10.53.0.6"
 # Expect a CDS/CDNSKEY Delete Record.
 set_cdsdelete
@@ -3979,7 +4049,7 @@ check_next_key_event 93600
 # Zone: step2.going-insecure.kasp
 #
 set_zone "step2.going-insecure.kasp"
-set_policy "insecure" "2" "7200"
+set_policy "insecure" "2" "3600"
 set_server "ns6" "10.53.0.6"
 
 # The DS is long enough removed from the zone to be considered HIDDEN.
@@ -4009,7 +4079,7 @@ check_next_key_event 7500
 #
 set_zone "step1.going-insecure-dynamic.kasp"
 set_dynamic
-set_policy "insecure" "2" "7200"
+set_policy "insecure" "2" "3600"
 set_server "ns6" "10.53.0.6"
 # Expect a CDS/CDNSKEY Delete Record.
 set_cdsdelete
@@ -4047,7 +4117,7 @@ check_next_key_event 93600
 #
 set_zone "step2.going-insecure-dynamic.kasp"
 set_dynamic
-set_policy "insecure" "2" "7200"
+set_policy "insecure" "2" "3600"
 set_server "ns6" "10.53.0.6"
 
 # The DS is long enough removed from the zone to be considered HIDDEN.

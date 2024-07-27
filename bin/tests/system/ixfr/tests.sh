@@ -16,8 +16,9 @@
 #          in the log file - need a better approach <sdm> - until then,
 #          if you add any tests above that point, you will break the test.
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+set -e
+
+. ../conf.sh
 
 wait_for_serial() (
   $DIG $DIGOPTS "@$1" "$2" SOA >"$4"
@@ -29,14 +30,17 @@ status=0
 n=0
 
 DIGOPTS="+tcp +noadd +nosea +nostat +noquest +nocomm +nocmd -p ${PORT}"
-SENDCMD="$PERL ../send.pl 10.53.0.2 ${EXTRAPORT1}"
-RNDCCMD="$RNDC -p ${CONTROLPORT} -c ../common/rndc.conf -s"
+RNDCCMD="$RNDC -p ${CONTROLPORT} -c ../_common/rndc.conf -s"
+
+sendcmd() {
+  send 10.53.0.2 "${EXTRAPORT1}"
+}
 
 n=$((n + 1))
 echo_i "testing initial AXFR ($n)"
 ret=0
 
-$SENDCMD <<EOF
+sendcmd <<EOF
 /SOA/
 nil.      	300	SOA	ns.nil. root.nil. 1 300 300 604800 300
 /AXFR/
@@ -79,7 +83,7 @@ ret=0
 # We change the IP address of a.nil., and the TXT record at the apex.
 # Then we do a SOA-only update.
 
-$SENDCMD <<EOF
+sendcmd <<EOF
 /SOA/
 nil.      	300	SOA	ns.nil. root.nil. 3 300 300 604800 300
 /IXFR/
@@ -111,7 +115,7 @@ ret=0
 
 # Provide a broken IXFR response and a working fallback AXFR response
 
-$SENDCMD <<EOF
+sendcmd <<EOF
 /SOA/
 nil.      	300	SOA	ns.nil. root.nil. 4 300 300 604800 300
 /IXFR/
@@ -148,7 +152,7 @@ ret=0
 nextpart ns1/named.run >/dev/null
 
 # Provide a broken IXFR response and a working fallback AXFR response.
-$SENDCMD <<EOF
+sendcmd <<EOF
 /SOA/
 nil.      	300	SOA	ns.nil. root.nil. 4 300 300 604800 300
 /IXFR/
@@ -203,8 +207,11 @@ status=$((status + ret))
 n=$((n + 1))
 echo_i "testing ixfr-from-differences option ($n)"
 # ns3 is primary; ns4 is secondary
-$CHECKZONE test. ns3/mytest.db >/dev/null 2>&1
-if [ $? -ne 0 ]; then
+{
+  $CHECKZONE test. ns3/mytest.db >/dev/null 2>&1
+  rc=$?
+} || true
+if [ $rc -ne 0 ]; then
   echo_i "named-checkzone returned failure on ns3/mytest.db"
 fi
 
@@ -349,6 +356,32 @@ $DIG $DIGOPTS ixfr=1 test @10.53.0.5 >dig.out1.test$n || ret=1
 # Should be "switch to TCP" response
 $DIG $DIGOPTS ixfr=1 +notcp test @10.53.0.5 >dig.out2.test$n || ret=1
 awk '$4 == "SOA" { soacnt++} END {if (soacnt == 2) exit(0); else exit(1);}' dig.out1.test$n || ret=1
+awk '$4 == "SOA" { soacnt++} END {if (soacnt == 1) exit(0); else exit(1);}' dig.out2.test$n || ret=1
+msg="IXFR delta response disabled due to 'provide-ixfr no;' being set"
+nextpart ns5/named.run | grep "$msg" >/dev/null || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "test 'provide-ixfr no;' (serial = current) ($n)"
+ret=0
+# Should be "AXFR style" response
+$DIG $DIGOPTS ixfr=3 test @10.53.0.5 >dig.out1.test$n || ret=1
+# Should be "switch to TCP" response
+$DIG $DIGOPTS ixfr=3 +notcp test @10.53.0.5 >dig.out2.test$n || ret=1
+awk '$4 == "SOA" { soacnt++} END {if (soacnt == 1) exit(0); else exit(1);}' dig.out1.test$n || ret=1
+awk '$4 == "SOA" { soacnt++} END {if (soacnt == 1) exit(0); else exit(1);}' dig.out2.test$n || ret=1
+if [ $ret != 0 ]; then echo_i "failed"; fi
+status=$((status + ret))
+
+n=$((n + 1))
+echo_i "test 'provide-ixfr no;' (serial > current) ($n)"
+ret=0
+# Should be "AXFR style" response
+$DIG $DIGOPTS ixfr=4 test @10.53.0.5 >dig.out1.test$n || ret=1
+# Should be "switch to TCP" response
+$DIG $DIGOPTS ixfr=4 +notcp test @10.53.0.5 >dig.out2.test$n || ret=1
+awk '$4 == "SOA" { soacnt++} END {if (soacnt == 1) exit(0); else exit(1);}' dig.out1.test$n || ret=1
 awk '$4 == "SOA" { soacnt++} END {if (soacnt == 1) exit(0); else exit(1);}' dig.out2.test$n || ret=1
 if [ $ret != 0 ]; then echo_i "failed"; fi
 status=$((status + ret))

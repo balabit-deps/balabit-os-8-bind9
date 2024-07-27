@@ -11,8 +11,7 @@
  * information regarding copyright ownership.
  */
 
-#ifndef DNS_RDATASLAB_H
-#define DNS_RDATASLAB_H 1
+#pragma once
 
 /*! \file dns/rdataslab.h
  * \brief
@@ -67,7 +66,8 @@ ISC_LANG_BEGINDECLS
 
 isc_result_t
 dns_rdataslab_fromrdataset(dns_rdataset_t *rdataset, isc_mem_t *mctx,
-			   isc_region_t *region, unsigned int reservelen);
+			   isc_region_t *region, unsigned int reservelen,
+			   uint32_t limit);
 /*%<
  * Slabify a rdataset.  The slab area will be allocated and returned
  * in 'region'.
@@ -123,7 +123,8 @@ isc_result_t
 dns_rdataslab_merge(unsigned char *oslab, unsigned char *nslab,
 		    unsigned int reservelen, isc_mem_t *mctx,
 		    dns_rdataclass_t rdclass, dns_rdatatype_t type,
-		    unsigned int flags, unsigned char **tslabp);
+		    unsigned int flags, uint32_t maxrrperset,
+		    unsigned char **tslabp);
 /*%<
  * Merge 'oslab' and 'nslab'.
  */
@@ -169,5 +170,3 @@ dns_rdataslab_equalx(unsigned char *slab1, unsigned char *slab2,
  */
 
 ISC_LANG_ENDDECLS
-
-#endif /* DNS_RDATASLAB_H */

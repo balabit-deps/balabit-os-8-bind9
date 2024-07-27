@@ -133,7 +133,7 @@ beginload(dns_db_t *db, dns_rdatacallbacks_t *callbacks) {
 	UNUSED(db);
 	UNUSED(callbacks);
 
-	fatal_error("current implementation should never call beginload()");
+	FATAL_ERROR("current implementation should never call beginload()");
 
 	/* Not reached */
 	return (ISC_R_SUCCESS);
@@ -149,19 +149,10 @@ endload(dns_db_t *db, dns_rdatacallbacks_t *callbacks) {
 	UNUSED(db);
 	UNUSED(callbacks);
 
-	fatal_error("current implementation should never call endload()");
+	FATAL_ERROR("current implementation should never call endload()");
 
 	/* Not reached */
 	return (ISC_R_SUCCESS);
-}
-
-static isc_result_t
-serialize(dns_db_t *db, dns_dbversion_t *version, FILE *file) {
-	sampledb_t *sampledb = (sampledb_t *)db;
-
-	REQUIRE(VALID_SAMPLEDB(sampledb));
-
-	return (dns_db_serialize(sampledb->rbtdb, version, file));
 }
 
 static isc_result_t
@@ -172,7 +163,7 @@ dump(dns_db_t *db, dns_dbversion_t *version, const char *filename,
 	UNUSED(filename);
 	UNUSED(masterformat);
 
-	fatal_error("current implementation should never call dump()");
+	FATAL_ERROR("current implementation should never call dump()");
 
 	/* Not reached */
 	return (ISC_R_SUCCESS);
@@ -400,12 +391,12 @@ issecure(dns_db_t *db) {
 }
 
 static unsigned int
-nodecount(dns_db_t *db) {
+nodecount(dns_db_t *db, dns_dbtree_t tree) {
 	sampledb_t *sampledb = (sampledb_t *)db;
 
 	REQUIRE(VALID_SAMPLEDB(sampledb));
 
-	return (dns_db_nodecount(sampledb->rbtdb));
+	return (dns_db_nodecount(sampledb->rbtdb, tree));
 }
 
 /*
@@ -429,12 +420,12 @@ overmem(dns_db_t *db, bool over) {
 }
 
 static void
-settask(dns_db_t *db, isc_task_t *task) {
+settask(dns_db_t *db, isc_task_t *task, isc_task_t *prunetask) {
 	sampledb_t *sampledb = (sampledb_t *)db;
 
 	REQUIRE(VALID_SAMPLEDB(sampledb));
 
-	dns_db_settask(sampledb->rbtdb, task);
+	dns_db_settask(sampledb->rbtdb, task, prunetask);
 }
 
 static isc_result_t
@@ -576,7 +567,6 @@ static dns_dbmethods_t sampledb_methods = {
 	detach,
 	beginload,
 	endload,
-	serialize,
 	dump,
 	currentversion,
 	newversion,
@@ -622,7 +612,8 @@ static dns_dbmethods_t sampledb_methods = {
 	NULL, /* setservestalerefresh */
 	NULL, /* getservestalerefresh */
 	NULL, /* setgluecachestats */
-	NULL  /* adjusthashsize */
+	NULL, /* setmaxrrperset */
+	NULL  /* setmaxtypepername */
 };
 
 /* Auxiliary driver functions. */

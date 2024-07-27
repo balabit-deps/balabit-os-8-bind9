@@ -11,8 +11,7 @@
  * information regarding copyright ownership.
  */
 
-#ifndef DNS_DNSSEC_H
-#define DNS_DNSSEC_H 1
+#pragma once
 
 /*! \file dns/dnssec.h */
 
@@ -29,7 +28,7 @@
 
 ISC_LANG_BEGINDECLS
 
-LIBDNS_EXTERNAL_DATA extern isc_stats_t *dns_dnssec_stats;
+extern isc_stats_t *dns_dnssec_stats;
 
 /*%< Maximum number of keys supported in a zone. */
 #define DNS_MAXZONEKEYS 32
@@ -94,6 +93,23 @@ dns_dnssec_keyfromrdata(const dns_name_t *name, const dns_rdata_t *rdata,
  *\li		#ISC_R_NOMEMORY
  *\li		DST_R_INVALIDPUBLICKEY
  *\li		various errors from dns_name_totext
+ */
+
+isc_result_t
+dns_dnssec_make_dnskey(dst_key_t *key, unsigned char *buf, int bufsize,
+		       dns_rdata_t *target);
+/*%<
+ *	Convert a DST key into a DNS record.
+ *
+ *	Requires:
+ *\li		'key' is not NULL
+ *\li		'buf' is not NULL
+ *\li		'bufsize' equals DST_KEY_MAXSIZE
+ *\li		'target' is not NULL
+ *
+ *	Returns:
+ *\li		#ISC_R_SUCCESS
+ *\li		various errors from dst_key_todns
  */
 
 isc_result_t
@@ -327,7 +343,8 @@ isc_result_t
 dns_dnssec_updatekeys(dns_dnsseckeylist_t *keys, dns_dnsseckeylist_t *newkeys,
 		      dns_dnsseckeylist_t *removed, const dns_name_t *origin,
 		      dns_ttl_t hint_ttl, dns_diff_t *diff, isc_mem_t *mctx,
-		      void (*report)(const char *, ...));
+		      void (*report)(const char *, ...)
+			      ISC_FORMAT_PRINTF(1, 2));
 /*%<
  * Update the list of keys in 'keys' with new key information in 'newkeys'.
  *
@@ -397,5 +414,3 @@ dns_dnssec_matchdskey(dns_name_t *name, dns_rdata_t *dsrdata,
  *\li	Other values indicate error
  */
 ISC_LANG_ENDDECLS
-
-#endif /* DNS_DNSSEC_H */

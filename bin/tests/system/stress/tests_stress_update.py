@@ -11,10 +11,12 @@
 
 import concurrent.futures
 import os
-import subprocess
 import time
+
 import dns.query
 import dns.update
+
+import isctest
 
 
 def rndc_loop(test_state, server):
@@ -24,7 +26,7 @@ def rndc_loop(test_state, server):
     cmdline = [
         rndc,
         "-c",
-        "../common/rndc.conf",
+        "../_common/rndc.conf",
         "-p",
         port,
         "-s",
@@ -33,7 +35,7 @@ def rndc_loop(test_state, server):
     ]
 
     while not test_state["finished"]:
-        subprocess.run(cmdline, check=False)
+        isctest.run.cmd(cmdline, raise_on_exception=False)
         time.sleep(1)
 
 
@@ -48,9 +50,9 @@ def update_zone(test_state, zone, named_port):
             response = dns.query.udp(update, server, 10, named_port)
             assert response.rcode() == dns.rcode.NOERROR
         except dns.exception.Timeout:
-            print(f"error: query timeout for {zone}")
+            isctest.log.info(f"error: query timeout for {zone}")
 
-    print(f"Update of {server} zone {zone} successful")
+    isctest.log.info(f"Update of {server} zone {zone} successful")
 
 
 # If the test has run to completion without named crashing, it has succeeded.

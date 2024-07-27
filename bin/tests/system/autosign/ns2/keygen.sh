@@ -11,8 +11,7 @@
 # See the COPYRIGHT file distributed with this work for additional
 # information regarding copyright ownership.
 
-SYSTEMTESTTOP=../..
-. $SYSTEMTESTTOP/conf.sh
+. ../../conf.sh
 
 # Have the child generate subdomain keys and pass DS sets to us.
 (cd ../ns3 && $SHELL keygen.sh)
@@ -20,18 +19,18 @@ SYSTEMTESTTOP=../..
 for subdomain in secure nsec3 autonsec3 optout rsasha256 rsasha512 \
   nsec3-to-nsec oldsigs sync dname-at-apex-nsec3 cds-delete \
   cdnskey-delete; do
-  cp ../ns3/dsset-$subdomain.example$TP .
+  cp ../ns3/dsset-$subdomain.example. .
 done
 
 # Create keys and pass the DS to the parent.
 zone=example
 zonefile="${zone}.db"
 infile="${zonefile}.in"
-cat $infile dsset-*.example$TP >$zonefile
+cat $infile dsset-*.example. >$zonefile
 
 kskname=$($KEYGEN -a ${DEFAULT_ALGORITHM} -3 -q -fk $zone)
 $KEYGEN -a ${DEFAULT_ALGORITHM} -3 -q $zone >/dev/null
-$DSFROMKEY $kskname.key >dsset-${zone}$TP
+$DSFROMKEY $kskname.key >dsset-${zone}.
 
 # Create keys for a private secure zone.
 zone=private.secure.example
@@ -53,7 +52,7 @@ for i in Xbar.+013+59973.key Xbar.+013+59973.private \
   cp $i $(echo $i | sed s/X/K/)
 done
 $KEYGEN -a ECDSAP256SHA256 -q $zone >/dev/null
-$DSFROMKEY Kbar.+013+60101.key >dsset-bar$TP
+$DSFROMKEY Kbar.+013+60101.key >dsset-bar.
 
 # a zone with empty non-terminals.
 zone=optout-with-ent

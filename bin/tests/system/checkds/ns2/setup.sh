@@ -18,9 +18,11 @@ echo_i "ns2/setup.sh"
 
 for subdomain in dspublished reference missing-dspublished bad-dspublished \
   multiple-dspublished incomplete-dspublished bad2-dspublished \
+  resolver-dspublished \
   dswithdrawn missing-dswithdrawn bad-dswithdrawn \
-  multiple-dswithdrawn incomplete-dswithdrawn bad2-dswithdrawn; do
-  cp "../ns9/dsset-$subdomain.checkds$TP" .
+  multiple-dswithdrawn incomplete-dswithdrawn bad2-dswithdrawn \
+  resolver-dswithdrawn; do
+  cp "../ns9/dsset-$subdomain.checkds." .
 done
 
 zone="checkds"

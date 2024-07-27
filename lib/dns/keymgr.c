@@ -22,6 +22,7 @@
 #include <isc/dir.h>
 #include <isc/mem.h>
 #include <isc/print.h>
+#include <isc/result.h>
 #include <isc/string.h>
 #include <isc/util.h>
 
@@ -30,10 +31,8 @@
 #include <dns/keymgr.h>
 #include <dns/keyvalues.h>
 #include <dns/log.h>
-#include <dns/result.h>
 
 #include <dst/dst.h>
-#include <dst/result.h>
 
 #define RETERR(x)                            \
 	do {                                 \
@@ -46,13 +45,28 @@
  * Set key state to `target` state and change last changed
  * to `time`, only if key state has not been set before.
  */
-#define INITIALIZE_STATE(key, state, timing, target, time)                    \
-	do {                                                                  \
-		dst_key_state_t s;                                            \
-		if (dst_key_getstate((key), (state), &s) == ISC_R_NOTFOUND) { \
-			dst_key_setstate((key), (state), (target));           \
-			dst_key_settime((key), (timing), time);               \
-		}                                                             \
+#define INITIALIZE_STATE(key, state, timing, target, time)                     \
+	do {                                                                   \
+		dst_key_state_t s;                                             \
+		char keystr[DST_KEY_FORMATSIZE];                               \
+		if (dst_key_getstate((key), (state), &s) == ISC_R_NOTFOUND) {  \
+			dst_key_setstate((key), (state), (target));            \
+			dst_key_settime((key), (timing), time);                \
+                                                                               \
+			if (isc_log_wouldlog(dns_lctx, ISC_LOG_DEBUG(1))) {    \
+				dst_key_format((key), keystr, sizeof(keystr)); \
+				isc_log_write(                                 \
+					dns_lctx, DNS_LOGCATEGORY_DNSSEC,      \
+					DNS_LOGMODULE_DNSSEC,                  \
+					ISC_LOG_DEBUG(3),                      \
+					"keymgr: DNSKEY %s (%s) initialize "   \
+					"%s state to %s (policy %s)",          \
+					keystr, keymgr_keyrole((key)),         \
+					keystatetags[state],                   \
+					keystatestrings[target],               \
+					dns_kasp_getname(kasp));               \
+			}                                                      \
+		}                                                              \
 	} while (0)
 
 /* Shorter keywords for better readability. */
@@ -118,11 +132,11 @@ keymgr_settime_remove(dns_dnsseckey_t *key, dns_kasp_t *kasp) {
 
 	ret = dst_key_getbool(key->key, DST_BOOL_ZSK, &zsk);
 	if (ret == ISC_R_SUCCESS && zsk) {
+		dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp, true);
 		/* ZSK: Iret = Dsgn + Dprp + TTLsig */
-		zsk_remove = retire + dns_kasp_zonemaxttl(kasp) +
-			     dns_kasp_zonepropagationdelay(kasp) +
-			     dns_kasp_retiresafety(kasp) +
-			     dns_kasp_signdelay(kasp);
+		zsk_remove =
+			retire + ttlsig + dns_kasp_zonepropagationdelay(kasp) +
+			dns_kasp_retiresafety(kasp) + dns_kasp_signdelay(kasp);
 	}
 	ret = dst_key_getbool(key->key, DST_BOOL_KSK, &ksk);
 	if (ret == ISC_R_SUCCESS && ksk) {
@@ -132,12 +146,12 @@ keymgr_settime_remove(dns_dnsseckey_t *key, dns_kasp_t *kasp) {
 			     dns_kasp_retiresafety(kasp);
 	}
 
-	remove = ksk_remove > zsk_remove ? ksk_remove : zsk_remove;
+	remove = ISC_MAX(ksk_remove, zsk_remove);
 	dst_key_settime(key->key, DST_TIME_DELETE, remove);
 }
 
 /*
- * Set the SyncPublish time (when the DS may be submitted to the parent)
+ * Set the SyncPublish time (when the DS may be submitted to the parent).
  *
  */
 static void
@@ -165,7 +179,8 @@ keymgr_settime_syncpublish(dns_dnsseckey_t *key, dns_kasp_t *kasp, bool first) {
 	if (first) {
 		/* Also need to wait until the signatures are omnipresent. */
 		isc_stdtime_t zrrsig_present;
-		zrrsig_present = published + dns_kasp_zonemaxttl(kasp) +
+		dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp, true);
+		zrrsig_present = published + ttlsig +
 				 dns_kasp_zonepropagationdelay(kasp) +
 				 dns_kasp_publishsafety(kasp);
 		if (zrrsig_present > syncpublish) {
@@ -246,12 +261,14 @@ keymgr_prepublication_time(dns_dnsseckey_t *key, dns_kasp_t *kasp,
 				 * No predecessor, wait for zone to be
 				 * completely signed.
 				 */
-				syncpub2 = pub + dns_kasp_zonemaxttl(kasp) +
+				dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp,
+								       true);
+				syncpub2 = pub + ttlsig +
 					   dns_kasp_publishsafety(kasp) +
 					   dns_kasp_zonepropagationdelay(kasp);
 			}
 
-			syncpub = syncpub1 > syncpub2 ? syncpub1 : syncpub2;
+			syncpub = ISC_MAX(syncpub1, syncpub2);
 			dst_key_settime(key->key, DST_TIME_SYNCPUBLISH,
 					syncpub);
 		}
@@ -600,6 +617,13 @@ keymgr_dep(dst_key_t *k, dns_dnsseckeylist_t *keyring, uint32_t *dep) {
 		 * Check if k is a direct successor of d, e.g. d depends on k.
 		 */
 		if (keymgr_direct_dep(d->key, k)) {
+			dst_key_state_t hidden[NUM_KEYSTATES] = {
+				HIDDEN, HIDDEN, HIDDEN, HIDDEN
+			};
+			if (keymgr_key_match_state(d->key, k, NA, NA, hidden)) {
+				continue;
+			}
+
 			if (dep != NULL) {
 				*dep = dst_key_id(d->key);
 			}
@@ -1226,6 +1250,7 @@ keymgr_transition_time(dns_dnsseckey_t *key, int type,
 		       isc_stdtime_t now, isc_stdtime_t *when) {
 	isc_result_t ret;
 	isc_stdtime_t lastchange, dstime, nexttime = now;
+	dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp, true);
 
 	/*
 	 * No need to wait if we move things into an uncertain state.
@@ -1298,7 +1323,7 @@ keymgr_transition_time(dns_dnsseckey_t *key, int type,
 			 *
 			 * We will also add the retire-safety interval.
 			 */
-			nexttime = lastchange + dns_kasp_zonemaxttl(kasp) +
+			nexttime = lastchange + ttlsig +
 				   dns_kasp_zonepropagationdelay(kasp) +
 				   dns_kasp_retiresafety(kasp);
 			/*
@@ -1571,9 +1596,9 @@ keymgr_key_init(dns_dnsseckey_t *key, dns_kasp_t *kasp, isc_stdtime_t now,
 	/* Get time metadata. */
 	ret = dst_key_gettime(key->key, DST_TIME_ACTIVATE, &active);
 	if (active <= now && ret == ISC_R_SUCCESS) {
-		dns_ttl_t zone_ttl = dns_kasp_zonemaxttl(kasp);
-		zone_ttl += dns_kasp_zonepropagationdelay(kasp);
-		if ((active + zone_ttl) <= now) {
+		dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp, true);
+		ttlsig += dns_kasp_zonepropagationdelay(kasp);
+		if ((active + ttlsig) <= now) {
 			zrrsig_state = OMNIPRESENT;
 		} else {
 			zrrsig_state = RUMOURED;
@@ -1604,9 +1629,9 @@ keymgr_key_init(dns_dnsseckey_t *key, dns_kasp_t *kasp, isc_stdtime_t now,
 	}
 	ret = dst_key_gettime(key->key, DST_TIME_INACTIVE, &retire);
 	if (retire <= now && ret == ISC_R_SUCCESS) {
-		dns_ttl_t zone_ttl = dns_kasp_zonemaxttl(kasp);
-		zone_ttl += dns_kasp_zonepropagationdelay(kasp);
-		if ((retire + zone_ttl) <= now) {
+		dns_ttl_t ttlsig = dns_kasp_zonemaxttl(kasp, true);
+		ttlsig += dns_kasp_zonepropagationdelay(kasp);
+		if ((retire + ttlsig) <= now) {
 			zrrsig_state = HIDDEN;
 		} else {
 			zrrsig_state = UNRETENTIVE;
@@ -1681,7 +1706,7 @@ keymgr_key_rollover(dns_kasp_key_t *kaspkey, dns_dnsseckey_t *active_key,
 		 */
 		prepub = keymgr_prepublication_time(active_key, kasp, lifetime,
 						    now);
-		if (prepub == 0 || prepub > now) {
+		if (prepub > now) {
 			if (isc_log_wouldlog(dns_lctx, ISC_LOG_DEBUG(1))) {
 				dst_key_format(active_key->key, keystr,
 					       sizeof(keystr));
@@ -1694,7 +1719,8 @@ keymgr_key_rollover(dns_kasp_key_t *kaspkey, dns_dnsseckey_t *active_key,
 					keystr, keymgr_keyrole(active_key->key),
 					dns_kasp_getname(kasp), (prepub - now));
 			}
-
+		}
+		if (prepub == 0 || prepub > now) {
 			/* No need to start rollover now. */
 			if (*nexttime == 0 || prepub < *nexttime) {
 				*nexttime = prepub;
@@ -2199,11 +2225,16 @@ dns_keymgr_run(const dns_name_t *origin, dns_rdataclass_t rdclass,
 	for (dns_dnsseckey_t *dkey = ISC_LIST_HEAD(*keyring); dkey != NULL;
 	     dkey = ISC_LIST_NEXT(dkey, link))
 	{
-		if (dst_key_ismodified(dkey->key) && !dkey->purge) {
+		bool modified = dst_key_ismodified(dkey->key);
+		if (dst_key_getttl(dkey->key) != dns_kasp_dnskeyttl(kasp)) {
+			dst_key_setttl(dkey->key, dns_kasp_dnskeyttl(kasp));
+			modified = true;
+		}
+		if (modified && !dkey->purge) {
 			dns_dnssec_get_hints(dkey, now);
 			RETERR(dst_key_tofile(dkey->key, options, directory));
-			dst_key_setmodified(dkey->key, false);
 		}
+		dst_key_setmodified(dkey->key, false);
 	}
 
 	result = ISC_R_SUCCESS;

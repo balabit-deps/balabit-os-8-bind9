@@ -27,6 +27,7 @@ options {
 	allow-transfer { any; };
 	recursion no;
 	dnssec-policy "rsasha256";
+	dnssec-validation no;
 };
 
 key rndc_key {
@@ -38,6 +39,11 @@ controls {
         inet 10.53.0.3 port @CONTROLPORT@ allow { any; } keys { rndc_key; };
 };
 
+zone "." {
+	type hint;
+	file "../../_common/root.hint.blackhole";
+};
+
 /* Zones that are getting initially signed */
 
 /* The default case: No keys created, using default policy. */
@@ -46,6 +52,15 @@ zone "default.kasp" {
 	file "default.kasp.db";
 	inline-signing yes;
 	dnssec-policy "default";
+};
+
+/* A zone with special characters. */
+zone "i-am.\":\;?&[]\@!\$*+,|=\.\(\)special.kasp." {
+        type primary;
+        file "i-am.special.kasp.db";
+        check-names ignore;
+	inline-signing yes;
+        dnssec-policy "default";
 };
 
 /* checkds: Zone with one KSK. */
@@ -143,6 +158,18 @@ zone "dynamic-inline-signing.kasp" {
 	dnssec-policy "default";
 	allow-update { any; };
 	inline-signing yes;
+};
+
+/*
+ * A dynamic inline-signed zone with dnssec-policy with DNSSEC records in the
+ * raw version of the zone.
+ */
+zone "dynamic-signed-inline-signing.kasp" {
+	type primary;
+	file "dynamic-signed-inline-signing.kasp.db.signed";
+	key-directory "keys";
+	dnssec-policy "default";
+	allow-update { any; };
 };
 
 /* An inline-signed zone with dnssec-policy. */
@@ -261,6 +288,16 @@ zone "three-is-a-crowd.kasp" {
 zone "expired-sigs.autosign" {
 	type primary;
 	file "expired-sigs.autosign.db";
+	inline-signing yes;
+	dnssec-policy "autosign";
+};
+
+/*
+ * Zone that has DNSKEY TTL mismatch with the dnssec-policy.
+ */
+zone "dnskey-ttl-mismatch.autosign" {
+	type primary;
+	file "dnskey-ttl-mismatch.autosign.db";
 	inline-signing yes;
 	dnssec-policy "autosign";
 };

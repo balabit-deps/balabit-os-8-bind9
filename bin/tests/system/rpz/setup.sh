@@ -15,36 +15,9 @@
 
 set -e
 
-SYSTEMTESTTOP=..
-. $SYSTEMTESTTOP/conf.sh
+. ../conf.sh
 
-QPERF=$($SHELL qperf.sh)
-
-USAGE="$0: [-DNx]"
-DEBUG=
-while getopts "DNx" c; do
-  case $c in
-    x)
-      set -x
-      DEBUG=-x
-      ;;
-    D) TEST_DNSRPS="-D" ;;
-    N) PARTIAL=-P ;;
-    *)
-      echo "$USAGE" 1>&2
-      exit 1
-      ;;
-  esac
-done
-shift $((OPTIND - 1))
-if test "$#" -ne 0; then
-  echo "$USAGE" 1>&2
-  exit 1
-fi
-
-if [ ${NOCLEAN:-unset} = unset ]; then
-  $SHELL clean.sh $PARTIAL $DEBUG
-fi
+$SHELL clean.sh
 
 for dir in ns*; do
   touch $dir/named.run
@@ -64,11 +37,8 @@ copy_setports ns10/named.conf.in ns10/named.conf
 
 copy_setports dnsrpzd.conf.in dnsrpzd.conf
 
-# decide whether to test DNSRPS
-# Note that dnsrps.conf and dnsrps-slave.conf are included in named.conf
-# and differ from dnsrpz.conf which is used by dnsrpzd.
-$SHELL ../ckdnsrps.sh -A $TEST_DNSRPS $DEBUG
-test -z "$(grep 'dnsrps-enable yes' dnsrps.conf)" && TEST_DNSRPS=
+touch dnsrps.conf
+touch dnsrps.cache
 
 # set up test policy zones.
 #   bl is the main test zone
@@ -98,7 +68,7 @@ signzone() {
   cat $1/$3 $1/$KEYNAME.key >$1/tmp
   $SIGNER -P -K $1 -o $2 -f $1/$4 $1/tmp >/dev/null
   sed -n -e 's/\(.*\) IN DNSKEY \([0-9]\{1,\} [0-9]\{1,\} [0-9]\{1,\}\) \(.*\)/trust-anchors {"\1" static-key \2 "\3";};/p' $1/$KEYNAME.key >>trusted.conf
-  DSFILENAME=dsset-${2}${TP}
+  DSFILENAME=dsset-${2}.
   rm $DSFILENAME $1/tmp
 }
 signzone ns2 tld2s base-tld2s.db tld2s.db
@@ -145,32 +115,6 @@ a3-17.tld2	500 A	17.17.17.17
 ; dummy NSDNAME policy to trigger lookups
 ns1.x.rpz-nsdname	CNAME	.
 EOF
-
-if test -n "$QPERF"; then
-  # Do not build the full zones if we will not use them.
-  $PERL -e 'for ($val = 1; $val <= 65535; ++$val) {
-	printf("host-%05d\tA    192.168.%d.%d\n", $val, $val/256, $val%256);
-	}' >>ns5/example.db
-
-  echo >>ns5/bl.db
-  echo "; rewrite some names" >>ns5/bl.db
-  $PERL -e 'for ($val = 2; $val <= 65535; $val += 69) {
-	printf("host-%05d.example.tld5\tCNAME\t.\n", $val);
-	}' >>ns5/bl.db
-
-  echo >>ns5/bl.db
-  echo "; rewrite with some not entirely trivial patricia trees" >>ns5/bl.db
-  $PERL -e 'for ($val = 3; $val <= 65535; $val += 69) {
-	printf("32.%d.%d.168.192.rpz-ip  \tCNAME\t.\n",
-		$val%256, $val/256);
-	}' >>ns5/bl.db
-fi
-
-# some psuedo-random queryperf requests
-$PERL -e 'for ($cnt = $val = 1; $cnt <= 3000; ++$cnt) {
-	printf("host-%05d.example.tld5 A\n", $val);
-	$val = ($val * 9 + 32771) % 65536;
-	}' >ns5/requests
 
 cp ns2/bl.tld2.db.in ns2/bl.tld2.db
 cp ns5/empty.db.in ns5/empty.db

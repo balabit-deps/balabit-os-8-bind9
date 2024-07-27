@@ -158,7 +158,7 @@ _dig_with_opts() {
 
 # RNDC.
 _rndccmd() {
-  "$RNDC" -c ../common/rndc.conf -p "$CONTROLPORT" -s "$@"
+  "$RNDC" -c ../_common/rndc.conf -p "$CONTROLPORT" -s "$@"
 }
 
 # Print IDs of keys used for generating RRSIG records for RRsets of type $1
@@ -213,6 +213,7 @@ set_policy() {
   POLICY=$1
   NUM_KEYS=$2
   DNSKEY_TTL=$3
+  KEYFILE_TTL=$3
   CDS_DELETE="no"
 }
 # By default policies are considered to be secure.
@@ -241,6 +242,8 @@ set_keyrole() {
   test "$2" = "csk" && key_set "$1" "KSK" "yes"
   test "$2" = "csk" && key_set "$1" "ZSK" "yes"
   test "$2" = "csk" && key_set "$1" "FLAGS" "257"
+
+  return 0
 }
 set_keylifetime() {
   key_set "$1" "EXPECT" "yes"
@@ -327,7 +330,7 @@ check_key() {
   _alg_numpad=$(printf "%03d" "$_alg_num")
   _alg_string=$(key_get "$1" ALG_STR)
   _length=$(key_get "$1" "ALG_LEN")
-  _dnskey_ttl="$DNSKEY_TTL"
+  _dnskey_ttl="$KEYFILE_TTL"
   _lifetime=$(key_get "$1" LIFETIME)
   _legacy=$(key_get "$1" LEGACY)
   _private=$(key_get "$1" PRIVATE)
@@ -378,7 +381,7 @@ check_key() {
     [ -s "$STATE_FILE" ] || ret=1
   fi
   [ "$ret" -eq 0 ] || _log_error "${BASE_FILE} files missing"
-  [ "$ret" -eq 0 ] || return
+  [ "$ret" -eq 0 ] || return 0
 
   # Retrieve creation date.
   grep "; Created:" "$KEY_FILE" >"${ZONE}.${KEY_ID}.${_alg_num}.created" || _log_error "mismatch created comment in $KEY_FILE"
@@ -453,6 +456,8 @@ check_key() {
       grep "DSChange: " "$STATE_FILE" >/dev/null || _log_error "mismatch ds change in $STATE_FILE"
     fi
   fi
+
+  return 0
 }
 
 # Check the key timing metadata for key $1.
@@ -655,7 +660,7 @@ key_unused() {
   [ -s "$KEY_FILE" ] || ret=1
   [ -s "$PRIVATE_FILE" ] || ret=1
   [ -s "$STATE_FILE" ] || ret=1
-  [ "$ret" -eq 0 ] || return
+  [ "$ret" -eq 0 ] || return 0
 
   # Treat keys that have been removed from the zone as unused.
   _check_removed=1
@@ -685,6 +690,8 @@ key_unused() {
   grep "Retired: " "$STATE_FILE" >/dev/null && _log_error "unexpected retired in $STATE_FILE"
   grep "Revoked: " "$STATE_FILE" >/dev/null && _log_error "unexpected revoked in $STATE_FILE"
   grep "Removed: " "$STATE_FILE" >/dev/null && _log_error "unexpected removed in $STATE_FILE"
+
+  return 0
 }
 
 # Test: dnssec-verify zone $1.
@@ -1049,7 +1056,7 @@ _find_dnskey() {
   _flags="$(key_get $1 FLAGS)"
   _key_file="$(key_get $1 BASEFILE).key"
 
-  awk '$1 == "'"$_owner"'" && $2 == "'"$DNSKEY_TTL"'" && $3 == "IN" && $4 == "DNSKEY" && $5 == "'"$_flags"'" && $6 == "3" && $7 == "'"$_alg"'" { print $8 }' <"$_key_file"
+  awk '$1 == "'"$_owner"'" && $2 == "'"$KEYFILE_TTL"'" && $3 == "IN" && $4 == "DNSKEY" && $5 == "'"$_flags"'" && $6 == "3" && $7 == "'"$_alg"'" { print $8 }' <"$_key_file"
 }
 
 # Test DNSKEY query.
