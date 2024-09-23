@@ -134,7 +134,7 @@ show_usage(void) {
 		"       -W specifies how long to wait for a reply\n"
 		"       -4 use IPv4 query transport only\n"
 		"       -6 use IPv6 query transport only\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 static void
@@ -185,6 +185,7 @@ retry:
 	result = dns_rdata_totext(rdata, NULL, b);
 	if (result == ISC_R_NOSPACE) {
 		isc_buffer_free(&b);
+		INSIST(bufsize <= (UINT_MAX / 2));
 		bufsize *= 2;
 		goto retry;
 	}
@@ -662,7 +663,7 @@ pre_parse_args(int argc, char **argv) {
 			break;
 		case 'V':
 			version();
-			exit(0);
+			exit(EXIT_SUCCESS);
 			break;
 		case 'w':
 			break;

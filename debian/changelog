@@ -1,3 +1,31 @@
+bind9 (1:9.18.30-0ubuntu0.20.04.1) focal; urgency=medium
+
+  * New upstream release 9.18.30 (LP: #2073310)
+    - Features:
+      + Print initial working directory during named startup, and changed
+        working directory when loading or reloading the configuration file
+      + Add max-query-restarts configuration statement
+    - Updates:
+      + Restrain named to specified number of cores when running via taskset,
+        cpuset, or numactl
+      + Reduce default max-recursion-queries value from 100 to 32
+      + Raise the log level of priming failures
+    - Bug Fixes:
+      + Fix privacy verification of EDDSA keys
+      + Fix algorithm rollover bug when there are two keys with the same keytag
+      + Return SERVFAIL for a too long CNAME chain
+      + Reconfigure catz member zones during named reconfiguration
+      + Update key lifetime and metadata after dnssec-policy reconfiguration
+      + Fix generation of 6to4-self name expansion from IPv4 address
+      + Fix invalid dig +yaml output
+      + Reject zero-length ALPN during SVBC ALPN text parsing
+      + Fix false QNAME minimisation error being reported
+      + Fix dig +timeout argument when using +http
+    - See https://bind9.readthedocs.io/en/v9.18.30/notes.html for additional
+      information. 
+
+ -- Lena Voytek <lena.voytek@canonical.com>  Mon, 23 Sep 2024 17:21:48 -0400
+
 bind9 (1:9.18.28-0ubuntu0.20.04.1) focal-security; urgency=medium
 
   * Updated to 9.18.28 to fix multiple security issues.
