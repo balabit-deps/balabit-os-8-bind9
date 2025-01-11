@@ -61,7 +61,7 @@
 		if ((x) != ISC_R_SUCCESS) {                                 \
 			fprintf(stderr, "mdig: %s failed with %s\n", (str), \
 				isc_result_totext(x));                      \
-			exit(-1);                                           \
+			exit(EXIT_FAILURE);                                 \
 		}                                                           \
 	}
 
@@ -208,7 +208,7 @@ recvresponse(isc_task_t *task, isc_event_t *event) {
 		if (continue_on_error) {
 			goto cleanup;
 		} else {
-			exit(-1);
+			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -297,8 +297,7 @@ recvresponse(isc_task_t *task, isc_event_t *event) {
 		char *hash;
 		int pf;
 
-		printf("-\n");
-		printf("  type: MESSAGE\n");
+		printf("- type: MESSAGE\n");
 		printf("  message:\n");
 
 		if (((response->flags & DNS_MESSAGEFLAG_RD) != 0) &&
@@ -790,7 +789,7 @@ usage(void) {
 			"           {local-opt} [ host {local-opt} [...]]\n"
 			"\nUse \"mdig -h\" (or \"mdig -h | more\") "
 			"for complete list of options\n");
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /*% help */
@@ -902,7 +901,7 @@ fatal(const char *format, ...) {
 	vfprintf(stderr, format, args);
 	va_end(args);
 	fprintf(stderr, "\n");
-	exit(-2);
+	_exit(EXIT_FAILURE);
 }
 
 static isc_result_t
@@ -1704,7 +1703,7 @@ dash_option(const char *option, char *next, struct query *query, bool global,
 			break;
 		case 'h':
 			help();
-			exit(0);
+			exit(EXIT_SUCCESS);
 			break;
 		case 'i':
 			/* deprecated */
@@ -1716,7 +1715,7 @@ dash_option(const char *option, char *next, struct query *query, bool global,
 			break;
 		case 'v':
 			fprintf(stderr, "mDiG %s\n", PACKAGE_VERSION);
-			exit(0);
+			exit(EXIT_SUCCESS);
 			break;
 		}
 		if (strlen(option) > 1U) {
@@ -2188,9 +2187,9 @@ main(int argc, char *argv[]) {
 			RUNCHECK(isc_time_now(&now));
 			if (isc_time_seconds(&start) == isc_time_seconds(&now))
 			{
-				int us = US_PER_SEC -
-					 (isc_time_nanoseconds(&now) /
-					  NS_PER_US);
+				unsigned int us = US_PER_SEC -
+						  (isc_time_nanoseconds(&now) /
+						   NS_PER_US);
 				if (us > US_PER_MS) {
 					usleep(us - US_PER_MS);
 				}

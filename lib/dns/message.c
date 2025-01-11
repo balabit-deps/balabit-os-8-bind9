@@ -3396,9 +3396,7 @@ dns_message_sectiontotext(dns_message_t *msg, dns_section_t section,
 			}
 			if (section == DNS_SECTION_QUESTION) {
 				INDENT(style);
-				if ((sflags & DNS_STYLEFLAG_YAML) != 0) {
-					ADD_STRING(target, "- ");
-				} else {
+				if ((sflags & DNS_STYLEFLAG_YAML) == 0) {
 					ADD_STRING(target, ";");
 				}
 				result = dns_master_questiontotext(
@@ -3748,8 +3746,6 @@ dns_message_pseudosectiontoyaml(dns_message_t *msg, dns_pseudosection_t section,
 					id = isc_buffer_getuint16(&optbuf);
 					snprintf(buf, sizeof(buf), " %u\n", id);
 					ADD_STRING(target, buf);
-					optlen -= 2;
-					POST(optlen);
 					continue;
 				}
 			} else if (optcode == DNS_OPT_SERVER_TAG) {
@@ -3760,8 +3756,6 @@ dns_message_pseudosectiontoyaml(dns_message_t *msg, dns_pseudosection_t section,
 					id = isc_buffer_getuint16(&optbuf);
 					snprintf(buf, sizeof(buf), " %u\n", id);
 					ADD_STRING(target, buf);
-					optlen -= 2;
-					POST(optlen);
 					continue;
 				}
 			} else {
@@ -4108,8 +4102,6 @@ dns_message_pseudosectiontotext(dns_message_t *msg, dns_pseudosection_t section,
 					id = isc_buffer_getuint16(&optbuf);
 					snprintf(buf, sizeof(buf), " %u\n", id);
 					ADD_STRING(target, buf);
-					optlen -= 2;
-					POST(optlen);
 					continue;
 				}
 			} else if (optcode == DNS_OPT_SERVER_TAG) {
@@ -4119,8 +4111,6 @@ dns_message_pseudosectiontotext(dns_message_t *msg, dns_pseudosection_t section,
 					id = isc_buffer_getuint16(&optbuf);
 					snprintf(buf, sizeof(buf), " %u\n", id);
 					ADD_STRING(target, buf);
-					optlen -= 2;
-					POST(optlen);
 					continue;
 				}
 			} else {

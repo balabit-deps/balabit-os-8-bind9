@@ -2706,8 +2706,10 @@ Boolean Options
 
    The :any:`querylog` option specifies whether query logging should be active when
    :iscman:`named` first starts. If :any:`querylog` is not specified, then query logging
-   is determined by the presence of the logging category ``queries``.  Query
-   logging can also be activated at runtime using the command ``rndc querylog
+   is determined by the presence of the logging category ``queries``.  Please
+   note that :option:`rndc reconfig` and :option:`rndc reload` have no effect on
+   this option, so it cannot be changed once the server is running. However,
+   query logging can be activated at runtime using the command ``rndc querylog
    on``, or deactivated with :option:`rndc querylog off <rndc querylog>`.
 
 .. namedconf:statement:: check-names
@@ -4688,9 +4690,20 @@ Tuning
    :tags: server, query
    :short: Sets the maximum number of iterative queries while servicing a recursive query.
 
-   This sets the maximum number of iterative queries that may be sent while
-   servicing a recursive query. If more queries are sent, the recursive
-   query is terminated and returns SERVFAIL. The default is 100.
+   This sets the maximum number of iterative queries that may be sent
+   by a resolver while looking up a single name. If more queries than this
+   need to be sent before an answer is reached, then recursion is terminated
+   and a SERVFAIL response is returned to the client. (Note: if the answer
+   is a CNAME, then the subsequent lookup for the target of the CNAME is
+   counted separately.) The default is 32.
+
+.. namedconf:statement:: max-query-restarts
+   :tags: server, query
+   :short: Sets the maximum number of chained CNAMEs to follow
+
+   This sets the maximum number of successive CNAME targets to follow
+   when resolving a client query, before terminating the query to avoid a
+   CNAME loop. Valid values are 1 to 255. The default is 11.
 
 .. namedconf:statement:: notify-delay
    :tags: transfer, zone
@@ -6431,10 +6444,9 @@ propagating DS updates.
 
 .. _dnssec_policy_default:
 
-Policy ``default`` causes the zone to be signed with a single combined-signing
-key (CSK) using algorithm ECDSAP256SHA256; this key has an unlimited
-lifetime.  (A verbose copy of this policy may be found in the source
-tree, in the file ``doc/misc/dnssec-policy.default.conf``.)
+The policy ``default`` causes the zone to be signed with a single combined-signing
+key (CSK) using the algorithm ECDSAP256SHA256; this key has an unlimited
+lifetime. This policy can be displayed using the command :option:`named -C`.
 
 .. note:: The default signing policy may change in future releases.
    This could require changes to a signing policy when upgrading to a
@@ -6462,7 +6474,9 @@ The following options can be specified in a :any:`dnssec-policy` statement:
     This indicates the TTL to use when generating DNSKEY resource
     records. The default is 1 hour (3600 seconds).
 
-:any:`keys`
+.. _dnssec-policy-keys:
+
+keys
     This is a list specifying the algorithms and roles to use when
     generating keys and signing the zone.  Entries in this list do not
     represent specific DNSSEC keys, which may be changed on a regular
