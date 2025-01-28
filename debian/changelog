@@ -1,3 +1,22 @@
+bind9 (1:9.18.30-0ubuntu0.20.04.2) focal-security; urgency=medium
+
+  * SECURITY UPDATE: Many records in the additional section cause CPU
+    exhaustion
+    - debian/patches/CVE-2024-11187.patch: limit the additional processing
+      for large RDATA sets in bin/tests/*, lib/dns/include/dns/rdataset.h,
+      lib/dns/rbtdb.c, lib/dns/rdataset.c, lib/dns/resolver.c,
+      lib/ns/query.c.
+    - CVE-2024-11187
+  * SECURITY UPDATE: DNS-over-HTTPS implementation suffers from multiple
+    issues under heavy query load
+    - debian/patches/CVE-2024-12705.patch: fix flooding issues in
+      lib/isc/netmgr/http.c, lib/isc/netmgr/netmgr-int.h,
+      lib/isc/netmgr/netmgr.c, lib/isc/netmgr/tcp.c,
+      lib/isc/netmgr/tlsstream.c. 
+    - CVE-2024-12705
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 28 Jan 2025 09:31:22 -0500
+
 bind9 (1:9.18.30-0ubuntu0.20.04.1) focal; urgency=medium
 
   * New upstream release 9.18.30 (LP: #2073310)
